@@ -16,7 +16,7 @@
  * `tools/nx-plugins` and `.githooks` specs before `pnpm install` has run.
  * TypeScript packages cannot import across project roots (Nx boundaries), so
  * the backlog project keeps a typed twin at
- * `entrypoint/backlog/src/test/helpers/git-env.ts`; both are pinned to the
+ * `entrypoint/backlog/test/helpers/git-env.ts`; both are pinned to the
  * same contract (delete every /^GIT_/ key).
  */
 

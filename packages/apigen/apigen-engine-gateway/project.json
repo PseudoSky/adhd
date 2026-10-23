@@ -14,7 +14,7 @@
   },
   "tags": [
     "layer:logic",
-    "platform:shared"
+    "platform:node"
   ],
   "targets": {
     "nx-release-publish": {

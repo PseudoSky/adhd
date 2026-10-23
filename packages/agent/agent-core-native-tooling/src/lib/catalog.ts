@@ -18,7 +18,7 @@
  *                   BOTH servers). `unbash` DROPPED; `rust-mcp-filesystem` deferred.
  * The same approval record is in this package's `README.md` and in the gated
  * live-test header
- * (`entrypoint/agent-mcp/src/__tests__/integration/native-tooling-adoption.e2e.test.ts`),
+ * (`entrypoint/agent-mcp/test/e2e/integration/native-tooling-adoption.e2e.ts`),
  * per AGENTS.md §7 / ADR-0008 D7 (README + AGENTS.md + gated test header).
  * ─────────────────────────────────────────────────────────────────────────────
  */
@@ -135,8 +135,42 @@ export const SHELL_SERVER = {
      * every allowlisted network call fails DNS inside the sandbox (0ba70e47).
      */
     childEnvAllowlist: 'MCP_SHELL_CHILD_ENV_ALLOWLIST',
+    /**
+     * Original `PATH` handed to the exit-status launcher (61358b6f). It travels
+     * through the server's own child-env allowlist, never a server patch.
+     */
+    origPath: 'ADHD_SHIM_ORIG_PATH',
   },
 } as const;
+
+/**
+ * Default shell argv allowlist (069316e5; ADR-0008 D5 policy change, owner-approved).
+ * The single source: `resolveShell` emits it as `ALLOW_COMMANDS` ONLY when the
+ * caller supplies neither `allowCommands` nor `allowPatterns`; any caller-supplied
+ * list replaces it in full (never merged). `curl` is the ONE network tool in the
+ * default (R5-WEB-SIMPLE AC1: every provider can fetch a page through the shell);
+ * `wget`, `ssh`, `scp`, `sudo` and `nc` stay absent. Whether `curl` can reach the
+ * network is the srt egress policy's call (agent-mcp: open by default, restrict
+ * with `agent.shell.sandbox.allowedDomains`).
+ *
+ * Every entry is a name the adopted server ACCEPTS under its own default policy
+ * (verified against the real `mcp-shell-server==1.1.12`, 61358b6f follow-through):
+ * the server rejects `sed`, `node`, `python3` (and `env`, `xargs`, `timeout`, `sh`,
+ * `bash`, other interpreters …) as "rejected by default security policy" even when
+ * allowlisted, so listing them only advertised commands that always fail. They
+ * are therefore NOT in the default; `default-shell-allowlist.e2e.test.ts` drives
+ * every entry through the real server so a rejected name cannot be re-added.
+ */
+export const DEFAULT_SHELL_ALLOW_COMMANDS: readonly string[] = Object.freeze([
+  // file operations
+  'cat', 'ls', 'cp', 'mv', 'mkdir', 'rm', 'touch', 'head', 'tail', 'wc', 'sort',
+  'uniq', 'tr', 'cut', 'diff', 'awk', 'grep', 'rg', 'echo', 'printf', 'pwd',
+  'test', 'true', 'false', 'basename', 'dirname', 'realpath', 'stat', 'tee', 'chmod',
+  // toolchains
+  'git', 'npm', 'pnpm', 'npx', 'nx', 'make', 'tsc', 'uv',
+  // web fetch (R5-WEB-SIMPLE AC1): the one network tool in the default
+  'curl',
+]);
 
 /**
  * The proxy variables `srt` injects into the sandboxed process so allowlisted

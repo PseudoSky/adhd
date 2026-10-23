@@ -1,0 +1,134 @@
+== WALL-GAP RECONCILIATION (C1 vs A1; graded wall wallMs) ==
+phase 1 task time | C1 58.125 (server task interval (completedAt - createdAt)) | A1 48.879 (phase wall (spawn -> exit)) | +9.246
+phase 2 task time | C1 34.795 (server task interval (completedAt - createdAt)) | A1 31.246 (phase wall (spawn -> exit)) | +3.549
+client poll lag (inside the phase sum) | C1 2.208 | A1 0.000 | +2.208
+harness overhead | C1 3.397 | A1 0.620 | +2.777
+  C1 overhead split: setup 1.283, submit 0.020, between phases 0.224, accounting wait 1.800 (fixed sleep 1.500 + hidden/reads 0.300), usage queries 0.025, teardown 0.044, residual 0.001
+  A1 overhead split: unattributed 0.620 (no marks; not split)
+graded wall | C1 98.525 | A1 80.745 | gap +17.780 = +9.246 +3.549 +2.208 +2.777 (residual 0 ms)
+measurement-path time carried by C1 and not by A1: 4.985 s (28.0% of the gap); task execution: 12.795 s
+
+== EVIDENCE A1 (A) ==
+sources | wire true | api log false | tracing plugin false | mcp calls false
+thinking blocks | 19 | text omitted by the API (signature only) 19 | text returned 0 | NOTE: the API returned no thinking text; do not infer anything from its absence
+thinking config on the wire | {"type":"adaptive","display":"updates"} null
+delegation | sync 1 | background 2
+
+== EVIDENCE C1 (C) ==
+sources | wire true | api log true | tracing plugin true | mcp calls true
+thinking blocks | 27 | text omitted by the API (signature only) 27 | text returned 0 | NOTE: the API returned no thinking text; do not infer anything from its absence
+thinking config on the wire | null
+delegation | sync 3 | background 0
+
+== THREADS A1 (A) ==
+thread | role | agent | phase | tools offered | requests | tool calls (+server) | tool errors | retry rounds | model s | tool s (trace spans | gaps) | out tokens | thinking blocks | span s
+999ea5a3 | parent | - | 1 | 25 | 16 | 17+0 | 0 | 0 | 71.690 | n/a | 7.921 | 12091 | 13 | 0.47-80.01
+fec9b7a9 | side | - | 1 | 0 | 1 | 0+0 | 0 | 0 | 3.351 | n/a | 0.000 | 654 | 1 | 16.04-19.39
+da0d6d2a | worker | - | 1 | 4 | 4 | 6+0 | 0 | 0 | 8.487 | n/a | 0.339 | 1919 | 2 | 28.31-37.14
+04a7f8a3 | worker | - | 1 | 4 | 3 | 2+0 | 0 | 0 | 7.189 | n/a | 0.711 | 1568 | 2 | 31.70-39.60
+234f5012 | worker | - | 2 | 4 | 3 | 3+0 | 0 | 0 | 8.063 | n/a | 0.894 | 1682 | 1 | 66.98-75.94
+total | requests 27 (parent 16, other 11) | tool errors 0 | model s 98.781
+
+== THREADS C1 (C) ==
+thread | role | agent | phase | tools offered | requests | tool calls (+server) | tool errors | retry rounds | model s | tool s (trace spans | gaps) | out tokens | thinking blocks | span s
+e95d6621 | parent | r2-parent-C1 | 1 | 34 | 16 | 22+1 | 2 | 2 | 57.542 | 19.664 | 36.211 | 11989 | 12 | 0.00-93.75
+f9622a9f | worker | worker | 1 | 33 | 6 | 8+0 | 0 | 0 | 14.082 | 2.774 | 2.796 | 2936 | 5 | 27.11-43.98
+0f67c01a | worker | worker | 1 | 33 | 6 | 8+0 | 1 | 1 | 17.946 | 0.207 | 0.223 | 4105 | 5 | 27.11-45.28
+b73cb662 | worker-nested | worker | 1 | 33 | 2 | 1+0 | 0 | 0 | 1.923 | 0.006 | 0.015 | 228 | 1 | 32.99-34.92
+50daaf8c | worker | worker | 2 | 33 | 4 | 4+0 | 0 | 0 | 12.703 | 0.040 | 0.074 | 2671 | 4 | 76.39-89.16
+total | requests 34 (parent 16, other 18) | tool errors 3 | model s 104.196
+
+== PARENT BLOCKING A1 (A) ==
+parent seq | response end s | wait for next parent request s | calls (name[delegation mode], trace span s) | same-turn calls | spans overlap
+2 | 3.04 | 1.208 | Bash, mcp__r2info__get_ticket | 2 | no/untraced
+3 | 6.45 | 0.369 | Bash | 1 | -
+4 | 15.86 | 3.540 | WebFetch | 1 | -
+6 | 31.68 | 0.064 | Agent[background], Agent[background] | 2 | no/untraced
+10 | 33.86 | 0.010 | Read | 1 | -
+12 | 36.35 | 0.010 | Edit | 1 | -
+15 | 38.05 | 0.428 | Bash | 1 | -
+17 | 40.91 | 0.014 | Bash | 1 | -
+18 | 43.12 | 0.468 | Bash | 1 | -
+21 | 58.18 | 0.012 | Read, Read | 2 | no/untraced
+22 | 61.68 | 0.009 | Edit | 1 | -
+23 | 66.96 | 0.030 | Agent[sync] | 1 | -
+25 | 71.80 | 0.298 | Bash | 1 | -
+27 | 76.51 | 0.378 | Bash | 1 | -
+delegation turns: 2 | parent blocked on SYNC delegation: 0.030 s over 1 turn(s) [0.030] | background delegation turns wait 0.064 s over 1 turn(s)
+
+== PARENT BLOCKING C1 (C) ==
+parent seq | response end s | wait for next parent request s | calls (name[delegation mode], trace span s) | same-turn calls | spans overlap
+1 | 1.19 | 0.134 | shell__shell_execute 0.122, r2info__get_ticket 0.004 | 2 | yes
+2 | 3.11 | 0.022 | fs__list_directory 0.007, fs__read_multiple_files 0.008 | 2 | yes
+3 | 4.25 | 0.044 | fs__read_multiple_files 0.004, fs__list_directory 0.002 | 2 | yes
+4 | 6.57 | 0.022 | fs__read_multiple_files 0.007, fs__list_directory 0.004 | 2 | yes
+5 | 8.28 | 0.138 | shell__shell_execute 0.119, shell__shell_execute 0.123 ERR | 2 | yes
+6 | 16.54 | 0.033 | shell__shell_execute 0.018 | 1 | -
+7 | 26.20 | 19.167 | agent-mcp__tasks_batch[sync x2] 19.128 | 1 | -
+22 | 48.40 | 0.026 | fs__edit_file 0.004 ERR, fs__read_multiple_files 0.007 | 2 | yes
+23 | 49.76 | 0.014 | fs__edit_file 0.004 | 1 | -
+24 | 50.68 | 0.114 | shell__shell_execute 0.103 | 1 | -
+26 | 68.87 | 0.025 | fs__edit_file 0.010, fs__create_directory 0.006 | 2 | yes
+27 | 70.65 | 0.014 | fs__write_file 0.002 | 1 | -
+28 | 75.69 | 13.537 | agent-mcp__task[sync] 13.524, shell__shell_execute 0.101 | 2 | yes
+33 | 90.73 | 0.018 | fs__read_text_file 0.002 | 1 | -
+delegation turns: 2 | parent blocked on SYNC delegation: 32.704 s over 2 turn(s) [19.167, 13.537] | background delegation turns wait 0.000 s over 0 turn(s)
+tracing plugin cross-check: delegation tool spans agent-mcp__tasks_batch 19.128 s, agent-mcp__task 13.524 s
+
+== WORKER-REQUEST SURPLUS (C1 vs A1) ==
+worker # | phase | C requests (agent) | A requests | surplus | C request purposes (in order) | A request purposes (in order)
+1 | 1 | 6 (worker) | 4 | 2 | dispatch+read > dispatch > edit+write > write > shell > final-answer | read > edit+write > shell > final-answer
+2 | 1 | 6 (worker) | 3 | 3 | read > shell > edit+write > shell > retry-after-error:shell > final-answer | shell > shell > final-answer
+3 | 1 | 2 (worker) | 3 | -1 | read > final-answer | read+shell > edit > final-answer
+4 | 2 | 4 (worker) | 0 | 4 | read > edit+read > shell > final-answer | -
+total worker requests | C 18 | A 10 | surplus 8
+purpose | C | A | C-A
+dispatch | 1 | 0 | 1
+dispatch+read | 1 | 0 | 1
+edit | 0 | 1 | -1
+edit+read | 1 | 0 | 1
+edit+write | 2 | 1 | 1
+final-answer | 4 | 3 | 1
+read | 3 | 1 | 2
+read+shell | 0 | 1 | -1
+retry-after-error:shell | 1 | 0 | 1
+shell | 4 | 3 | 1
+write | 1 | 0 | 1
+
+== TOOLS OFFERED (C1 vs A1) ==
+role | C threads x tools | A threads x tools | only in C (n) | only in A (n)
+parent | 1 x 34 | 1 x 25 | 34: agent-mcp__agent agent-mcp__guide agent-mcp__pricing_history agent-mcp__pricing_refresh agent-mcp__result agent-mcp__session_clear agent-mcp__session_close agent-mcp__session_list agent-mcp__session_update agent-mcp__task agent-mcp__task_cancel agent-mcp__task_list agent-mcp__task_resume agent-mcp__tasks_batch agent-mcp__usage_query builtin__request_human_input fs__create_directory fs__directory_tree fs__edit_file fs__get_file_info fs__list_allowed_directories fs__list_directory fs__list_directory_with_sizes fs__move_file fs__read_file fs__read_media_file fs__read_multiple_files fs__read_text_file fs__search_files fs__write_file r2info__get_ticket shell__shell_execute web_fetch web_search | 25: Agent Bash CronCreate CronDelete CronList DesignSync Edit EnterWorktree ExitWorktree ListAgents Monitor NotebookEdit PushNotification Read RemoteTrigger ReportFindings ScheduleWakeup SendMessage Skill TaskStop WebFetch WebSearch Workflow Write mcp__r2info__get_ticket
+side | 0 x 0 | 1 x 0 | 0:  | 0: 
+worker | 4 x 33 | 3 x 4 | 33: agent-mcp__agent agent-mcp__guide agent-mcp__pricing_history agent-mcp__pricing_refresh agent-mcp__result agent-mcp__session_clear agent-mcp__session_close agent-mcp__session_list agent-mcp__session_update agent-mcp__task agent-mcp__task_cancel agent-mcp__task_list agent-mcp__task_resume agent-mcp__tasks_batch agent-mcp__usage_query builtin__request_human_input fs__create_directory fs__directory_tree fs__edit_file fs__get_file_info fs__list_allowed_directories fs__list_directory fs__list_directory_with_sizes fs__move_file fs__read_file fs__read_media_file fs__read_multiple_files fs__read_text_file fs__search_files fs__write_file shell__shell_execute web_fetch web_search | 4: Bash Edit Read Write
+
+== CONTAMINATION A1 (A; probes: carrierRate) ==
+probe | thread | role | phase | request seq | channel | tool | minimal span
+carrierRate | 999ea5a3 | parent | 1 | 6 | response.toolInput | Agent | [4 chars]
+carrierRate | 04a7f8a3 | worker | 1 | 9 | request.brief | - | [4 chars]
+carrierRate | 999ea5a3 | parent | 2 | 29 | response.text | - | [4 chars]
+carrierRate | 999ea5a3 | parent | 2 | 29 | response.text | - | [3 chars]
+matches 4 | in PARENT assistant text of phase 1 (the q_rate invalid rule, oracle.mjs q_rate) 0
+
+== CONTAMINATION C1 (C; probes: carrierRate) ==
+probe | thread | role | phase | request seq | channel | tool | minimal span
+carrierRate | e95d6621 | parent | 1 | 2 | request.toolResult | - | [4 chars]
+carrierRate | e95d6621 | parent | 1 | 25 | response.text | - | [4 chars]
+carrierRate | e95d6621 | parent | 2 | 34 | response.text | - | [4 chars]
+carrierRate | e95d6621 | parent | 2 | 34 | response.text | - | [3 chars]
+matches 4 | in PARENT assistant text of phase 1 (the q_rate invalid rule, oracle.mjs q_rate) 1 at request seq 25
+
+== RT1-RT6 WIRE CHECKS A1 (A) ==
+RT1 PASS | thinking replayed == emitted: 19 emitted, 15 replayable (not the last response of a thread), 15 replayed byte-matched by signature, 0 replayed blocks never emitted in their thread
+RT2 PASS | no dangling server_tool_use in replayed history: 0 dangling
+RT3 PASS | no refetch of an already-fetched URL: 1 fetch calls, 1 unique URLs
+RT4 n/a | bare tool-name emissions: not applicable to this arm
+RT5 PASS | no 400 and no provider:history_degraded: 27/27 requests HTTP 200, 0 history_degraded events
+RT6 PASS | cache continuity (adopted: cache_read >= previous cache_read + cache_creation, per thread): 22/22 pairs; LITERAL reading (cache_read >= previous total prompt tokens = input + cache_read + cache_creation): 0/22 pairs, deficits of the failing pairs: 2 tokens (the previous request's uncached input_tokens)
+
+== RT1-RT6 WIRE CHECKS C1 (C) ==
+RT1 PASS | thinking replayed == emitted: 27 emitted, 22 replayable (not the last response of a thread), 22 replayed byte-matched by signature, 0 replayed blocks never emitted in their thread
+RT2 PASS | no dangling server_tool_use in replayed history: 0 dangling
+RT3 PASS | no refetch of an already-fetched URL: 1 fetch calls, 1 unique URLs
+RT4 PASS | bare tool-name emissions: 0
+RT5 PASS | no 400 and no provider:history_degraded: 34/34 requests HTTP 200, 0 history_degraded events
+RT6 PASS | cache continuity (adopted: cache_read >= previous cache_read + cache_creation, per thread): 29/29 pairs; LITERAL reading (cache_read >= previous total prompt tokens = input + cache_read + cache_creation): 0/29 pairs, deficits of the failing pairs: 2,4 tokens (the previous request's uncached input_tokens)

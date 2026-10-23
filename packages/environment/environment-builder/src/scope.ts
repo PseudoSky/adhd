@@ -28,7 +28,7 @@ export function findProjectRoot(startDir: string): string | undefined {
 
   // Bounded by the filesystem root — never infinite, matches real tool
   // behavior (git, Claude Code) of walking to the fs root.
-  // eslint-disable-next-line no-constant-condition
+   
   while (true) {
     for (const marker of PROJECT_MARKERS) {
       if (existsSync(`${dir}/${marker}`)) return dir;

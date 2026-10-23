@@ -32,6 +32,10 @@ All exports from `src/index.ts`:
 - `extractClasses(opts)` → `Promise<Operation[]>` — class export extraction (SPEC §10)
 - `createExtractionSession()` → `ExtractionSession` — per-run shared cache
 - `clearPersistentProjectCache()` → `void` — drop process-lifetime caches
+- `releaseExtractionMemory()` → `void` — release the process-lifetime extraction tier before a long-running serve
+- `createExtractorRegistry()` / `extractSourceEntry(input)` → the one IR-generation entry (`{ operations, files }`)
+- `assertExtractorOptions(options)` → `void` — enforce the `ExtractCall.extractorOptions` contract
+- `registerTypescriptSubprocessExtractor(registry, opts?)` / `createTypescriptSubprocessExtractor(opts?)` / `runExtractWorker(io?)` — `ts-subprocess` extractor and its worker
 - `languageOfSource(file)` → `PluginLanguage | undefined` — extension → language tag
 - `pluginConsumesSource(plugin, file)` → `boolean` — should plugin consume file?
 - `sourcesForPlugin(plugin, files)` → `string[]` — filter files by plugin language

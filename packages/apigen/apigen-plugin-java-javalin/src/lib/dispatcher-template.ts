@@ -243,11 +243,32 @@ ${branches}
 `;
 }
 
+/**
+ * ASCII subset of the Java identifier grammar (JLS §3.8). Parameter names are spliced
+ * raw into generated Java (`__p_<name>` local variables and `body.get("<name>")` string
+ * literals), so anything outside this set would either fail `mvn` or break out of the
+ * string literal. Rejecting at generate time keeps the failure attributable to the op.
+ *
+ * Intentional narrowing: the JLS grammar also admits non-ASCII letters, which this pattern
+ * rejects. The reason is the raw splice above: the ASCII set is the one the generated
+ * local-variable and string-literal emission is written against, and admitting Unicode
+ * names would require that emission path to be proven for them first. An operation with a
+ * non-ASCII parameter fails at generate time; rename the parameter to ASCII to resolve it.
+ */
+const JAVA_IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
+
 function renderBranch(op: JavaOperation): string {
   const decls: string[] = [];
   const argNames: string[] = [];
 
   for (const p of op.javaParams) {
+    if (!JAVA_IDENTIFIER.test(p.name)) {
+      throw new Error(
+        `renderDispatcherJava: operation "${op.id}" has parameter name "${p.name}" ` +
+          `that is not a valid Java identifier (ASCII letters, digits, "_" and "$", ` +
+          `not starting with a digit); rename the parameter in the source`
+      );
+    }
     const glue = glueFor(p.javaType);
     const bodyExpr = `body.get("${p.name}")`;
     const varName = `__p_${p.name}`;

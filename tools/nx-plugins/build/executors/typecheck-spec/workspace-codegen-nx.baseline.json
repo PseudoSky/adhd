@@ -3,7 +3,7 @@
   "total": 8,
   "files": {
     "packages/workspace/workspace-base-vite-paths/src/index.ts": 1,
-    "packages/workspace/workspace-codegen-nx/src/generators/base/generator.spec.ts": 2,
+    "packages/workspace/workspace-codegen-nx/test/unit/generators/base/generator.spec.ts": 2,
     "packages/workspace/workspace-codegen-nx/vite.config.ts": 5
   }
 }

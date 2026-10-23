@@ -57,6 +57,66 @@
         "description": "Machine check that the push/CI gate's resource-heavy lane (`e2e`) stays reachable and cached — the check that stops the silent-green recurrence. Fails when: a project ships src/**/*.e2e.ts but declares no `e2e` target; any `test.dependsOn` re-couples `e2e`; an `e2e` target is not cache:true with non-empty inputs containing `default`; a publishable project's `e2e` presence disagrees with `publish` reaching `e2e` (the tools/nx-plugins/build/plugin.js conditional); a gate file (.githooks/pre-push + both CI workflows) fails to invoke every target in GATE_TARGETS (tools/gate/lane-gate.mjs); or a project has a tsconfig.spec.json with no compiling target (ratcheted in the checker's baseline). Invoked UNCONDITIONALLY by .githooks/pre-push and both workflows BEFORE the lanes; also `nx run @adhd/source:lane-reachability` / `pnpm run check:lane-reachability`."
       }
     },
+    "test-gates": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "inputs": [
+        "{workspaceRoot}/tools/nx-plugins/test/gates/**/*",
+        "{workspaceRoot}/tools/nx-plugins/test/executors/wiring/**/*",
+        "{workspaceRoot}/tools/gate/**/*",
+        "{workspaceRoot}/tools/nx-plugins/test/routing/**/*",
+        "{workspaceRoot}/docs/standards/**/*",
+        "{workspaceRoot}/.githooks/**/*",
+        "{workspaceRoot}/.github/**/*",
+        "{workspaceRoot}/{apps,libs,packages,entrypoint,extensions}/**/*",
+        "!{workspaceRoot}/**/{node_modules,dist,coverage,.nx}/**",
+        {
+          "runtime": "date -u +%Y-%m-%d"
+        },
+        {
+          "runtime": "git rev-parse HEAD"
+        },
+        {
+          "env": "GATE_BASE"
+        },
+        {
+          "env": "GATE_FULL"
+        },
+        {
+          "env": "WORKSPACE_STANDARDS_ENGINE"
+        }
+      ],
+      "outputs": [
+        "{workspaceRoot}/.nx/test-gates"
+      ],
+      "options": {
+        "command": "node tools/nx-plugins/test/gates/run-gates.mjs",
+        "args": "--step=B"
+      },
+      "configurations": {
+        "author-loop": {
+          "args": "--step=A"
+        },
+        "pre-commit": {
+          "args": "--step=B"
+        },
+        "pre-push": {
+          "args": "--step=C"
+        },
+        "presubmit": {
+          "args": "--step=D"
+        },
+        "mainline": {
+          "args": "--step=E"
+        },
+        "release": {
+          "args": "--step=G"
+        }
+      },
+      "metadata": {
+        "description": "595965cc T30: the workspace-standards gate engine run over this repository's command table (tools/nx-plugins/test/gates/gates.table.json). `nx run @adhd/source:test-gates` runs stage B (pre-commit static checks); `--configuration=presubmit|mainline|release|pre-push` runs that stage. Writes ONE JSON report to .nx/test-gates/gate-report.json and exits with the worst gate's status. Cached, keyed on the files the gates read plus today's date (G4 expiry) and HEAD (G12 reads commit messages): a second run over unchanged inputs on the same day and commit is a cache hit (evidence is nx's cache line; never --skip-nx-cache). A gate with no command is reported as an obligation, never as a pass."
+      }
+    },
     "mass-delete-guard": {
       "executor": "@adhd/nx-mass-delete-guard:check",
       "options": {},
@@ -88,10 +148,20 @@
       "executor": "nx:run-commands",
       "cache": false,
       "options": {
-        "command": "node --test tools/nx-plugins/build/executors/lockfile/lockfile-gate.e2e.spec.mjs"
+        "command": "node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=./tools/nx-plugins/test/metrics/node-test-reporter.mjs --test-reporter-destination=stdout tools/nx-plugins/build/executors/lockfile/lockfile-gate.e2e.spec.mjs"
       },
       "metadata": {
         "description": "E2E proof the lockfile gate has teeth (backlog 4f26493e AC2 / e98bb455 AC1): real `corepack pnpm` against a scratch workspace and a drifted real package.json (restored in finally) must turn the gate red, name the drift, leave pnpm-lock.yaml byte-identical, and regenerateLockfile must turn it green. Invoked by the CI `main` job."
+      }
+    },
+    "declared-deps-hash-teeth": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "options": {
+        "command": "node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=./tools/nx-plugins/test/metrics/node-test-reporter.mjs --test-reporter-destination=stdout tools/nx-plugins/lint/declared-deps-hash.e2e.spec.mjs"
+      },
+      "metadata": {
+        "description": "E2E proof of the declared-dependency cache inputs (fbbb1464 AC3 / AC4): with a real Nx hasher over a scratch workspace, a bumped installed version of a declared dependency must change the lint and sync-deps-check task hashes, and a warm-cache lint must miss and fail after the bump. Lane e2e per ADR-0009; invoked by the CI `main` job. Not part of test:build-tools."
       }
     },
     "check-published-parity": {
@@ -124,7 +194,7 @@
         "backlog:build"
       ],
       "options": {
-        "command": "node --test docs/plan/actionable-store/demo/fixture/demo-gate.spec.mjs"
+        "command": "node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=./tools/nx-plugins/test/metrics/node-test-reporter.mjs --test-reporter-destination=stdout docs/plan/actionable-store/demo/fixture/demo-gate.spec.mjs"
       },
       "metadata": {
         "description": "Proves the demo-acceptance gate has teeth (backlog ddceb069): a deliberately broken R-control turns the runner red; the unbroken runner is green. Invoked by the CI `main` job after `demo-acceptance`."
@@ -134,10 +204,32 @@
       "executor": "nx:run-commands",
       "cache": false,
       "options": {
-        "command": "node --test tools/evidence/evidence.spec.mjs"
+        "command": "node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=./tools/nx-plugins/test/metrics/node-test-reporter.mjs --test-reporter-destination=stdout tools/evidence/evidence.spec.mjs"
       },
       "metadata": {
         "description": "Evidence tooling gate (backlog 65788fd8 D-AC4): drives check-suite-tree-state, commit-mine and audit-closed-items as real processes against throwaway git repos; each tool has a negative control (a broken copy must go red). Exit code gates. Invoked by the CI `main` job."
+      }
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "dependsOn": [],
+      "options": {
+        "command": "node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=./tools/nx-plugins/test/metrics/node-test-reporter.mjs --test-reporter-destination=stdout scripts/worktree-scripts.spec.mjs",
+        "cwd": "."
+      },
+      "inputs": [
+        "{workspaceRoot}/scripts/**/*",
+        "{workspaceRoot}/tools/nx-plugins/lib/git-env.js",
+        {
+          "runtime": "git --version"
+        },
+        {
+          "runtime": "node --version"
+        }
+      ],
+      "metadata": {
+        "description": "Runs the worktree lifecycle scripts' spec (scripts/worktree-scripts.spec.mjs) against throwaway repos. It lives with the scripts, in this project, on purpose: a spec under tools/nx-plugins/build belongs to @adhd/nx-build, which nearly every project depends on, so touching it made `nx affected -t test` run ~66 projects (~4.5 min) for a scripts-only change."
       }
     }
   }

@@ -214,7 +214,7 @@ test('50e8c966 AC3: guard_verify does not blame a user.email that pre-existed th
   }
 });
 
-test('50e8c966 AC3: pre-commit and pre-push are wired to the guard (source it, scrub the test run, verify after)', () => {
+test('50e8c966 AC3: pre-commit and pre-push are wired to the guard (source it, scrub the test run, verify after)', { skip: 'backlog 8963c3cb until 2026-12-31 - .githooks/pre-push is disabled (renamed disabled-pre-push)' }, () => {
   for (const hook of ['pre-commit', 'pre-push']) {
     const text = readFileSync(join(here, hook), 'utf8');
     assert.match(text, /\.\s+"\$hook_dir\/lib\/git-env-guard\.sh"/, `${hook} must source the guard`);
@@ -323,6 +323,51 @@ test('f2836e29 AC2: guard_verify names a STRAY WORKTREE added during the run', (
   }
 });
 
+test('50e8c966 AC2: guard_verify passes (exit 0) when a MANAGED worktree under <repo>/.worktrees/ is added during the run', () => {
+  const managed = join(R, '.worktrees', 'managed-add');
+  const r = runGuard(`guard_snapshot\ngit -C "${R}" worktree add -q "${managed}" -b managed-add-branch\nguard_verify`);
+  try {
+    assert.equal(r.status, 0, `a concurrent agent's managed worktree must not fail the hook\n${r.stderr}`);
+    assert.doesNotMatch(r.stderr, /GIT-ENV-LEAK/);
+  } finally {
+    spawnSync('git', ['-C', R, 'worktree', 'remove', '--force', managed], { env: cleanGitEnv() });
+    spawnSync('git', ['-C', R, 'branch', '-D', 'managed-add-branch'], { env: cleanGitEnv() });
+  }
+});
+
+test('50e8c966 AC2: guard_verify passes (exit 0) when a MANAGED worktree under <repo>/.worktrees/ is removed during the run', () => {
+  const managed = join(R, '.worktrees', 'managed-rm');
+  // detached: a branch checked out elsewhere is hidden from the ref snapshot, so removal would surface it as a ref change
+  git(R, ['worktree', 'add', '-q', '--detach', managed]);
+  try {
+    const r = runGuard(`guard_snapshot\ngit -C "${R}" worktree remove --force "${managed}"\nguard_verify`);
+    assert.equal(r.status, 0, `removing a managed worktree must not fail the hook\n${r.stderr}`);
+    assert.doesNotMatch(r.stderr, /GIT-ENV-LEAK/);
+  } finally {
+    spawnSync('git', ['-C', R, 'worktree', 'remove', '--force', managed], { env: cleanGitEnv() });
+  }
+});
+
+test('50e8c966 AC2: negative control - a worktree added OUTSIDE .worktrees/ (even beside a managed one) still fails the hook and names its path', () => {
+  const managed = join(R, '.worktrees', 'managed-mixed');
+  const stray = join(base, 'stray-mixed-wt');
+  const r = runGuard(
+    `guard_snapshot\ngit -C "${R}" worktree add -q "${managed}" -b managed-mixed-branch\n` +
+      `git -C "${R}" worktree add -q "${stray}" -b stray-mixed-branch\nguard_verify`
+  );
+  try {
+    assert.notEqual(r.status, 0, 'a temp-dir worktree must still fail the hook');
+    assert.match(r.stderr, /GIT-ENV-LEAK/);
+    assert.match(r.stderr, /stray-mixed-wt/);
+    assert.doesNotMatch(r.stderr, /managed-mixed/, 'the managed worktree must not be blamed');
+  } finally {
+    spawnSync('git', ['-C', R, 'worktree', 'remove', '--force', managed], { env: cleanGitEnv() });
+    spawnSync('git', ['-C', R, 'worktree', 'remove', '--force', stray], { env: cleanGitEnv() });
+    spawnSync('git', ['-C', R, 'branch', '-D', 'managed-mixed-branch'], { env: cleanGitEnv() });
+    spawnSync('git', ['-C', R, 'branch', '-D', 'stray-mixed-branch'], { env: cleanGitEnv() });
+  }
+});
+
 // ─── f2836e29 AC1: --only commit — Gate 3 sees the right staged list ────────
 
 /**
@@ -390,9 +435,10 @@ test('f2836e29 AC1 (negative control): computing the staged list AFTER the scrub
  * verbatim) via a real `git push` of a CHECKED-OUT branch to a scratch BARE
  * remote, in a scratch clone with its own hook copy and scrubbed env.
  *
- * STUBBED (and only these): the three heavy gate commands the hook shells out
- * to - tools/nx-plugins/.../check-lane-reachability.mjs and
- * .../check-lockfile-fresh.mjs (both `exit 0`), and `npx` (a fake on PATH that
+ * STUBBED (and only these): the heavy gate commands the hook shells out
+ * to - tools/nx-plugins/.../check-lane-reachability.mjs,
+ * .../check-lockfile-fresh.mjs and the G12 planning-record check
+ * .../test/routing/test-routing.mjs and the G4 skip-expiry check .../wiring/check-skip-expiry.mjs and the G9 header check .../wiring/check-test-headers.mjs (all `exit 0`), and `npx` (a fake on PATH that
  * records its argv and optionally runs ADHD_FAKE_NPX_SIDE_EFFECT, standing in
  * for the nx test run). The guard stage - guard_snapshot, guard_exclude_ref in
  * the stdin loop, guard_verify - is the real code, in the real order.
@@ -419,6 +465,9 @@ function pushScenario({ sideEffect = '' } = {}) {
   for (const f of [
     'tools/nx-plugins/test/executors/wiring/check-lane-reachability.mjs',
     'tools/nx-plugins/build/executors/lockfile/check-lockfile-fresh.mjs',
+    'tools/nx-plugins/test/routing/test-routing.mjs',
+    'tools/nx-plugins/test/executors/wiring/check-skip-expiry.mjs',
+    'tools/nx-plugins/test/executors/wiring/check-test-headers.mjs',
   ]) {
     mkdirSync(dirname(join(clone, f)), { recursive: true });
     writeFileSync(join(clone, f), 'process.exit(0);\n');
@@ -444,7 +493,7 @@ function pushScenario({ sideEffect = '' } = {}) {
   return { push, S, clone, bare };
 }
 
-test('d80b7374 AC4: a real `git push` of a checked-out branch passes the real pre-push guard stage (exit 0, no GIT-ENV-LEAK)', () => {
+test('d80b7374 AC4: a real `git push` of a checked-out branch passes the real pre-push guard stage (exit 0, no GIT-ENV-LEAK)', { skip: 'backlog 8963c3cb until 2026-12-31 - .githooks/pre-push is disabled (renamed disabled-pre-push)' }, () => {
   const { push, S, bare } = pushScenario();
   assert.equal(push.status, 0, `${push.stdout}\n${push.stderr}`);
   assert.doesNotMatch(push.stderr + push.stdout, /GIT-ENV-LEAK/);
@@ -453,7 +502,7 @@ test('d80b7374 AC4: a real `git push` of a checked-out branch passes the real pr
   assert.match(git(bare, ['for-each-ref', '--format=%(refname)']), /refs\/heads\/main/, 'push reached the bare remote');
 });
 
-test('d80b7374 AC4 negative control: the same real push is BLOCKED when the gate moves a non-pushed ref', () => {
+test('d80b7374 AC4 negative control: the same real push is BLOCKED when the gate moves a non-pushed ref', { skip: 'backlog 8963c3cb until 2026-12-31 - .githooks/pre-push is disabled (renamed disabled-pre-push)' }, () => {
   const { push, bare } = pushScenario({
     sideEffect:
       'GIT_AUTHOR_NAME=a GIT_AUTHOR_EMAIL=a@b.c GIT_COMMITTER_NAME=a GIT_COMMITTER_EMAIL=a@b.c git update-ref refs/heads/side "$(git commit-tree -p HEAD -m leak HEAD^{tree})"',

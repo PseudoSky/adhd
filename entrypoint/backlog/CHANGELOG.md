@@ -1,3 +1,61 @@
+## 1.0.20 (2026-10-22)
+
+This was a version bump only for backlog to align it with other projects, there were no code changes.
+
+## Unreleased
+
+### 🩹 Fixes
+
+- **backlog:** `lookup` on a superseded issue uid (or unique prefix) now returns the live chain head in `redirect.uid` and an additive `forwardedFrom` echoing the uid supplied, instead of redirecting to the stale uid that `get` then refuses; a prefix matching a superseded node and its own head resolves to the head. `get` and every write verb are unchanged and still answer `conflict` naming the live uid (68175e51-9eda-459c-bc23-6bba2b4c7707).
+
+## 1.0.19 (2026-10-21)
+
+### 🚀 Features
+
+- **backlog:** add remove-note verb ([4e33bbe4](https://github.com/PseudoSky/adhd/commit/4e33bbe4))
+
+### 🩹 Fixes
+
+- **backlog:** re-anchor CONTRACT.md NoteNotFoundError/NoteRemovalNotPermittedError line refs after merge ([d3b216bc](https://github.com/PseudoSky/adhd/commit/d3b216bc))
+- **backlog:** honest remove-note identity model, verb counts and surface docs ([588e99c8](https://github.com/PseudoSky/adhd/commit/588e99c8))
+- **nx-test:** review corrections for the repo-wide spawn-isolation guard (0945d1b9) ([1a92065c](https://github.com/PseudoSky/adhd/commit/1a92065c))
+
+### ❤️ Thank You
+
+- pseudosky
+
+## 1.0.18 (2026-10-19)
+
+### 🩹 Fixes
+
+- **backlog:** stop the CLI trace from overwriting the sox log level ([fd9e2755](https://github.com/PseudoSky/adhd/commit/fd9e2755))
+- **backlog:** make the CLI stderr check real and correct the output-stream contract ([5ab84154](https://github.com/PseudoSky/adhd/commit/5ab84154))
+- **backlog:** compare timeline window by parsed instant and validate cursor since ([2c911586](https://github.com/PseudoSky/adhd/commit/2c911586))
+- **backlog:** reject explicit null for open-curve.at and tighten timeline since ([333c2407](https://github.com/PseudoSky/adhd/commit/333c2407))
+- **backlog:** reject explicit null for defaulted inputs and fix timeline window cursor ([c4843264](https://github.com/PseudoSky/adhd/commit/c4843264))
+- **backlog:** route CLI logs through sox telemetry and make optional inputs optional ([024eb38c](https://github.com/PseudoSky/adhd/commit/024eb38c))
+- **backlog:** verify citations against the repo that contains the cited path ([54ed7139](https://github.com/PseudoSky/adhd/commit/54ed7139))
+- **backlog:** with-dist-lock resolves its child via node_modules/.bin ([b038b4df](https://github.com/PseudoSky/adhd/commit/b038b4df))
+
+### ❤️ Thank You
+
+- pseudosky
+
+## 1.0.17 (2026-10-15)
+
+### 🚀 Features
+
+- **test:** G9 test header and tier check, wired into pre-push, CI and the gate table (595965cc T34) ([f69c3f6e](https://github.com/PseudoSky/adhd/commit/f69c3f6e))
+
+### 🩹 Fixes
+
+- **test:** blind-review findings on G12, G4, the gate table and the cache inputs (595965cc) ([b4bbd215](https://github.com/PseudoSky/adhd/commit/b4bbd215))
+- **test:** engine-driven gate specs are todo against ca23e252 in CI, G1 argv is tested, the T35 e2e carries a header (595965cc) ([df5094ec](https://github.com/PseudoSky/adhd/commit/df5094ec))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 1.0.16 (2026-10-11)
 
 This was a version bump only for backlog to align it with other projects, there were no code changes.

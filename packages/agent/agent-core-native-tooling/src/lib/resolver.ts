@@ -1,4 +1,4 @@
-import { isAbsolute, resolve, sep } from 'node:path';
+import { delimiter, isAbsolute, resolve, sep } from 'node:path';
 
 import type {
   DispatchToolConfig,
@@ -8,6 +8,7 @@ import type {
   ShellToolConfig,
 } from '@adhd/agent-base-types';
 import {
+  DEFAULT_SHELL_ALLOW_COMMANDS,
   DISPATCH_SERVER_KEY,
   FS_SERVER,
   SHELL_PROXY_ENV_KEYS,
@@ -97,6 +98,15 @@ export interface NativeResolveContext {
    * `~/.srt-settings.json`. Absent ⇒ `srt` reads its own default path.
    */
   srtSettingsPath?: string;
+  /**
+   * Exit-status launcher directory (61358b6f; see `exit-shim.ts`), produced by
+   * `prepareExitShimDir`. When set, the builtin shell server's `PATH` is
+   * `<dir>:<origPath>` so a non-zero exit is reported as a trailing
+   * `[exit status: N]` stderr line. Absent => the legacy unwrapped behaviour
+   * (bare resolver callers, custom hosts). A custom `shell: McpServerConfig` is
+   * never touched.
+   */
+  exitShim?: { dir: string; origPath: string };
 }
 
 function isMcpServerConfig(value: unknown): value is McpServerConfig {
@@ -314,6 +324,10 @@ function resolveShell(
   const env: Record<string, string> = {};
   if (overrides.allowCommands?.length) {
     env[SHELL_SERVER.envKeys.allowCommands] = overrides.allowCommands.join(',');
+  } else if (!overrides.allowCommands && !overrides.allowPatterns) {
+    // Default allowlist (069316e5): only when the caller supplied NEITHER list.
+    // Any caller-supplied list (even an empty one) overrides it in full.
+    env[SHELL_SERVER.envKeys.allowCommands] = DEFAULT_SHELL_ALLOW_COMMANDS.join(',');
   }
   // Pattern allow-list passthrough (ADR-0008 D5): the adopted server `fullmatch`es
   // each regex against the command NAME (`re.fullmatch(pattern, command[0])`),
@@ -342,12 +356,24 @@ function resolveShell(
   // proxy vars in the server's child-env allowlist. MERGED with a user-supplied
   // value (user entries first, de-duplicated) — never overwritten. Absent when
   // the sandbox is off: there is no injected proxy to pass through.
-  if (ctx.sandbox !== false) {
+  // Exit-status launcher (61358b6f): the shim dir leads the server's PATH and the
+  // original PATH rides in via the server's own child-env allowlist (merged,
+  // never overwritten). Independent of the sandbox.
+  const shimNames: string[] = [];
+  if (ctx.exitShim) {
+    env['PATH'] = `${ctx.exitShim.dir}${delimiter}${ctx.exitShim.origPath}`;
+    env[SHELL_SERVER.envKeys.origPath] = ctx.exitShim.origPath;
+    shimNames.push(SHELL_SERVER.envKeys.origPath);
+  }
+  if (ctx.sandbox !== false || ctx.exitShim) {
     const key = SHELL_SERVER.envKeys.childEnvAllowlist;
     // A value may arrive via `shell.env` OR the ambient `ctx.env` (which
     // `withBaseEnv` would otherwise let this key shadow); keep both.
     const existing = [env[key], ctx.env?.[key]].filter(Boolean).join(',');
-    env[key] = mergeCsv(existing, SHELL_PROXY_ENV_KEYS);
+    env[key] = mergeCsv(existing, [
+      ...(ctx.sandbox !== false ? SHELL_PROXY_ENV_KEYS : []),
+      ...shimNames,
+    ]);
   }
 
   const config: McpServerConfig = {

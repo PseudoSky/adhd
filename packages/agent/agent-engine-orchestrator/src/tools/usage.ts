@@ -795,7 +795,10 @@ function sessionGrainRows(db: Database, input: TaskUsageInput, source: IPriceSou
 interface TaskEventRow {
   taskId: string;
   type: string;
+  /** The payload text of a MODEL_REQUEST / MODEL_RESPONSE row; always null for a TOOL_RESULT row. */
   payload: string | null;
+  /** `tool_call_est_result_tokens` of a TOOL_RESULT row, extracted in SQL; null for other types or when absent. */
+  toolResultTokens: number | null;
   createdAt: string;
 }
 
@@ -841,7 +844,10 @@ function deriveTurns(
       .select({
         taskId: taskEventsTable.taskId,
         type: taskEventsTable.type,
-        payload: taskEventsTable.payload,
+        // A TOOL_RESULT payload carries the whole (up to 16000-char) tool result; the turn grain needs one
+        // number from it, so SQLite extracts that number and the payload text stays in the database.
+        payload: sql<string | null>`CASE WHEN ${taskEventsTable.type} = 'TOOL_RESULT' THEN NULL ELSE ${taskEventsTable.payload} END`,
+        toolResultTokens: sql<number | null>`CASE WHEN ${taskEventsTable.type} = 'TOOL_RESULT' THEN json_extract(${taskEventsTable.payload}, '$.tool_call_est_result_tokens') END`,
         createdAt: taskEventsTable.createdAt,
       })
       .from(taskEventsTable)
@@ -1030,10 +1036,7 @@ function deriveTurns(
       rows.push(row);
       lastResponseRow = row;
     } else if (evt.type === "TOOL_RESULT") {
-      const payload = (evt.payload ? JSON.parse(evt.payload) : {}) as {
-        tool_call_est_result_tokens?: number;
-      };
-      pendingToolTokens += payload.tool_call_est_result_tokens ?? 0;
+      pendingToolTokens += evt.toolResultTokens ?? 0;
     }
   }
   flush();

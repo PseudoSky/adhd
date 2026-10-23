@@ -13,7 +13,7 @@ import { dispatch, buildFnTable, describeParams, needsEnvelopeField, dataParamNa
 import type { Logger, LogFormat, CreateLoggerOptions, ParamInfo, AnyFn, BatchOptions, BatchItemResult } from '@adhd/apigen-engine-runtime';
 ```
 
-- **`dispatch(fns, ctx, schema, fnName, envelope, data)`** — the one dispatch path. No plugin
+- **`dispatch(fns, createClient, schema, fnName, envelope, domainArgs)`** — the one dispatch path. No plugin
   inlines this; all import it here.
 - **`buildFnTable(mod)`** — normalize an imported module into a callable table, recursively
   unwrapping `default` / CommonJS `module.exports` layers and keying functions by their
@@ -60,6 +60,11 @@ reads as "pass an empty object" and teaches nothing.
 > Requires AJV `verbose: true`: the formatter reads `parentSchema` (the accepted-key set)
 > and `data` (the rejected value) off each `ErrorObject`, neither of which is present on
 > AJV's default error shape.
+
+## `--use` plugin typing and query coercion
+
+- `UsePlugin['capabilities']['layer']` is derived from `@adhd/apigen-core-client`'s `LayerCapability`: the layer receives the core-client `Call`, and at least one of `layer` / `createLayer` is required by the type. `capabilities.mount` stays structural (`{ host, operations: unknown[] }`). A reader that needs the runtime `Call` (`.domainArgs`) casts `rawCall as unknown as Call`.
+- GET query-string params are coerced to `number` / `integer` / `boolean` from the function's composed schema, including nullable forms: `type: ['null', T]`, and a `oneOf` / `anyOf` with a single non-null branch. A union with several non-null branches is left as-is for the validate-Layer to judge.
 
 ## Request envelope
 

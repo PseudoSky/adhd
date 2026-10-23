@@ -1,3 +1,13 @@
+## 0.1.6 (2026-10-15)
+
+This was a version bump only for agent-plugin-sanitize to align it with other projects, there were no code changes.
+
+## Unreleased
+
+### 🚀 Features
+
+- **agent-plugin-sanitize:** with `delegationOnly: false` the plugin vetoes persistence of provider server-tool result bodies through the new `transform:server_result_persist` hook, so they are replayed within the producing run only and never stored. The default (`delegationOnly: true`) registers no handler and changes nothing. README now states that server-tool results are untrusted, bypass `transform:tool_result`, and documents the opt-outs (`nativeWebTools: false`, `echo.serverResultTtlMinutes: 0`, `session_clear`). (R9-hist S5b)
+
 ## 0.1.5 (2026-10-06)
 
 ### 🩹 Fixes

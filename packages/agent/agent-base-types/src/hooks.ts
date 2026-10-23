@@ -45,12 +45,58 @@ export interface PostModelResponsePayload {
   responseModel?: string;
   /** MODEL_RESPONSE.created_at − MODEL_REQUEST.created_at for this turn's model call. */
   computeMs: number;
+  /**
+   * Time to first byte: milliseconds from the provider request starting to its first streamed
+   * byte/event. Present only when the provider measured it (anthropic: first stream event;
+   * claudecli: first non-`system` CLI event); absent otherwise, never a guess. Same value as
+   * `MODEL_RESPONSE.payload.ttfb_ms`.
+   */
+  ttfbMs?: number;
+  /**
+   * Engine overhead before this call: milliseconds from the previous model call of the same task
+   * returning to this request starting (context assembly, tool execution, hooks, persistence).
+   * Absent for a task's first model call. Same value as `MODEL_RESPONSE.payload.overhead_ms`.
+   */
+  overheadMs?: number;
+  /**
+   * The `thinking` configuration this call was sent with: `'none'` when the request carried no
+   * `thinking` field (the API default), else the configured `type`. Absent when the provider has
+   * no such option (R10 trace signal).
+   */
+  thinkingConfig?: 'none' | 'adaptive' | 'disabled';
+  /** Thinking content blocks (`thinking` and `redacted_thinking`) in this response. Absent when not measured. */
+  thinkingBlocks?: number;
+  /**
+   * Total bytes of tool-result content sent to the model in this request's history (the
+   * tool_result blocks the call carried in). Absent when not measured.
+   */
+  toolResultBytesIn?: number;
+  /** Zero-based index of this model call within its task. Absent when not tracked. */
+  turnIndex?: number;
 }
+/** Concurrency class a tool call was scheduled under (`unordered` = never gated by the limiter's ordering). */
+export type ToolCallConcurrencyClass = 'safe' | 'barrier' | 'unordered';
+/** Coarse outcome class of a tool call, for trace analysis. */
+export type ToolCallErrorClass =
+  | 'none'
+  | 'policy_rejected'
+  | 'arg_mismatch'
+  | 'arg_coerced'
+  | 'exit_nonzero'
+  | 'tool_error';
 export interface PreToolCallPayload {
   executionContext: ExecutionContext;
   toolName: string;
   callId: string;
   toolInput: unknown;
+  /** Class the call was scheduled under. Absent when the engine did not classify it. */
+  concurrencyClass?: ToolCallConcurrencyClass;
+  /** Zero-based index of the model turn whose response requested this call. */
+  turnIndex?: number;
+  /** Zero-based index of the ordered execution group the call ran in. */
+  groupIndex?: number;
+  /** Milliseconds the call waited for a concurrency slot or an earlier group before starting. */
+  queuedMs?: number;
 }
 export interface PostToolCallPayload {
   executionContext: ExecutionContext;
@@ -68,18 +114,50 @@ export interface PostToolCallPayload {
    */
   isDenial?: boolean;
   /**
+   * The shell command's exit status (61358b6f), present only on a SUCCESSFUL
+   * `shell_execute` result whose last text part carries the exit shim's
+   * `[exit status: N]` trailer (i.e. a non-zero exit). A non-zero exit is not a
+   * fault, so `isError` is unchanged; absent ⇒ exit 0, a non-shell tool, or no
+   * shim. Also recorded on the persisted `TOOL_RESULT` event.
+   */
+  exitStatus?: number;
+  /**
    * Token estimate for the FULL, untruncated tool result (tokenized before the
-   * 500-char truncation applied to the stored `task_events.TOOL_RESULT.result` summary).
+   * model-visible cap applied to the stored `task_events.TOOL_RESULT.result` text).
    */
   estResultTokens: number;
+  /** Outcome class of the call. Absent when the engine did not classify it. */
+  errorClass?: ToolCallErrorClass;
+  /** UTF-8 byte length of the full result content as returned by the tool. */
+  resultBytes?: number;
+  /** `true` when the host appended a guidance note to this result before it reached the model. */
+  noteAppended?: boolean;
 }
 export interface MessageAppendedPayload {
   executionContext: ExecutionContext;
   message: Message;
 }
+/**
+ * Every advisory flag a task can complete with, the single source for `TaskCompletionWarning` and the
+ * zod mirror in `agent-engine-orchestrator`. A warning never changes the task's status or result.
+ * - `no_tool_use`: the final stop was `completed`, the task made zero tool calls, and the agent was
+ *   granted at least one tool (cbd559eb).
+ */
+export const TASK_COMPLETION_WARNINGS = ['no_tool_use'] as const;
+
+/** One advisory completion warning; derived from `TASK_COMPLETION_WARNINGS`. */
+export type TaskCompletionWarning = (typeof TASK_COMPLETION_WARNINGS)[number];
+
 export interface TaskCompletedPayload {
   executionContext: ExecutionContext;
   result: string;
+  /**
+   * Task-wide count of tool uses: calls the orchestrator executed plus the CLI-internal tool uses a
+   * provider reported (claudecli). Mirrors the `toolUseCount` on the persisted `TASK_COMPLETED` event (cbd559eb).
+   */
+  toolUseCount?: number;
+  /** Present only when the task completed with at least one warning. */
+  warnings?: TaskCompletionWarning[];
 }
 export interface TaskFailedPayload {
   executionContext: ExecutionContext;
@@ -215,6 +293,83 @@ export interface HitlResumePayload {
 export interface SessionClosedPayload {
   session: Session;
 }
+/** Where a task's startup wall time went (R10 trace signal), emitted once per task before its first model call. */
+export interface TaskStartupPayload {
+  executionContext: ExecutionContext;
+  /** Per MCP server: milliseconds to connect and list tools. */
+  mcpConnectMs: Record<string, number>;
+  /** Milliseconds from task start until the full tool list was ready. */
+  toolsReadyMs: number;
+  /**
+   * Milliseconds the task waited in the queue before starting. Optional: present only when the emitter
+   * measured it (enqueue to dequeue); absent otherwise, never a guess and never 0.
+   */
+  queueWaitMs?: number;
+  /**
+   * Milliseconds spent resolving or creating the session. Optional: present only when the emitter measured
+   * it; absent otherwise, never a guess and never 0.
+   */
+  sessionMs?: number;
+  /** Number of tools advertised to the model. */
+  toolCount: number;
+}
+/** A dispatching tool (`task`, `tasks_batch`, an agent task) finished handing work to child tasks. */
+export interface DispatchCompletedPayload {
+  executionContext: ExecutionContext;
+  /**
+   * `task` / `tasks_batch` / `agent_task`: the call started child tasks. `result`: a `result` tool call that
+   * waited (`wait_ms`) for one existing child; it starts nothing, so it is not a dispatch in the counters.
+   */
+  kind: 'task' | 'tasks_batch' | 'agent_task' | 'result';
+  mode: 'sync' | 'background';
+  childTaskIds: string[];
+  /**
+   * The id of the parent's tool call (the model's `tool_use` / `tool_calls[].id`, or `bridge-N` for a claudecli
+   * bridged call) that made this dispatch, so concurrent dispatch calls on one parent are told apart exactly.
+   * Absent when the dispatch was not made through an engine tool call (e.g. a direct REST call).
+   */
+  toolCallId?: string;
+  /** Milliseconds the parent was blocked by this dispatch (about 0 for `background`). */
+  parentBlockedMs: number;
+  /** Milliseconds spent waiting for the children, when the dispatch waited. */
+  waitMs?: number;
+}
+/**
+ * A background child's result reached its parent. Type only: no emitter exists yet
+ * (background auto-delivery is a later segment).
+ */
+export interface BackgroundDeliveredPayload {
+  executionContext: ExecutionContext;
+  childTaskId: string;
+  /** Milliseconds from the child finishing to the parent receiving the result. */
+  latencyMs: number;
+  consumedVia: 'delivery' | 'result';
+}
+
+/**
+ * Persistence veto for the provider-native server-tool result bodies of one assistant message
+ * (R9-hist, Anthropic `web_fetch` / `web_search` results and their `server_tool_use` blocks).
+ *
+ * Server-tool results are executed by the provider, so they never pass through
+ * `transform:tool_result` and cannot be rewritten (the blocks are opaque and signed). A plugin that
+ * treats third-party content as untrusted therefore has exactly one lever: refuse to let it outlive
+ * the run that produced it. The orchestrator emits this event once per assistant message, before
+ * persisting its echo, with `persist: true`; a handler MUTATES the payload (passed by reference,
+ * same contract as `transform:tool_result`) and sets `persist = false` to veto. After `emit()`
+ * returns the orchestrator reads `persist`: `false` means the server-tool blocks of this message
+ * are replayed within the producing run only and are never stored.
+ *
+ * A handler may only veto: it must never set `persist` back to `true` (handlers run in
+ * registration order, so a later `true` would silently undo an earlier plugin's veto).
+ */
+export interface ServerResultPersistPayload {
+  sessionId: string;
+  agentName?: string;
+  /** Bytes of the server-tool blocks that would be persisted (0 means nothing to veto). */
+  serverBytes: number;
+  /** Starts `true`; set to `false` to prevent the server-tool blocks from being stored. */
+  persist: boolean;
+}
 
 export interface HookEventMap {
   'task:start': TaskStartPayload;
@@ -231,6 +386,12 @@ export interface HookEventMap {
    * appended to the conversation history.
    */
   'transform:tool_result': PostToolCallPayload;
+  /**
+   * Mutation-style persistence veto for provider server-tool result bodies, emitted once per
+   * assistant message before its echo is stored. Handlers set `payload.persist = false` to keep
+   * the bodies in-run only. See `ServerResultPersistPayload`.
+   */
+  'transform:server_result_persist': ServerResultPersistPayload;
   /**
    * Emitted by budget plugins when a cap whose mode is "warning" (the default)
    * is exceeded on the model path. Enforcement resolves — the run continues.
@@ -268,6 +429,12 @@ export interface HookEventMap {
   'hitl:resume': HitlResumePayload;
   /** A session transitioned to `closed`. */
   'session:closed': SessionClosedPayload;
+  /** Task startup timing breakdown (R10). Observational. */
+  'task:startup': TaskStartupPayload;
+  /** A dispatching tool handed work to child tasks (R10). Observational. */
+  'dispatch:completed': DispatchCompletedPayload;
+  /** A background child's result reached its parent (R10). Type only: not emitted yet. */
+  'background:delivered': BackgroundDeliveredPayload;
   /** A model-call attempt failed and will be retried or failed over (provider-failure SPEC §5.2). */
   'provider:attempt_failed': AttemptFailedPayload<'provider'>;
   /** A provider call ended: terminal, suspended, held, or refused by an open trip. */

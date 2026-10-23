@@ -559,6 +559,7 @@ for that adapter — ADR-0012 §1 note two).
 | `rmLocation`                                           | `immediate` | invalidate-by-uid after confirming the row is live, for uniformity with every other verb above (one mode, one decision, never re-litigated per verb)                                                                                         |
 | `addCitation`                                          | `immediate` | resolves the issue → live `issue` row and mints the `citation` node + its `has_citation` edge + audit in one transaction; the cited file's sha is computed before the transaction opens (never a lock held across a filesystem/git read)     |
 | `removeCitation`                                       | `immediate` | invalidate-by-uid (the citation's OWN uid, never a `(target,line)` composite) after confirming the citation row is live, then invalidates its `has_citation` edge — the `rmLocation` shape, applied to `citation`                          |
+| `removeNote`                                           | `immediate` | invalidate-by-uid (the note's OWN uid) after confirming the `note` node is live, then invalidates its `has_note` edge and writes the `note-removed` audit row against the owning issue — the `removeCitation` shape, applied to `note`     |
 
 #### `findOrCreateNode` is not race-free — the write layer does not call it
 
@@ -1265,7 +1266,7 @@ draft):**
   real store, real `BacklogCtx` built via `buildBacklogEnv({..., namespace:
   'test' })` against a temp `dbPath`; `vi.mock('@adhd/sox-embedding-provider',
   ...)` with the deterministic fake from
-  `src/test/helpers/fake-embedding-provider.ts`, and a per-call spy on
+  `test/helpers/fake-embedding-provider.ts`, and a per-call spy on
   `createEmbeddingProvider`, so every assertion is an invocation COUNT, never
   wall-clock):
   - `embedding.enabled: true`, each of `claim`/`transition`/`move`/`relate`/
@@ -1941,11 +1942,11 @@ silently.
   nothing.
 
 - **How a human or agent gets a `uid` at all — the two-step pattern.**
-  §3a's `lookup` is registry-only (project/component/location — "where does
-  this live"); it does **not** resolve issues, and conflating the two would
-  be wrong: `lookup` answers a structural question with one correct answer
-  per input, while resolving "the issue about X" is inherently a _search_
-  with zero, one, or many matches. So issue addressing is **discover, then
+  §3a's `lookup` answers structural questions with one correct answer per
+  input — registry shape (project/component/location — "where does this
+  live") and a uid or unique uid prefix — while resolving "the issue about X"
+  is inherently a _search_ with zero, one, or many matches, which is `query`'s
+  job. For a uid, `lookup` is the one verb that heals a rotted uid: given a uid or unique prefix of a superseded issue (replaced by a body edit), it returns the uid of the live head and sets `forwardedFrom` to the uid you supplied. `get`, `update`, `transition`, `claim`, `relate`, `move` and `delete` never forward: addressing a superseded uid returns `conflict` naming the live uid. So issue addressing is **discover, then
   act** — the same shape a coding agent already uses for `rg` before `Edit`:
 
   1. `query({filter:{grep:"..."} , fields:["uid","title"]})` (or
@@ -2808,7 +2809,7 @@ not carry (§7). Every action once carried under `admin` is accounted for:
 
 ### 6.7 Transport surfaces
 
-CLI/MCP/HTTP each mount the issue verbs (the nine plus `add-citation`/`remove-citation`) plus §3a's registry verbs
+CLI/MCP/HTTP each mount the issue verbs (the nine plus `add-citation`/`remove-citation`/`remove-note`) plus §3a's registry verbs
 through the same one-descriptor→four-projection mechanism `server.ts`
 already uses (`describeMountedSurface`/`project(op)`) — unchanged
 mechanism, new operation list. MCP tool names follow the existing
@@ -3117,8 +3118,13 @@ access control out of scope).
   component, sessionId, holder}, now?}` lists ACTIVE reservations (`leaseExpiry >
   now`, `now` injectable); `query {view:"sessions"}` lists sessions; the
   `timeline {sessionId}` verb returns the session, its descendants and the ordered
-  ops. Spellings `list reservation` / `get session` belong to the unshipped
+  ops. Without `sessionId` it returns every session's ops in the window `[since, now]`
+  (`since` defaults to 7 days before now; `session` is `null`). Spellings `list reservation` / `get session` belong to the unshipped
   CLI-HIERARCHY verb tree; the shipped spellings are the views above.
+- **Optional inputs.** A default applies only when its key is omitted. `claim.action`
+  defaults to `claim`, `relate.action` to `add`, `obligate.on_fail` to `block`, and
+  `open-curve.at` to the current instant. An explicit `null` or unknown value is
+  rejected (`validation` or `invalid_argument`), never silently defaulted.
 - **Reads.** `get {fields:["specRevisionFragment"]}` returns the HEAD revision's
   fragment verbatim; `query {projection:"byCitationPath", path:P}` returns every
   live item citing P (exact path equality, relative paths resolved per project

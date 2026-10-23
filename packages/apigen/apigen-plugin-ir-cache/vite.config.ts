@@ -1,5 +1,6 @@
 /// <reference types='vitest' />
 import { defineConfig } from 'vite';
+import { configDefaults } from 'vitest/config';
 import dts from 'vite-plugin-dts';
 import * as path from 'path';
 import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin';
@@ -8,6 +9,7 @@ import { nxViteTsPathsPre } from '../../../tools/vite-plugins/source-resolution.
 import { externalizeRealDeps } from '../../../tools/vite-plugins/externalize.mjs';
 
 import { vitestTestDefaults } from '../../../tools/vite-plugins/vitest-pool-defaults.mjs';
+import { E2E_FILE_EXCLUDES, UNIT_FILE_INCLUDES } from '../../../tools/vite-plugins/e2e-globs.mjs';
 
 export default defineConfig({
   root: __dirname,
@@ -58,7 +60,9 @@ export default defineConfig({
       dir: '../../../node_modules/.vitest',
     },
     environment: 'node',
-    include: ['src/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
+    include: UNIT_FILE_INCLUDES,
+    // The real ts-morph extraction suite (tier P) is `*.e2e.ts` and runs in the `e2e` target (vitest.e2e.config.ts), never here (ADR 0009).
+    exclude: [...configDefaults.exclude, ...E2E_FILE_EXCLUDES],
 
     // `computeCacheKey`'s spec (ir-cache-layer.spec.ts) times out at vitest's
     // 5s default under the CI `nx affected -t test --parallel=5` run (load

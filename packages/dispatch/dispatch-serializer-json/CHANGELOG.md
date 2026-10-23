@@ -1,3 +1,14 @@
+## 0.1.5 (2026-10-21)
+
+### 🩹 Fixes
+
+- **dispatch-orchestrator:** review corrections for dag lock reclaim and serializer cleanup (0b80a7b5) ([59e3628a](https://github.com/PseudoSky/adhd/commit/59e3628a))
+- **dispatch-orchestrator:** reclaim stale dispatch locks without deleting a competitor's lock, unique temp files in dag serializer, dry runs take the dag lock (0b80a7b5) ([108f0a2d](https://github.com/PseudoSky/adhd/commit/108f0a2d))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 0.1.4 (2026-10-07)
 
 ### 🚀 Features

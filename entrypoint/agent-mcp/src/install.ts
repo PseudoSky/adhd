@@ -24,6 +24,7 @@
  * zero-dependency choice.
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { CLI_VERSION } from './cli-version.js';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 
@@ -333,6 +334,10 @@ export function install(argv: string[], cwd: string = process.cwd(), homeOverrid
 export async function runInstallCommand(argv: string[]): Promise<void> {
   if (argv[0] === '--help' || argv[0] === '-h') {
     console.log(INSTALL_HELP_TEXT);
+    return;
+  }
+  if (argv[0] === '--version' || argv[0] === '-v') {
+    console.log(CLI_VERSION);
     return;
   }
   const result = install(argv);

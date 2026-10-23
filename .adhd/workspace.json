@@ -8,6 +8,7 @@
     "decompile":  { "description": "Bytecode/bundle decompilation toolchain — CLI for reversing built JS artifacts" },
     "dispatch":   { "description": "Task dispatch — DAG-based execution planning and optimization" },
     "environment": { "description": "Environment management — specs, builders, core runtimes for Node, Python, and Rust" },
+    "policy":     { "description": "Policy evaluation — spec, deciders, services and wiring for ABAC-style authorization" },
     "resilience": { "description": "Fail-safe primitives - persistent kill-switches and guards that protect callers and upstream services from compounding failures" },
     "stealth":    { "description": "Stealth browsing - CDP Chrome core library and the search entrypoint built on it" },
     "ui-react":   { "description": "React UI components — hooks, storybook config" },

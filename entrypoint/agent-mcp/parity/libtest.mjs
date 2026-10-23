@@ -1,0 +1,703 @@
+// PARITY-INSTRUMENT-ONLY
+// Zero-cost unit tests for the driver's helpers (`node drive.mjs --check-lib`). No model call, no network.
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { spawn, spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import * as L from './lib.mjs';
+import * as F from './fixtures.mjs';
+import * as O from './oracle.mjs';
+import * as OLD from './golden/r4/oracle.r4.frozen.mjs';
+import * as DT from './detectors.mjs';
+import * as QLt from './quality.mjs';
+import * as JGt from './judge.mjs';
+import { rescoreRecord } from './rescore.mjs';
+import * as MTt from './metrics.mjs';
+import * as GRt from './grid.mjs';
+import * as GTt from './gate.mjs';
+import { buildPlan, ancestorLeaks, runHidden, transcriptFor, resultForJudge, gapSecondsSince, categoryOf, specFor, fixturesFact, recordDuration, rederiveDurationReport, tmpRoot } from './drive.mjs';
+import * as LGt from './ledger.mjs';
+import crypto from 'node:crypto';
+
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const ROUND1 = path.join(HERE, 'golden/absent-round1.jsonl');
+const LIVE_RUNS = path.join(HERE, 'golden/absent-round2-runs');   // Round 2 evidence, read-only
+
+const SLEEPER = 'setInterval(()=>{},1000)';
+/** The sweep fixture's child: spawns a grandchild sleeper and reports its pid as a PLAIN STRING (`console.log(<number>)` is ANSI-coloured when FORCE_COLOR is set, as nx sets it). */
+const SWEEP_CHILD_SRC = `const c=require('child_process').spawn(process.execPath,['-e','${SLEEPER}']);process.stdout.write(String(c.pid)+'\\n');${SLEEPER}`;
+
+/** Parses one pid line from a fixture child. Throws a message carrying the raw text unless it is a plain integer pid > 1 (dcf8b7da AC2). */
+function parsePidLine(raw) {
+  const text = String(raw).trim(); const n = Number(text);
+  if (!/^\d+$/.test(text) || !Number.isInteger(n) || n <= 1) throw new Error(`grandchild pid is not a plain integer: ${JSON.stringify(String(raw))}`);
+  return n;
+}
+/** Resolves with the first pid line the child prints; rejects at the deadline or when the child exits first. */
+function readPidLine(child, deadlineMs = 10_000) {
+  return new Promise((resolve, reject) => {
+    let buf = ''; const timer = setTimeout(() => done(new Error(`no pid line from the fixture child within ${deadlineMs}ms (got ${JSON.stringify(buf)})`)), deadlineMs);
+    const onData = (b) => { buf += String(b); if (buf.includes('\n')) done(null, buf); };
+    const onExit = () => done(new Error(`fixture child exited before printing a pid (got ${JSON.stringify(buf)})`));
+    const done = (err, v) => { clearTimeout(timer); child.stdout.off('data', onData); child.off('exit', onExit); if (err) reject(err); else try { resolve(parsePidLine(v)); } catch (e) { reject(e); } };
+    child.stdout.on('data', onData); child.once('exit', onExit);
+  });
+}
+/** Polls (bounded) until none of `pids` is alive. */
+async function waitGone(pids, deadlineMs) {
+  const t0 = Date.now();
+  while (pids.some((p) => L.alive(p))) { if (Date.now() - t0 > deadlineMs) return false; await new Promise((r) => setTimeout(r, 25)); }
+  return true;
+}
+/**
+ * Runs `body({ child, grand, bystander })` against a fresh process tree (child -> grandchild, plus an unrelated bystander), all spawned by THIS call, and ALWAYS reaps that tree
+ * afterwards, whether `body` passes or throws (dcf8b7da AC3). Only processes this function spawned (and the child's descendants) are ever signalled.
+ */
+async function withSweepTree(body) {
+  const child = spawn(process.execPath, ['-e', SWEEP_CHILD_SRC], { stdio: ['ignore', 'pipe', 'ignore'] });
+  const bystander = spawn(process.execPath, ['-e', SLEEPER], { stdio: 'ignore' });
+  const exited = (p) => (p.exitCode !== null || p.signalCode !== null ? Promise.resolve() : new Promise((r) => p.once('exit', r)));
+  let grand = null;
+  try {
+    grand = await readPidLine(child);
+    return await body({ child, grand, bystander });
+  } finally {
+    // Signals go through the harness's guarded paths only (r10-killsafety AC4): the registered child and its live descendants via sweepPids, the handles this call holds via ChildProcess.kill.
+    const owned = new Set(); const reg = new L.OwnedRegistry();
+    if (child.exitCode === null && child.signalCode === null && reg.add(child.pid)) { owned.add(child.pid); for (const d of L.descendantsOf([child.pid])) owned.add(d.pid); }   // grandchild found via the tree even if its pid never parsed
+    if (Number.isInteger(grand)) owned.add(grand);
+    if (owned.size) await L.sweepPids([...owned], 300, reg);
+    child.kill('SIGKILL'); bystander.kill('SIGKILL');
+    await Promise.all([exited(child), exited(bystander)]); await waitGone([...owned], 5000);
+  }
+}
+
+export async function runLibTests({ log = console.log } = {}) {
+  const results = [];
+  const t = async (name, fn) => {
+    try { await fn(); results.push({ name, ok: true }); log(`  ok   ${name}`); }
+    catch (e) { results.push({ name, ok: false, err: e.message }); log(`  FAIL ${name}: ${e.message}`); }
+  };
+  const eq = (a, b, m = '') => { if (JSON.stringify(a) !== JSON.stringify(b)) throw new Error(`${m} expected ${JSON.stringify(b)} got ${JSON.stringify(a)}`); };
+  const ok = (c, m) => { if (!c) throw new Error(m); };
+  const near = (a, b, tol, m = '') => { if (Math.abs(a - b) > tol) throw new Error(`${m} ${a} not within ${tol} of ${b}`); };
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'r2-libtest-'));
+
+  // ---- cost model
+  const HK = L.RATE_CARDS['claude-haiku-4-5'].rates;   // historical haiku tests price at the haiku card explicitly (the default card follows the pin)
+  await t('cost: tiered pricing arithmetic', () => {
+    const n = L.normUsage({ input_tokens: 1000, output_tokens: 200, cache_read_input_tokens: 10000, cache_creation_input_tokens: 3000, cache_creation: { ephemeral_5m_input_tokens: 1000, ephemeral_1h_input_tokens: 2000 } });
+    near(L.priceNorm(n, HK).usd, 1000 * 1 / 1e6 + 200 * 5 / 1e6 + 10000 * 0.1 / 1e6 + 1000 * 1.25 / 1e6 + 2000 * 2 / 1e6, 1e-12);
+  });
+  // R7-model: model-parametric cost card, with negative controls.
+  await t('R7-model AC1: the pin is claude-sonnet-5-5 and the judge model is a SEPARATE pin (claude-haiku-4-5)', async () => {
+    eq(F.PIN_MODEL, 'claude-sonnet-5-5'); const J = await import('./judge.mjs'); eq(J.JUDGE_MODEL, 'claude-haiku-4-5'); ok(J.JUDGE_MODEL !== F.PIN_MODEL, 'judge model must not share the arm pin');
+    eq(F.makeSpec({ seed: 's', arm: 'A', rep: 1 }).pin, F.PIN_MODEL);
+  });
+  await t('R7-model AC3: the default rate card is the pinned model\'s; sonnet-5-5 is priced from the committed pricing.json snapshot ($2/$10, cache read 0.10, 5m 2.50, 1h 4.00 per M), not at haiku rates', () => {
+    eq(L.RATES_PER_M, L.RATE_CARDS['claude-sonnet-5-5'].rates); eq(L.RATES_PER_M, { input: 2.0, output: 10.0, cacheRead: 0.10, write5m: 2.5, write1h: 4.0 });
+    const n = L.normUsage({ input_tokens: 1e6, output_tokens: 1e6, cache_read_input_tokens: 1e6, cache_creation_input_tokens: 2e6, cache_creation: { ephemeral_5m_input_tokens: 1e6, ephemeral_1h_input_tokens: 1e6 } });
+    near(L.priceNorm(n).usd, 2 + 10 + 0.1 + 2.5 + 4, 1e-9); near(L.priceNorm(n, HK).usd, 1 + 5 + 0.1 + 1.25 + 2, 1e-9);   // negative control: the haiku card gives a different number
+    ok(/pricing\.json/.test(L.RATE_CARDS['claude-sonnet-5-5'].source), 'the card cites its source');
+    eq(L.rateCardFor('claude-sonnet-5-5-20260101')?.model, 'claude-sonnet-5-5');
+  });
+  await t('R7-model AC3: a model with no rate card is UNMEASURED, never priced at another model\'s rates (no invented price)', () => {
+    eq(L.rateCardFor('claude-sonnet-5'), null); eq(L.rateCardFor('claude-opus-9'), null);
+    const p = L.priceNorm(L.normUsage({ input_tokens: 5, output_tokens: 5 }), L.rateCardFor('claude-sonnet-5')?.rates ?? null);
+    eq(p.usd, null); ok(p.unmeasured === true, 'unmeasured flag'); eq(L.priceTokens({ in: 5 }, null), null); eq(L.unmeasuredNote('claude-opus-9'), 'unmeasured: no rate card for claude-opus-9');
+  });
+  await t('R8-model AC3: claude-haiku-5-5 is priced from the committed pricing.json snapshot ($0.10/$0.50, cache read 0.01, 5m 0.125, 1h 0.20 per M), the >=100k override tier is recorded not applied, and neighbours keep their own card', () => {
+    const c = L.rateCardFor('claude-haiku-5-5'); eq(c?.rates, { input: 0.10, output: 0.50, cacheRead: 0.01, write5m: 0.125, write1h: 0.20 });
+    eq(c.tierOverride.minPromptTokens, 100000); ok(/anthropic\/claude-haiku-5\.5/.test(c.source) && /not applied/.test(c.source), 'the card cites its source and says the tier is not applied');
+    eq(L.rateCardFor('claude-haiku-5-5-20261001')?.model, 'claude-haiku-5-5');
+    const n = L.normUsage({ input_tokens: 1e6, output_tokens: 1e6, cache_read_input_tokens: 1e6, cache_creation_input_tokens: 2e6, cache_creation: { ephemeral_5m_input_tokens: 1e6, ephemeral_1h_input_tokens: 1e6 } });
+    near(L.priceNorm(n, c.rates).usd, 0.10 + 0.50 + 0.01 + 0.125 + 0.20, 1e-9); ok(Math.abs(L.priceNorm(n, c.rates).usd - L.priceNorm(n, HK).usd) > 1, 'negative control: the haiku-4-5 card is a different number');
+    eq(L.rateCardFor('claude-haiku-4-5').rates, HK);
+  });
+  await t('R8-model AC3: turns are priced by the model the RESPONSE reported (the resolved id), never the round pin; an observed model without a card is unmeasured; no observed model falls back to the pin', () => {
+    const usage = { input_tokens: 1e6, output_tokens: 1e6 };
+    const mk = (model) => ({ order: ['m1'], msgs: new Map([['m1', { model, parent: null, usage, stop: 'end_turn', tools: [], thinking: false }]]) });
+    const usdFor = (model) => L.turnsFromCliStream(mk(model))[0].usd;
+    near(usdFor('claude-haiku-5-5'), 0.10 + 0.50, 1e-9);                                  // resolved haiku id -> haiku-5-5 card, although the pin card is sonnet's
+    near(usdFor('claude-sonnet-5-5'), 2 + 10, 1e-9);
+    eq(usdFor('claude-opus-9'), null);                                                    // no card -> unmeasured, not the pin's price
+    near(usdFor(undefined), L.priceNorm(L.normUsage(usage)).usd, 1e-9);                   // no observed model -> the pin's default card
+    eq(L.ratesForModel('claude-haiku-5-5'), L.RATE_CARDS['claude-haiku-5-5'].rates); eq(L.ratesForModel('claude-opus-9'), null); eq(L.ratesForModel(''), L.RATES_PER_M);
+    const scaled = L.reconcileCliOutput([{ idx: 1, model: 'claude-haiku-5-5', in: 0, cr: 0, w5m: 0, w1h: 0, wUntiered: 0, out: 1 }], 1e6); near(scaled[0].usd, 0.50, 1e-9);
+  });
+  await t('cost: untiered writes are flagged and priced at 5m, never 1h', () => {
+    const p = L.priceNorm(L.normUsage({ cache_creation_input_tokens: 1000000 }), HK);
+    ok(p.untieredFlag, 'flag'); near(p.usd, 1.25, 1e-9);
+  });
+  await t('cost: tier assertion fires for C-1h; for A only when the PARENT writes 5m (native subagents legitimately write 5m)', () => {
+    ok(L.tierAssertion('C', { w1h: 5, w5m: 0, wUntiered: 0 }).length === 1, 'C');
+    eq(L.tierAssertion('A', { w1h: 33063, w5m: 20537, wUntiered: 0 }, { w1h: 33063, w5m: 0, wUntiered: 0 }), []);                 // A1 p1: child 5m, parent 1h => no warning
+    ok(L.tierAssertion('A', { w1h: 0, w5m: 5, wUntiered: 0 }, { w1h: 0, w5m: 5, wUntiered: 0 }).length === 1, 'parent 5m must warn (negative control)');
+    ok(L.tierAssertion('A', { w1h: 0, w5m: 5, wUntiered: 0 }).length === 1, 'without a parent split the total is asserted');
+    ok(L.tierAssertion('B', { w1h: 0, w5m: 5, wUntiered: 0 }).length === 1, 'B 5m warns'); eq(L.tierAssertion('B', { w1h: 5, w5m: 0, wUntiered: 0 }), []);
+  });
+  await t('cost: A1 phase 1 = $0.239084 reproduced from modelUsage tokens (304 in, 17,995 out, 570,076 cache read, 20,537 5m + 33,063 1h writes) at haiku-4.5 list rates', () => {
+    near(L.priceTokens({ in: 304, out: 17995, cr: 570076, w5m: 20537, w1h: 33063 }, HK), 0.239084, 5e-7);
+    const result = { total_cost_usd: 0.23908385, usage: { output_tokens: 2909 }, modelUsage: { 'claude-haiku-4-5': { inputTokens: 304, outputTokens: 17995, cacheReadInputTokens: 570076, cacheCreationInputTokens: 53600, costUSD: 0.23908385 } } };
+    const acc = L.cliPhaseAccounting([result]); near(acc.increment.usd, 0.239084, 5e-7); eq(acc.increment.out, 17995);
+    near(L.priceTokens({ in: acc.increment.in, out: acc.increment.out, cr: acc.increment.cr, w5m: 20537, w1h: acc.increment.cw - 20537 }, HK), acc.increment.usd, 5e-7, 'recompute vs CLI');
+    // negative control: the old basis (result.usage.output_tokens, the parent's last segment) undercounts by exactly the Round 2 gap
+    const old = L.priceTokens({ in: 304, out: 2909, cr: 570076, w5m: 20537, w1h: 33063 }, HK); near(0.239084 - old, 15086 * 5 / 1e6, 5e-7, 'old basis gap'); ok(old < 0.17, 'old basis was expected to undercount');
+  });
+  await t('cost: phase 2 of a resumed session is the INCREMENT over phase 1 (CLI cost and modelUsage are session-cumulative); several result events per phase use the last', () => {
+    const mu = (i, o, cr, cw, usd) => ({ total_cost_usd: usd, modelUsage: { m: { inputTokens: i, outputTokens: o, cacheReadInputTokens: cr, cacheCreationInputTokens: cw, costUSD: usd } } });
+    const p1 = L.cliPhaseAccounting([mu(1, 10, 100, 5, 0.1), mu(2, 20, 200, 6, 0.2)]); eq(p1.nResults, 2); near(p1.cumulative.usd, 0.2, 1e-12);
+    const p2 = L.cliPhaseAccounting([mu(5, 50, 500, 9, 0.5)], p1.cumulative); near(p2.increment.usd, 0.3, 1e-12); eq(p2.increment.out, 30); eq(p2.increment.cr, 300); eq(p2.cumulative.out, 50);
+    eq(L.cliPhaseAccounting([]), null);
+  });
+  await t('cost: Round 2 A1 / A2 streams (read-only evidence): per-phase and whole-run costs equal the CLI (A1 0.239084 + 0.124014 = 0.363098; A2 0.136359 + 0.058448 = 0.194807) and the tier-aware recompute lands within 0.5%', () => {
+    if (!fs.existsSync(LIVE_RUNS) || !fs.existsSync(ROUND1)) return;   // round-1/2 evidence is not shipped with the instrument (only the R4 goldens are)
+    for (const [run, want] of [['A1', [0.239084, 0.124014, 0.363098]], ['A2', [0.136359, 0.058448, 0.194807]]]) {
+      let prior = null; const incs = []; let lastCum = null;
+      for (const ph of [1, 2]) {
+        const f = path.join(LIVE_RUNS, run, `A.phase${ph}.stream.jsonl`); ok(fs.existsSync(f), `evidence missing: ${f}`);
+        const p = L.parseCliStream(L.parseJsonLines(fs.readFileSync(f, 'utf8'))); const acc = L.cliPhaseAccounting(p.results, prior); prior = acc.cumulative; lastCum = acc.cumulative; incs.push(acc.increment.usd);
+        const turns = L.reconcileCliOutput(L.turnsFromCliStream(p), acc.increment.out); const re = turns.reduce((a, x) => a + x.usd, 0);
+        near(re / acc.increment.usd, 1, 0.005, `${run} p${ph} recompute ${re} vs CLI ${acc.increment.usd}`);
+        const old = L.reconcileCliOutput(L.turnsFromCliStream(p), p.result.usage.output_tokens).reduce((a, x) => a + x.usd, 0); ok(old / acc.increment.usd < 0.9, `old basis should undercount (${old})`);
+      }
+      near(incs[0], want[0], 5e-7, `${run} p1`); near(incs[1], want[1], 5e-7, `${run} p2`); near(incs[0] + incs[1], want[2], 5e-7, `${run} total`); near(lastCum.usd, want[2], 5e-7, `${run} cumulative`);
+    }
+  });
+  await t('cost: Round 1 stream: raw per-message output undercounts (31 vs 2473 in the result), reconciliation lands within 0.5% of the CLI total_cost_usd', () => {
+    if (!fs.existsSync(LIVE_RUNS) || !fs.existsSync(ROUND1)) return;   // round-1/2 evidence is not shipped with the instrument (only the R4 goldens are)
+    const events = L.parseJsonLines(fs.readFileSync(ROUND1, 'utf8'));
+    const p = L.parseCliStream(events); ok(p.result && p.result.total_cost_usd > 0, 'no result with a cost');
+    const raw = L.turnsFromCliStream(p); const rawSum = raw.reduce((a, x) => a + x.usd, 0);
+    ok(rawSum / p.result.total_cost_usd < 0.97, 'the raw stream was expected to undercount (negative control)');
+    const rec = L.reconcileCliOutput(raw, p.result); const sum = rec.reduce((a, x) => a + x.usd, 0);
+    near(sum / p.result.total_cost_usd, 1, 0.005, `reconciled ${sum} cli ${p.result.total_cost_usd}`);
+    near(rec.reduce((a, x) => a + x.out, 0), L.cliPhaseAccounting(p.results).increment.out, 1e-6); eq(L.cliPhaseAccounting(p.results).increment.out, p.result.usage.output_tokens); ok(rec.every((x) => x.outScaled), 'not flagged');
+  });
+  await t('cost: reconcileCliOutput is a no-op without a result or when the stream already agrees', () => {
+    const turns = [{ in: 1, cr: 0, w5m: 0, w1h: 0, wUntiered: 0, out: 10, usd: 1 }];
+    eq(L.reconcileCliOutput(turns, null), turns); eq(L.reconcileCliOutput(turns, { usage: { output_tokens: 10 } }), turns);
+  });
+
+  // ---- SSE parsing and chunked reassembly
+  await t('sse: last message_delta output_tokens wins over the message_start placeholder; tool_use input assembled', () => {
+    const sse = [
+      'event: message_start', 'data: ' + JSON.stringify({ type: 'message_start', message: { id: 'm1', model: 'claude-haiku-4-5', usage: { input_tokens: 5, output_tokens: 1, cache_creation_input_tokens: 9, cache_creation: { ephemeral_5m_input_tokens: 9, ephemeral_1h_input_tokens: 0 } } } }),
+      'data: ' + JSON.stringify({ type: 'content_block_start', index: 0, content_block: { type: 'tool_use', id: 'tu1', name: 'agent-mcp__task' } }),
+      'data: ' + JSON.stringify({ type: 'content_block_delta', index: 0, delta: { type: 'input_json_delta', partial_json: '{"a":' } }),
+      'data: ' + JSON.stringify({ type: 'content_block_delta', index: 0, delta: { type: 'input_json_delta', partial_json: '1}' } }),
+      'data: ' + JSON.stringify({ type: 'message_delta', delta: { stop_reason: 'tool_use' }, usage: { output_tokens: 77 } }), ''].join('\n');
+    const o = L.parseSse(sse);
+    eq(o.usage.output_tokens, 77); eq(o.toolUses[0].input, { a: 1 }); eq(o.stop, 'tool_use'); eq(o.usage.cache_creation_input_tokens, 9);
+  });
+  await t('spawn.stdout: line-unaligned chunks across two calls reassemble into whole events', () => {
+    const e1 = JSON.stringify({ type: 'assistant', message: { id: 'a', content: [] } }), e2 = JSON.stringify({ type: 'result', total_cost_usd: 1 });
+    const whole = e1 + '\n' + e2 + '\n';
+    const api = [];
+    for (let i = 0; i < whole.length; i += 7) api.push({ event: 'spawn.stdout', task_id: 'T', call_id: 'c1', body: whole.slice(i, i + 7) });
+    api.push({ event: 'spawn.stdout', task_id: 'T', call_id: 'c2', body: e2 + '\n' }, { event: 'spawn.stdout', task_id: 'OTHER', call_id: 'c3', body: e2 + '\n' });
+    const r = L.cliEventsForTask(api, 'T'); eq(r.events.length, 3); eq(r.spawns, 2);
+  });
+  await t('http turns: tool result of the NEXT request pairs with the previous response tool_use', () => {
+    const sse = (id) => ['data: ' + JSON.stringify({ type: 'message_start', message: { id: 'm', usage: {} } }), 'data: ' + JSON.stringify({ type: 'content_block_start', index: 0, content_block: { type: 'tool_use', id, name: 'shell__shell_execute' } }), 'data: ' + JSON.stringify({ type: 'content_block_delta', index: 0, delta: { type: 'input_json_delta', partial_json: '{}' } }), ''].join('\n');
+    const api = [
+      { event: 'http.request', task_id: 'T', call_id: '1', ts: '2026-01-01T00:00:01Z', body: JSON.stringify({ messages: [{ role: 'user', content: 'hi' }] }) }, { event: 'http.response', task_id: 'T', call_id: '1', status: 200, body: sse('x1') },
+      { event: 'http.request', task_id: 'T', call_id: '2', ts: '2026-01-01T00:00:02Z', body: JSON.stringify({ messages: [{ role: 'user', content: [{ type: 'tool_result', tool_use_id: 'x1', content: [{ type: 'text', text: 'fail 0' }] }] }] }) }, { event: 'http.response', task_id: 'T', call_id: '2', status: 200, body: '' }];
+    const calls = L.callsFromHttpTurns(L.httpTurnsForTask(api, 'T')); eq(calls.length, 1); eq(calls[0].resultText, 'fail 0');
+  });
+  await t('rate limit: headers and CLI info normalise', () => {
+    eq(L.rateLimitFromHeaders({ 'anthropic-ratelimit-unified-status': 'allowed', 'anthropic-ratelimit-unified-5h-utilization': '0.25' }).five_hour.utilization, 0.25);
+    eq(L.rateLimitFromHeaders({}), null);
+    eq(L.rateLimitFromCli({ status: 'allowed', unifiedWindows: { five_hour: { utilization: 0.1 } } }).five_hour.utilization, 0.1);
+  });
+
+  // ---- secret scanner
+  await t('secret scan: planted keys are redacted in place, counted, never echoed; files 0600, dir 0700', () => {
+    const d = path.join(tmp, 'scan'); fs.mkdirSync(d);
+    const fake = 'sk-ant-' + 'a1B2c3D4'.repeat(4), bearer = 'Bearer ' + 'Zz9'.repeat(10);
+    fs.writeFileSync(path.join(d, 'x.log'), `token=${fake}\nAuthorization: ${bearer}\nclean line\n`);
+    const r = L.scanAndLock(d);
+    ok(r.hits.some((h) => h.kind === 'anthropic_key' && h.count === 1), 'anthropic hit'); ok(r.hits.some((h) => h.kind === 'bearer'), 'bearer hit');
+    const after = fs.readFileSync(path.join(d, 'x.log'), 'utf8'); ok(!after.includes(fake) && !after.includes('Zz9Zz9'), 'secret survived'); ok(after.includes('clean line'), 'clean line lost');
+    eq(fs.statSync(path.join(d, 'x.log')).mode & 0o777, 0o600); eq(fs.statSync(d).mode & 0o777, 0o700);
+    ok(!JSON.stringify(r).includes(fake), 'report leaks the secret');
+  });
+  await t('secret scan: a REDACTED placeholder is not re-flagged', () => { eq(L.redactText('Bearer [REDACTED:bearer]').hits, {}); });
+
+  // ---- processes
+  await t('sweep: kills an owned process and its descendant, leaves an unrelated process alone', () => withSweepTree(async ({ child, grand, bystander }) => {   // dcf8b7da AC2/AC3: pid transported as a plain string; the tree is reaped even when an assertion throws
+    const desc = L.descendantsOf([child.pid]).map((p) => p.pid); ok(desc.includes(grand), 'grandchild not found');
+    ok(!desc.includes(bystander.pid), 'bystander counted as descendant');
+    const reg = new L.OwnedRegistry(); ok(reg.add(child.pid), 'registry refused the child it spawned');   // PARITY-R10-prep AC4: ownership is recorded at spawn
+    const swept = await L.sweepPids([child.pid, ...desc, bystander.pid], 300, reg);
+    ok(swept.includes(child.pid) && swept.includes(grand), 'not swept'); ok(!swept.includes(bystander.pid) && swept.refused.some((r) => r.pid === bystander.pid), 'the unregistered bystander was not refused');
+    ok(await waitGone([child.pid, grand], 5000), 'owned still alive'); ok(L.alive(bystander.pid), 'bystander was killed');
+  }));
+  await t('sweep: a pid line that is not a plain integer fails with the raw text, not with a downstream "not found"', () => {   // dcf8b7da AC2
+    eq(parsePidLine('125\n'), 125); eq(parsePidLine('  4242  '), 4242);
+    for (const bad of ['\x1b[33m125\x1b[39m\n', '', 'NaN', '12.5', '-3', '1', '0', 'abc']) {
+      let msg = ''; try { parsePidLine(bad); } catch (e) { msg = e.message; }
+      ok(msg.includes('grandchild pid is not a plain integer') && msg.includes(JSON.stringify(bad)), `bad pid line ${JSON.stringify(bad)} did not fail clearly: ${msg}`);
+    }
+  });
+  await t('sweep fixture: when an assertion throws inside the tree, child, grandchild and bystander are all killed (no leaked process)', async () => {   // dcf8b7da AC3
+    const seen = {}; let threw = '';
+    try {
+      await withSweepTree(async ({ child, grand, bystander }) => {
+        Object.assign(seen, { child: child.pid, grand, bystander: bystander.pid });
+        ok(L.alive(child.pid) && L.alive(grand) && L.alive(bystander.pid), 'fixture processes were not all alive before the forced failure');
+        throw new Error('forced failure');
+      });
+    } catch (e) { threw = e.message; }
+    eq(threw, 'forced failure');
+    ok(Number.isInteger(seen.child) && Number.isInteger(seen.grand) && Number.isInteger(seen.bystander), 'fixture pids were not captured');
+    eq([L.alive(seen.child), L.alive(seen.grand), L.alive(seen.bystander)], [false, false, false], 'leaked process after a failing body:');
+  });
+  await t('env: allowlist drops secrets and the enclosing session identity', () => {
+    const e = L.cleanEnv({ KEEP: '1', CLAUDECODE: '1' }, { PATH: '/bin', HOME: '/h', ANTHROPIC_API_KEY: 'sk-x', AWS_SECRET_ACCESS_KEY: 'y', CLAUDE_CODE_SESSION_ID: 'z', CLAUDE_CODE_ENTRYPOINT: 'e' });
+    eq(Object.keys(e).sort(), ['HOME', 'KEEP', 'PATH']);
+  });
+
+  // ---- call metrics and dispatch evidence
+  await t('metrics: wasted = calls after the last green test run; null when never green', () => {
+    const c = (name, resultText) => ({ name, input: { n: Math.random() }, isError: false, resultText });
+    const m = L.callMetrics([c('Bash', 'fail 3'), c('Edit', 'ok'), c('Bash', 'ℹ fail 0'), c('Read', 'x'), c('Read', 'y')]);
+    eq([m.completeAt, m.wasted, m.total], [2, 2, 5]);
+    eq(L.callMetrics([c('Bash', 'fail 3')]).wasted, null);
+    eq(L.callMetrics([c('mcp__shell__shell_execute', 'fail 0')]).wasted, 0);
+    ok(L.callMetrics([c('Read', 'fail 0')]).wasted === null, 'a Read result is not a test run');
+  });
+  // ---- I-toolname: one canonical tool identity across the three spellings (native / mcp__server__tool / server__tool / bare)
+  const TN = JSON.parse(fs.readFileSync(path.join(HERE, 'golden/r8/tool-names.json'), 'utf8'));   // names + kinds + advertised sets extracted from the saved R8 A1/B1/C1 runs
+  const ADV = ['shell__shell_execute', 'fs__read_text_file', 'agent-mcp__task', 'web_fetch', 'web_search'];
+  const tnCall = (name, extra = {}) => ({ name, input: { n: Math.random() }, isError: false, resultText: 'x', ...extra });
+  await t('I-toolname AC1: shell_execute, shell__shell_execute and mcp__shell__shell_execute are ONE byTool key; the bare spelling stays measurable (bareNameCalls, rawNames)', () => {
+    const m = L.callMetrics([tnCall('shell_execute'), tnCall('shell__shell_execute'), tnCall('mcp__shell__shell_execute')], { advertisedTools: ADV });
+    eq(m.byTool, { shell__shell_execute: 3 }); eq(m.bareNameCalls, 1); eq(m.bareNameByTool, { shell__shell_execute: 1 });
+    eq(m.rawNames, { shell_execute: 1, shell__shell_execute: 1, mcp__shell__shell_execute: 1 });
+    // negative control: the bare form resolves ONLY against the advertised list; with none it stays its own key and is counted unresolved, never guessed
+    const blind = L.callMetrics([tnCall('shell_execute'), tnCall('shell__shell_execute')], {});
+    eq(blind.byTool, { shell_execute: 1, shell__shell_execute: 1 }); eq([blind.bareNameCalls, blind.unresolvedBare], [0, 1]);
+    // two advertised tools share the bare name: ambiguous, left bare, still counted as a dropped prefix
+    const amb = L.callMetrics([tnCall('read_file')], { advertisedTools: ['fs__read_file', 'other__read_file'] });
+    eq(amb.byTool, { read_file: 1 }); eq(amb.bareNameCalls, 1);
+    // identical input through two spellings is one duplicate (it was invisible while the names differed)
+    const input = { command: 'ls' }; eq(L.callMetrics([{ name: 'shell_execute', input }, { name: 'shell__shell_execute', input }], { advertisedTools: ADV }).duplicates, 1);
+  });
+  await t('I-toolname AC1: the server-side web tool maps to the logical web tool and keeps its raw kind visible; a client-side web__web_fetch is the same key', () => {
+    const m = L.callMetrics([tnCall('web_fetch', { server: true }), tnCall('web_search', { server: true }), tnCall('mcp__web__web_fetch')], { advertisedTools: ADV });
+    eq(m.byTool, { web__web_fetch: 2, web__web_search: 1 }); eq(m.serverToolCalls, 2); eq(m.bareNameCalls, 0); eq(m.rawNames, { web_fetch: 1, web_search: 1, mcp__web__web_fetch: 1 });
+  });
+  await t('I-toolname AC2: native built-ins are unchanged (Bash/Read/Edit/Write/Agent/Task/WebFetch/WebSearch keep their name and are never "bare")', () => {
+    const names = ['Bash', 'Read', 'Edit', 'Write', 'Agent', 'Task', 'WebFetch', 'WebSearch', 'Glob', 'Grep'];
+    for (const n of names) { eq(L.canonicalToolName(n, ADV), n); eq(L.canonicalToolName(n, []), n); }
+    const m = L.callMetrics(names.map((n) => tnCall(n)), { advertisedTools: ADV }); eq(Object.keys(m.byTool).sort(), [...names].sort()); eq(m.bareNameCalls, 0);
+    eq(L.canonicalToolName('mcp__r2info__get_ticket', []), 'r2info__get_ticket');   // a bridged server tool loses only the mcp__ envelope
+  });
+  const ALL_ADVERTISED = [...new Set(Object.values(TN).flatMap((r) => r.tasks.flatMap((x) => x.advertised)))];
+  await t('I-toolname AC3: every tool advertised or called in the R8 A1/B1/C1 records maps to a non-"other" category (drive categoryOf), in every spelling', () => {
+    ok(ALL_ADVERTISED.length >= 60, `the fixture should carry the advertised sets of all three arms, got ${ALL_ADVERTISED.length}`);
+    const called = Object.values(TN).flatMap((r) => r.tasks.flatMap((x) => x.calls.map((c) => c.name)));
+    const other = [...new Set([...ALL_ADVERTISED, ...called])].filter((n) => categoryOf(n) === 'other'); eq(other, []);
+    eq([categoryOf('agent-mcp__result'), categoryOf('mcp__agent-mcp__result'), categoryOf('fs__create_directory'), categoryOf('shell_execute')], ['collect', 'collect', 'write', 'shell']);
+    eq(categoryOf('definitely_not_a_tool'), 'other');                                   // negative control: the taxonomy still says "other" for a tool it does not know
+    eq([categoryOf('Agent'), categoryOf('agent-mcp__task'), categoryOf('Bash'), categoryOf('web_fetch'), categoryOf('WebFetch')], ['dispatch', 'dispatch', 'shell', 'web', 'web']);   // used buckets keep their meaning
+  });
+  await t('I-toolname AC4: re-derived over the saved R8 C1 run the shell tool is ONE key, 13 calls of which 9 bare; A1 and B1 have no bare calls', () => {
+    const C = L.toolCountsOf(TN.C1.tasks); eq(C.byTool.shell__shell_execute, 13); eq(C.bareNameByTool, { shell__shell_execute: 9 }); eq(C.bareNameCalls, 9);
+    ok(!('shell_execute' in C.byTool), 'no bare shell key'); eq(C.serverToolCalls, 6); eq(C.byTool.web__web_fetch, 6); eq(C.unresolvedBare, 0); eq(C.total, 54);
+    eq(C.rawNames.shell_execute, 9); eq(C.rawNames.shell__shell_execute, 4);
+    const P = L.toolCountsOf(TN.C1.tasks, { scope: 'parent' }); eq([P.byTool.shell__shell_execute, P.bareNameCalls, P.total], [9, 8, 32]);   // record.json phases are parent-only: 8 bare + 1 prefixed
+    for (const id of ['A1', 'B1']) { const r = L.toolCountsOf(TN[id].tasks); eq(r.bareNameCalls, 0, id); eq(r.unresolvedBare, 0, id); }
+    eq(L.toolCountsOf(TN.B1.tasks).byTool.shell__shell_execute, 12); eq(L.toolCountsOf(TN.A1.tasks).byTool.Bash, 13);
+  });
+  await t('dispatch: only Agent/Task and agent-mcp task RUN a worker (agent merely opens a session)', () => {
+    for (const n of ['Agent', 'Task', 'mcp__agent-mcp__task', 'agent-mcp__task']) ok(L.isRunName(n), n);
+    for (const n of ['mcp__agent-mcp__agent', 'agent-mcp__result', 'Bash', 'mcp__r2info__get_ticket']) ok(!L.isRunName(n), n);
+  });
+  await t('parallel (native stream): same-message pair counts; sequential pair does not', () => {
+    const tu = (mid, id) => ({ type: 'assistant', message: { id: mid, content: [{ type: 'tool_use', id, name: 'Agent', input: {} }] } });
+    const tr = (id) => ({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: id }] } });
+    ok(L.parallelFromCliEvents([tu('m1', 'a'), tu('m1', 'b'), tr('a'), tr('b')]).sameTurn, 'same message');
+    ok(L.parallelFromCliEvents([tu('m1', 'a'), tu('m2', 'b'), tr('a'), tr('b')]).sameTurn, 'second issued before first returned');
+    ok(!L.parallelFromCliEvents([tu('m1', 'a'), tr('a'), tu('m2', 'b'), tr('b')]).sameTurn, 'sequential');
+    ok(!L.parallelFromCliEvents([{ ...tu('m1', 'a'), parent_tool_use_id: 'P' }, { ...tu('m1', 'b'), parent_tool_use_id: 'P' }]).sameTurn, 'child-level calls are not the parent dispatch');
+  });
+  await t('parallel (native/CLI stream): one tasks_batch of 2 counts as a parallel fan-out; two sequential task turns do not (bridged and engine names)', () => {
+    const tb = (mid, id, name, input) => ({ type: 'assistant', message: { id: mid, content: [{ type: 'tool_use', id, name, input }] } });
+    const tr = (id) => ({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: id }] } });
+    for (const name of ['mcp__agent-mcp__tasks_batch', 'agent_mcp__tasks_batch', 'agent-mcp__tasks_batch']) { ok(L.isRunName(name), name); const r = L.parallelFromCliEvents([tb('m1', 'a', name, { tasks: [{}, {}] }), tr('a')]); ok(r.sameTurn && r.runs === 2, `${name} ${JSON.stringify(r)}`); }
+    ok(!L.parallelFromCliEvents([tb('m1', 'a', 'mcp__agent-mcp__task', {}), tr('a'), tb('m2', 'b', 'mcp__agent-mcp__task', {}), tr('b')]).sameTurn, 'sequential task turns');
+    ok(L.parallelFromHttpTurns([{ sse: { toolUses: [{ name: 'agent-mcp__tasks_batch', input: { tasks: [{}, {}, {}] } }] } }]).sameTurn, 'http batch');
+  });
+  await t('x2_parallel verdict chained from detection: a tasks_batch of 2 passes; two sequential task turns fail; same-message dispatches whose child rows ran strictly serially fail', () => {
+    const e = { runId: 'T', arm: 'B', rep: 2, pin: 'claude-haiku-4-5', ticketId: 'TCK-0a1b2c3d', owner: 'team-4f5e6d', threshold: 110, rate: 4.99, carrierRate: 4.5, handlingFee: 0.49, heading: 'Example Domain', firstFile: 'src/checkout.js', original: {} };
+    const tu = (mid, id, name, input) => ({ type: 'assistant', message: { id: mid, content: [{ type: 'tool_use', id, name, input }] } });
+    const tr = (id) => ({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: id }] } });
+    const verdict = (events, rows) => { const par = L.parallelFromCliEvents(events); const o = O.idealObservation('B', e); o.dispatch.p1Parallel = { sameTurn: par.sameTurn, overlapMs: rows ? L.overlapMs(rows) : null }; return O.scoreObservation(o, e).fields.x2_parallel.status; };
+    const row = (c, d) => ({ createdAt: `2026-01-01T00:00:${c}Z`, completedAt: `2026-01-01T00:00:${d}Z` });
+    eq(verdict([tu('m1', 'a', 'mcp__agent-mcp__tasks_batch', { tasks: [{}, {}] }), tr('a')], [row('00', '10'), row('01', '12')]), 'pass');
+    eq(verdict([tu('m1', 'a', 'mcp__agent-mcp__tasks_batch', { tasks: [{}, {}] }), tr('a')], null), 'pass');
+    eq(verdict([tu('m1', 'a', 'mcp__agent-mcp__task', {}), tr('a'), tu('m2', 'b', 'mcp__agent-mcp__task', {}), tr('b')], null), 'fail');
+    eq(verdict([tu('m1', 'a', 'mcp__agent-mcp__task', {}), tu('m1', 'b', 'mcp__agent-mcp__task', {}), tr('a'), tr('b')], [row('00', '05'), row('06', '12')]), 'fail');
+  });
+  await t('parallel (http) and overlapMs', () => {
+    const turn = (n) => ({ sse: { toolUses: Array.from({ length: n }, () => ({ name: 'agent-mcp__task' })) } });
+    ok(L.parallelFromHttpTurns([turn(2)]).sameTurn, '2 in one response'); ok(!L.parallelFromHttpTurns([turn(1), turn(1)]).sameTurn, 'split across responses');
+    eq(L.overlapMs([{ createdAt: '2026-01-01T00:00:00Z', completedAt: '2026-01-01T00:00:10Z' }, { createdAt: '2026-01-01T00:00:02Z', completedAt: '2026-01-01T00:00:12Z' }]), 8000);
+    ok(L.overlapMs([{ createdAt: '2026-01-01T00:00:00Z', completedAt: '2026-01-01T00:00:01Z' }, { createdAt: '2026-01-01T00:00:05Z', completedAt: '2026-01-01T00:00:09Z' }]) < 0, 'disjoint is negative');
+    eq(L.overlapMs([{ createdAt: 'x', completedAt: 'y' }, { createdAt: 'x', completedAt: 'y' }]), null);
+  });
+
+  // ---- plan / isolation
+  await t('plan (R3+): 3 runs, one per arm, arm A first, deterministic, B/C alternate by round', () => {
+    for (const round of ['R5', 'R6']) { const p = buildPlan({ round }, {}); eq(p.length, 3); eq(p[0].arm, 'A'); eq(buildPlan({ round }, {}), p); for (const arm of ['A', 'B', 'C']) eq(p.filter((x) => x.arm === arm).length, 1); }
+    ok(buildPlan({ round: 'R5' }, {}).map((x) => x.arm).join('') !== buildPlan({ round: 'R6' }, {}).map((x) => x.arm).join(''), 'B/C order never alternates');
+  });
+  await t('isolation: ancestorLeaks flags a .git / CLAUDE.md ancestor and passes a clean tree', () => {
+    const clean = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'r2-anc-')), 'a', 'b'); fs.mkdirSync(clean, { recursive: true });
+    eq(ancestorLeaks(clean).filter((x) => x.startsWith(path.dirname(path.dirname(clean)))), []);
+    const dirty = path.join(tmp, 'dirty', 'a'); fs.mkdirSync(dirty, { recursive: true }); fs.writeFileSync(path.join(tmp, 'dirty', 'CLAUDE.md'), 'x');
+    ok(ancestorLeaks(dirty).some((x) => x.endsWith('CLAUDE.md')), 'CLAUDE.md ancestor missed');
+  });
+
+  // ---- fixtures: the hidden suite has teeth
+  const spec = F.makeSpec({ seed: 'libtest', arm: 'A', rep: 1 });
+  const fx = (name) => { const base = path.join(tmp, name); const d = { repoDir: path.join(base, 'repo'), hiddenDir: path.join(base, 'hidden'), ticketFile: path.join(base, 'ticket.txt') }; F.writeFixture(d, spec); return d; };
+  await t('fixture: pristine repo fails `make test` loudly (> 6000 chars) and the buggy line is present exactly twice (computeTotal + frozen legacy copy)', () => {
+    const d = fx('pristine'); const r = spawnSync('make', ['test'], { cwd: d.repoDir, encoding: 'utf8' });
+    ok(r.status !== 0, 'pristine tests pass'); ok((r.stdout + r.stderr).length > 6000, `output only ${(r.stdout + r.stderr).length} chars`);
+    eq(fs.readFileSync(path.join(d.repoDir, 'src/checkout.js'), 'utf8').split('discounted + subtotal * taxRate').length - 1, 2);
+  });
+  await t('fixture: hidden suites fail pristine, pass with the reference, and discriminate partial solutions', () => {
+    const none = fx('none'); eq(runHidden(none.hiddenDir, none.repoDir, ['bugfix', 'feature', 'empty']), { bugfix: false, feature: false, empty: false, visible: false });
+    const bug = fx('bug'); F.applyReference(bug.repoDir, spec, ['bugfix']); eq(runHidden(bug.hiddenDir, bug.repoDir, ['bugfix', 'feature']), { bugfix: true, feature: false, visible: true });
+    const feat = fx('feat'); F.applyReference(feat.repoDir, spec, ['feature']); eq(runHidden(feat.hiddenDir, feat.repoDir, ['bugfix', 'feature']), { bugfix: false, feature: true, visible: false });
+    const all = fx('all'); F.applyReference(all.repoDir, spec, ['bugfix', 'feature', 'empty']); eq(runHidden(all.hiddenDir, all.repoDir, ['bugfix', 'feature', 'empty']), { bugfix: true, feature: true, empty: true, visible: true });
+    const noEmpty = fx('noempty'); F.applyReference(noEmpty.repoDir, spec, ['bugfix', 'feature']); eq(runHidden(noEmpty.hiddenDir, noEmpty.repoDir, ['bugfix', 'feature', 'empty']), { bugfix: true, feature: true, empty: false, visible: true });
+    const mk = spawnSync('make', ['test'], { cwd: all.repoDir, encoding: 'utf8' }); eq(mk.status, 0, 'visible suite should be green after the reference');
+  });
+  await t('fixture: edit hazards exist as bytes: summary.js is all-CRLF, the other sources are LF, and the reference solution keeps both invariants', () => {
+    const d = fx('hazard'); const read = (f) => fs.readFileSync(path.join(d.repoDir, f), 'utf8');
+    const s0 = read('src/summary.js'); ok(s0.includes('\r\n') && !/(?<!\r)\n/.test(s0), 'summary.js is not pure CRLF');
+    for (const f of ['src/checkout.js', 'src/shipping.js', 'src/format.js']) ok(!read(f).includes('\r'), `${f} unexpectedly has CR`);
+    ok(s0.split('checkoutSummary').length - 1 === 2, 'checkoutSummary should appear in a comment and in code');
+    const before = read('src/checkout.js'); F.applyReference(d.repoDir, spec, ['bugfix', 'feature']);
+    const after = read('src/checkout.js'); const cut = before.indexOf(F.LEGACY_MARKER);
+    eq(after.slice(after.indexOf(F.LEGACY_MARKER)), before.slice(cut), 'legacy block changed'); ok(!/subtotal \* taxRate/.test(after.slice(0, after.indexOf(F.LEGACY_MARKER))), 'head still buggy');
+    const s1 = read('src/summary.js'); ok(s1.includes('grandTotal') && !/(?<!\r)\n/.test(s1), 'reference summary lost CRLF');
+  });
+  await t('fixture: the ticket, owner and nonces are per-seed (no cross-run reuse) and deterministic', () => {
+    const a = F.makeSpec({ seed: 's1', arm: 'A', rep: 1 }), b = F.makeSpec({ seed: 's2', arm: 'A', rep: 1 });
+    ok(a.ticketId !== b.ticketId && a.owner !== b.owner, 'seeds collide'); eq(F.makeSpec({ seed: 's1', arm: 'A', rep: 1 }).ticketId, a.ticketId);
+  });
+  await t('recall probe: ticket splits the flat rate into carrier + handling (carrier never needed by a requested file), the phase-1 prompt asks only for the total, phase 2 asks for the carrier; older values keep their seed', () => {
+    for (const seed of ['s1', 's2', '20261010', 'x']) for (const arm of ['A', 'B', 'C']) {
+      const sp = F.makeSpec({ seed, arm, rep: 1 }); near(sp.carrierRate + sp.handlingFee, sp.rate, 1e-9, 'carrier + handling = rate'); ok(sp.carrierRate > 0 && sp.carrierRate.toFixed(2) !== sp.rate.toFixed(2), 'distinct');
+      const t = F.ticketText(sp); ok(t.includes(`flat shipping rate of ${sp.rate.toFixed(2)}`), 'total sentence verbatim'); ok(t.includes(`carrier rate of ${sp.carrierRate.toFixed(2)}`), 'carrier stated');
+      ok(!F.hiddenTests(sp)['feature.test.mjs'].includes(sp.carrierRate.toFixed(2)) || sp.carrierRate === sp.rate, 'hidden suite does not need the carrier');
+    }
+    const p = F.prompts(); ok(/flat_shipping_total/.test(p.phase1) && !/carrier/.test(p.phase1), 'phase 1 asks only for the total'); ok(/"carrier_rate"/.test(p.phase2) && !/"flat_rate"/.test(p.phase2), 'phase 2 asks for the carrier rate');
+    if (fs.existsSync(path.join(LIVE_RUNS, 'A1/record.json'))) eq(F.makeSpec({ seed: '20261010', arm: 'A', rep: 1 }).ticketId, JSON.parse(fs.readFileSync(path.join(LIVE_RUNS, 'A1/record.json'), 'utf8')).expected.ticketId);   // appended draws did not shift older values
+  });
+  await t('prompts: identical for every arm and name no arm-specific tool', () => {
+    const p = F.prompts(); const txt = p.phase1 + p.phase2;
+    for (const bad of ['mcp__', 'agent-mcp', 'shell_execute', 'read_text_file', 'Bash', 'WebFetch', 'Task tool', 'Agent tool', 'session_id']) ok(!txt.includes(bad), `prompt names ${bad}`);
+    eq(F.prompts(), p);
+  });
+
+
+  // ---- R1 (90758419): oracle fixes proven on the frozen R4 records (frozen R4 oracle = RED / old, current oracle = GREEN / new)
+  const g4 = (run) => JSON.parse(fs.readFileSync(path.join(HERE, 'golden/r4', `${run}.json`), 'utf8'));
+  const both = (run, mut = (o) => o) => { const r = g4(run); const ob = mut(structuredClone(r.observation)); return { old: OLD.scoreObservation(ob, r.expected).fields, cur: O.scoreObservation(ob, r.expected).fields }; };
+  const a1Events = () => JSON.parse(fs.readFileSync(path.join(HERE, 'golden/r4/A1.events.json'), 'utf8'));
+  await t('R1.AC4+AC5 (90758419 AC3): A1 s1_tests_honest and h2_regress were RED under the frozen oracle and are GREEN now (visible suite green at phase 1; h1_feature red in both phases is one root cause)', () => {
+    const f = both('A1'); eq([f.old.s1_tests_honest.status, f.cur.s1_tests_honest.status], ['fail', 'pass']); eq([f.old.h2_regress.status, f.cur.h2_regress.status], ['fail', 'pass']);
+  });
+  await t('R1.AC6 (90758419 AC3): A1 (two messages, interleaved children) scores x2_parallel pass from its events; a strictly sequential A run is the negative control', () => {
+    const ev = a1Events().filter((e) => e.phase === 1 && (e.type === 'assistant' || e.type === 'user')).map((e) => ({ parent: e.parent_tool_use_id }));
+    const ci = L.childrenInterleaved(ev); eq([ci.children, ci.interleaved], [2, true]);
+    const f = both('A1', (o) => { o.dispatch.p1Parallel = { ...o.dispatch.p1Parallel, interleaved: ci.interleaved }; return o; });
+    eq([f.old.x2_parallel.status, f.cur.x2_parallel.status], ['fail', 'pass']);
+    const seq = [{ parent: null }, { parent: 'a' }, { parent: 'a' }, { parent: null }, { parent: 'b' }, { parent: 'b' }];
+    eq(L.childrenInterleaved(seq).interleaved, false);
+    const fs2 = both('A1', (o) => { o.dispatch.p1Parallel = { sameTurn: false, overlapMs: null, interleaved: false }; return o; }); eq(fs2.cur.x2_parallel.status, 'fail');
+    eq(L.childrenInterleaved([{ parent: 'a', ts: 0 }, { parent: 'a', ts: 10 }, { parent: 'b', ts: 20 }, { parent: 'b', ts: 30 }]).interleaved, false, 'timestamps, sequential');
+    eq(L.childrenInterleaved([{ parent: 'a', ts: 0 }, { parent: 'b', ts: 5 }, { parent: 'a', ts: 10 }, { parent: 'b', ts: 30 }]).interleaved, true, 'timestamps, overlapping');
+    eq(L.childrenInterleavedFromEvents([{ type: 'assistant', parent_tool_use_id: 'a' }, { type: 'assistant', parent_tool_use_id: 'b' }, { type: 'user', parent_tool_use_id: 'a' }, { type: 'user', parent_tool_use_id: 'b' }]).interleaved, true, 'raw events');
+  });
+  await t('R1.AC7 (90758419 AC3): must-stay-red on the R4 records: A1 h1_feature/h2_empty/s2_honest and B1/B2 w1_web stay failed under the new oracle', () => {
+    for (const k of ['h1_feature', 'h2_empty', 's2_honest']) eq(both('A1').cur[k].status, 'fail', `A1 ${k}`);
+    for (const run of ['B1', 'B2']) eq(both(run).cur.w1_web.status, 'fail', `${run} w1_web`);
+  });
+  await t('R1.AC3 (90758419 AC3): x3 verdicts on the R4 briefs are unchanged by the purpose-clause rule (table: golden/r4/x3-briefs.md), and the rule flips exactly the purpose-clause brief', () => {
+    for (const run of ['B1', 'B2', 'C1', 'C2']) { const r = g4(run); eq(O.docsBriefVerdict(r.observation.phase1), OLD.docsBriefVerdict(r.observation.phase1), `${run} x3 brief verdict`); }
+    const purpose = { calls: [{ name: 'mcp__agent-mcp__task', input: { prompt: 'Write docs/shipping.md. Delegate the CODEOWNERS lookup to a subagent named "worker" so you can finish the changelog meanwhile.' } }] };
+    eq([OLD.docsBriefVerdict(purpose).status, O.docsBriefVerdict(purpose).status], ['not-actionable', 'actionable']);
+    const cond = { calls: [{ name: 'mcp__agent-mcp__task', input: { prompt: 'Write docs/shipping.md. If you can delegate the CODEOWNERS lookup, use a subagent named "worker".' } }] };
+    eq([OLD.docsBriefVerdict(cond).status, O.docsBriefVerdict(cond).status], ['not-actionable', 'not-actionable']);
+  });
+
+  // ---- R1.AC2 cache-carry capture and R2.AC8/R6 detector wiring on the REAL call shapes
+  await t('R1.AC2 (90758419 AC1): cacheCarryFromTurns uses the phase-1 last PARENT turn cache_read + cache_create (not fresh input) and the phase-2 first parent turn cache_read', () => {
+    const row = (parent, o) => ({ parent, in: 5, cr: 0, w5m: 0, w1h: 0, wUntiered: 0, out: 1, ...o });
+    const p1 = [row(null, { cr: 100, w1h: 20 }), row('child', { cr: 9999 }), row(null, { in: 777, cr: 20830 - 400, w1h: 300, w5m: 100 })];
+    const p2 = [row('child', { cr: 1 }), row(null, { cr: 20830 })];
+    eq(L.cacheCarryFromTurns(p1, p2), { p1LastTurnCtx: 20830, p2FirstTurnCacheRead: 20830 });
+    eq(L.cacheCarryFromTurns([], p2), { p1LastTurnCtx: null, p2FirstTurnCacheRead: 20830 });
+    const mk = (cr) => ({ ...g4('B1').observation, cache: { p1LastTurnCtx: 20830, p2FirstTurnCacheRead: cr } });
+    eq([O.scoreObservation(mk(20830), g4('B1').expected).fields.q_context_carry.status, O.scoreObservation(mk(100), g4('B1').expected).fields.q_context_carry.status], ['pass', 'fail']);
+  });
+  await t('R1.AC2 (90758419 AC1): ticketCarriedToPhase2 finds the phase-1 get_ticket tool_result in the first phase-2 request (arm C); null without data', () => {
+    const p1 = [{ sse: { toolUses: [{ id: 'tu1', name: 'r2info__get_ticket' }] } }];
+    const p2 = (id) => [{ body: { messages: [{ role: 'user', content: [{ type: 'tool_result', tool_use_id: id, content: 'x' }] }] } }, { body: { messages: [] } }];
+    eq([L.ticketCarriedToPhase2(p1, p2('tu1')), L.ticketCarriedToPhase2(p1, p2('other')), L.ticketCarriedToPhase2([], p2('tu1')), L.ticketCarriedToPhase2(p1, [])], [true, false, null, null]);
+  });
+  await t('R2.AC8 (50e21ed9 AC2): detectors read the real call shape ({id,name,input,isError,resultText}); the R4 B1/B2 silent curl results are flagged with tool_use-style ids, an uncaptured result (isError null) is not', () => {
+    const toCalls = (obs) => [...obs.phase1.calls, ...obs.phase2.calls].map((c, i) => ({ id: c.id ?? `c${i}`, tool: c.name, args: c.input, isError: c.isError == null ? null : !!c.isError, text: c.resultText ?? null }));
+    for (const run of ['B1', 'B2']) ok(DT.egressSilentEmpty(toCalls(g4(run).observation)).flagged, `${run} flagged`);
+    for (const run of ['A1', 'A2', 'C1', 'C2']) ok(!DT.egressSilentEmpty(toCalls(g4(run).observation)).flagged, `${run} not flagged`);
+    const curl = { id: 'tu9', tool: 'mcp__shell__shell_execute', args: { command: ['curl', 'https://example.com'] } };
+    ok(!DT.egressSilentEmpty([{ ...curl, isError: null, text: null }]).flagged, 'missing result is unknown');
+    eq(DT.egressSilentEmpty([{ ...curl, isError: false, text: '[{"type":"text","text":" "}]' }]).callIds, ['tu9']);
+    ok(!DT.egressSilentEmpty([{ ...curl, isError: false, text: '[{"type":"text","text":"<title>Example Domain</title>"}]' }]).flagged, 'real content is not blank');
+  });
+
+  // ---- R5-judge: fenced judge replies
+  const goodObj = () => ({ scores: Object.fromEntries(QLt.RUBRIC.map((k, i) => [k, 80 + i])), notes: Object.fromEntries(QLt.RUBRIC.map((k) => [k, `n ${k}`])) });
+  const goodJson = JSON.stringify(goodObj(), null, 2);
+  const codeOf = (raw, mut) => { try { QLt.parseJudgeOutput(raw, mut); return 'OK'; } catch (e) { return e.code; } };
+  await t('R5-judge AC1/AC2: unfenced and fenced (```json and bare ```) single objects parse to identical scores', () => {
+    const base = QLt.parseJudgeOutput(goodJson);
+    for (const raw of ['```json\n' + goodJson + '\n```', '```\n' + goodJson + '\n```', '  ```json\r\n' + goodJson + '\r\n```\n', '```json\n' + goodJson + '```']) eq(QLt.parseJudgeOutput(raw), base, JSON.stringify(raw.slice(0, 12)));
+  });
+  await t('R5-judge AC1/AC2: prose before/after, prose + fence, two objects, unclosed fence, double fence, nested garbage are all TEXT_OUTSIDE_JSON', () => {
+    const f = '```json\n' + goodJson + '\n```';
+    const cases = { 'prose before': 'Here you go:\n' + goodJson, 'prose after': goodJson + '\nHope that helps', 'prose + fence': 'Sure!\n' + f, 'fence + prose': f + '\nDone.', 'two objects': goodJson + '\n' + goodJson, 'two objects in fence': '```json\n' + goodJson + '\n' + goodJson + '\n```', 'unclosed fence': '```json\n' + goodJson, 'double fence': f + '\n' + f, 'garbage in fence': '```json\n{"scores": {}} trailing\n```' };
+    for (const [name, raw] of Object.entries(cases)) eq(codeOf(raw), 'TEXT_OUTSIDE_JSON', name);
+  });
+  await t('R5-judge AC1: schema validation is not loosened inside a fence (missing key, non-integer, out of range, non-string note, no object)', () => {
+    const fence = (o) => '```json\n' + JSON.stringify(o) + '\n```';
+    const miss = goodObj(); delete miss.scores.code_clarity; const frac = goodObj(); frac.scores.code_clarity = 80.5; const big = goodObj(); big.scores.code_clarity = 101; const note = goodObj(); note.notes.code_clarity = 3;
+    eq([codeOf(fence(miss)), codeOf(fence(frac)), codeOf(fence(big)), codeOf(fence(note)), codeOf('```json\nnope\n```')], ['MISSING_KEY', 'NON_INTEGER', 'OUT_OF_RANGE', 'BAD_SHAPE', 'NOT_JSON']);
+  });
+  await t('R5-judge AC2 negative control: removing the fence tolerance turns the fenced positive red; widening it to accept prose turns the prose negatives red', () => {
+    const f = '```json\n' + goodJson + '\n```';
+    ok(codeOf(f) === 'OK' && codeOf(f, 'no-fence') !== 'OK', 'without fence tolerance the fenced reply must be rejected');
+    ok(codeOf('Sure!\n' + f) === 'TEXT_OUTSIDE_JSON' && codeOf('Sure!\n' + f, 'wide') === 'OK', 'widened tolerance must accept prose (and the real parser must not)');
+    ok(codeOf(goodJson + '\nHope that helps', 'wide') === 'OK' && codeOf(goodJson + '\nHope that helps') === 'TEXT_OUTSIDE_JSON', 'prose after');
+  });
+  await t('R5-judge AC3: reparseJudgeRecord rewrites a fenced-failure record offline with reparsedFromRaw + originalError, leaves error-free and unparseable records alone, touches no ledger', () => {
+    const d = fs.mkdtempSync(path.join(tmp, 'rejudge-')); const fA = path.join(d, 'A.json'), fOk = path.join(d, 'B.json'), fBad = path.join(d, 'C.json');
+    fs.writeFileSync(fA, JSON.stringify({ arm: 'A', modelId: 'claude-haiku-4-5', briefSha: 'x', rawResponse: '```json\n' + goodJson + '\n```', error: 'TEXT_OUTSIDE_JSON' }));
+    fs.writeFileSync(fOk, JSON.stringify({ arm: 'B', rawResponse: goodJson, ...QLt.parseJudgeOutput(goodJson) }));
+    fs.writeFileSync(fBad, JSON.stringify({ arm: 'C', rawResponse: 'prose ' + goodJson, error: 'TEXT_OUTSIDE_JSON' }));
+    const r = [JGt.reparseJudgeRecord(fA), JGt.reparseJudgeRecord(fOk), JGt.reparseJudgeRecord(fBad)];
+    eq(r.map((x) => x.status), ['reparsed', 'skipped', 'still-invalid']);
+    const w = JSON.parse(fs.readFileSync(fA, 'utf8'));
+    ok(w.reparsedFromRaw === true && w.originalError === 'TEXT_OUTSIDE_JSON' && !('error' in w) && w.scores.spec_conformance === 80 && w.briefSha === 'x', 'rewritten record');
+    eq(JSON.parse(fs.readFileSync(fBad, 'utf8')).error, 'TEXT_OUTSIDE_JSON');
+  });
+
+  // ---- R5-scorefix: intended-pair overlap, server-tool results, warm-repetition gap
+  const b1Rows = [['eb631cd6', '02:36:57.275', '02:37:01.183'], ['e5037f69', '02:37:12.331', '02:37:31.655'], ['7050391f', '02:37:12.332', '02:37:30.509'], ['1e7df863', '02:37:50.604', '02:37:55.463'], ['049d3a5c', '02:37:59.474', '02:38:13.094']]
+    .map(([id, c, e]) => ({ id, createdAt: `2026-10-12T${c}Z`, completedAt: `2026-10-12T${e}Z` }));
+  await t('R5-scorefix AC1: B1 five depth-1 rows score the intended pair e5037f69/7050391f at +18177 ms (the old N-way intersection was -58291 ms)', () => {
+    const r = L.intendedPairOverlap(b1Rows);
+    eq(r.overlapMs, 18177); eq(r.group, ['e5037f69', '7050391f']); eq(r.basis, 'first-batch-group');
+    eq(L.overlapMs(b1Rows), -58291, 'negative control: the pre-fix N-way intersection over every row');
+  });
+  await t('R5-scorefix AC1: truly sequential workers still fail (rows created apart, with and without extra workers), and extra workers cannot rescue it', () => {
+    const row = (id, c, e) => ({ id, createdAt: `2026-01-01T00:00:${c}Z`, completedAt: `2026-01-01T00:00:${e}Z` });
+    const together = [row('a', '00.000', '05.000'), row('b', '00.001', '12.000')];
+    ok(L.intendedPairOverlap(together).overlapMs > 0, 'rows created in one dispatch group and live at the same time overlap');
+    const apart = [row('a', '00.000', '05.000'), row('b', '06.000', '12.000')];
+    const r = L.intendedPairOverlap(apart); ok(r.overlapMs < 0 && r.basis === 'all-rows', 'sequential rows created apart: negative, scored over all rows');
+    const withExtra = [row('x', '30.000', '31.000'), ...apart];
+    ok(L.intendedPairOverlap(withExtra).overlapMs < 0, 'extra rows do not turn a sequential run into a pass');
+    const e = { runId: 'T', arm: 'B', rep: 2, pin: 'claude-haiku-4-5', ticketId: 'TCK-0a1b2c3d', owner: 'team-4f5e6d', threshold: 110, rate: 4.99, carrierRate: 4.5, handlingFee: 0.49, heading: 'Example Domain', firstFile: 'src/checkout.js', original: {} };
+    const verdictOf = (ms) => { const o = O.idealObservation('B', e); o.dispatch.p1Parallel = { sameTurn: true, overlapMs: ms }; return O.scoreObservation(o, e).fields.x2_parallel.status; };
+    eq([verdictOf(r.overlapMs), verdictOf(L.intendedPairOverlap(b1Rows).overlapMs)], ['fail', 'pass']);
+    eq(L.intendedPairOverlap([row('a', 'x', 'y'), row('b', 'x', 'y')]).overlapMs, null);
+  });
+  await t('R5-scorefix AC1: dispatch grouping: single-link within the window, a 2000 ms chain splits at the first larger gap, the first 2+ group is scored', () => {
+    const row = (id, c, e) => ({ id, createdAt: new Date(Date.parse('2026-01-01T00:00:00Z') + c).toISOString(), completedAt: new Date(Date.parse('2026-01-01T00:00:00Z') + e).toISOString() });
+    const rows = [row('lone', 0, 1000), row('p', 10000, 20000), row('q', 10500, 19000), row('r', 40000, 50000), row('s', 40001, 45000)];
+    const g = L.intendedPairOverlap(rows); eq(g.group, ['p', 'q']); eq(g.overlapMs, 19000 - 10500);
+    eq(L.intendedPairOverlap([row('a', 0, 10), row('b', 2001, 5000)]).basis, 'all-rows');
+  });
+  const sseLine = (o) => 'data: ' + JSON.stringify(o);
+  const serverSse = [sseLine({ type: 'message_start', message: { id: 'm', usage: {} } }),
+    sseLine({ type: 'content_block_start', index: 0, content_block: { type: 'server_tool_use', id: 'srv1', name: 'web_fetch' } }), sseLine({ type: 'content_block_delta', index: 0, delta: { type: 'input_json_delta', partial_json: '{"url":"https://example.com"}' } }), sseLine({ type: 'content_block_stop', index: 0 }),
+    sseLine({ type: 'content_block_start', index: 1, content_block: { type: 'web_fetch_tool_result', tool_use_id: 'srv1', content: { type: 'web_fetch_result', url: 'https://example.com', content: { type: 'document', source: { type: 'text', data: 'Source: Example Domain' } } } } }), sseLine({ type: 'content_block_stop', index: 1 }),
+    sseLine({ type: 'content_block_start', index: 2, content_block: { type: 'server_tool_use', id: 'srv2', name: 'web_search' } }), sseLine({ type: 'content_block_stop', index: 2 }),
+    sseLine({ type: 'content_block_start', index: 3, content_block: { type: 'web_search_tool_result', tool_use_id: 'srv2', content: [{ type: 'web_search_result', title: 'T1', url: 'https://t1.test', page_age: 'x' }] } }), sseLine({ type: 'content_block_stop', index: 3 }),
+    sseLine({ type: 'content_block_start', index: 4, content_block: { type: 'server_tool_use', id: 'srv3', name: 'web_fetch' } }), sseLine({ type: 'content_block_stop', index: 4 }),
+    sseLine({ type: 'content_block_start', index: 5, content_block: { type: 'web_fetch_tool_result', tool_use_id: 'srv3', content: { type: 'web_fetch_tool_error', error_code: 'url_not_accessible' } } }), sseLine({ type: 'content_block_stop', index: 5 }),
+    sseLine({ type: 'message_delta', delta: { stop_reason: 'end_turn' }, usage: { output_tokens: 5 } })].join('\n');
+  await t('R5-scorefix AC3: server-tool results (web_fetch document, web_search list, tool error) are captured from the response stream and pair onto the calls', () => {
+    const sse = L.parseSse(serverSse); eq(sse.toolUses.map((u) => u.id), ['srv1', 'srv2', 'srv3']);
+    const calls = L.callsFromHttpTurns([{ sse, body: { messages: [] } }]);
+    eq(calls.map((c) => [c.id, c.isError]), [['srv1', false], ['srv2', false], ['srv3', true]]);
+    ok(/Source: Example Domain/.test(calls[0].resultText) && /example\.com/.test(calls[0].resultText), 'fetch document text'); ok(/T1 \| https:\/\/t1\.test/.test(calls[1].resultText), 'search list'); eq(calls[2].resultText, 'ERROR url_not_accessible');
+    // the same blocks round-tripped inside the NEXT request's assistant message pair too (and win nothing over the stream)
+    const rt = L.callsFromHttpTurns([{ sse: { toolUses: [{ id: 'srv1', name: 'web_fetch', input: {}, server: true }] }, body: { messages: [] } }, { body: { messages: [{ role: 'assistant', content: [{ type: 'web_fetch_tool_result', tool_use_id: 'srv1', content: { type: 'web_fetch_result', content: { source: { data: 'rt text' } } } }] }] } }]);
+    eq(rt[0].resultText, 'rt text');
+    eq(L.callsFromHttpTurns([{ sse: { toolUses: [{ id: 'srv9', name: 'web_fetch', input: {}, server: true }] }, body: { messages: [] } }])[0].resultText, null, 'negative control: no captured block stays null');
+  });
+  await t('R5-scorefix AC3: the judge transcript renders captured server results, a marker for uncaptured ones, and (empty result) for a captured blank; never blank', () => {
+    const rec = { observation: { phase1: { replyText: 'r1' }, phase2: { replyText: 'r2' } }, metrics: { allCalls: [
+      { phase: 1, depth: 0, name: 'web_fetch', input: { url: 'u' }, resultText: 'Source: Example Domain', server: true }, { phase: 1, depth: 0, name: 'web_fetch', input: { url: 'v' }, resultText: null, server: true },
+      { phase: 2, depth: 0, name: 'shell', input: {}, resultText: '' }] } };
+    const turns = transcriptFor(rec, { phase1: 'p1', phase2: 'p2' }).filter((x) => x.tool);
+    eq(turns.map((x) => x.result), ['Source: Example Domain', '(result not captured)', '(empty result)']);
+    ok(turns.every((x) => x.result.trim() !== ''), 'never blank');
+    const norm = JGt.normalizeTranscript(turns); ok(norm[1].result === '(result not captured)', 'survives the judge normaliser'); eq(resultForJudge({ resultText: 'z'.repeat(5) }), 'zzzzz');
+  });
+  await t('R5-scorefix AC3: every judge record carries the brief format version (2 now; a record without it is the old blank-result format)', async () => {
+    eq(JGt.BRIEF_FORMAT, 2);
+    const d = fs.mkdtempSync(path.join(tmp, 'bf-'));
+    const client = { async complete() { return { text: 'not json', inputTokens: 1, outputTokens: 1 }; } };
+    const r = await JGt.runJudge({ client, arm: 'C', brief: 'b', briefSha: 's', outDir: d });
+    eq(r.ok, false); eq(JSON.parse(fs.readFileSync(path.join(d, 'C.json'), 'utf8')).briefFormat, 2);
+    const r1 = await JGt.runJudge({ client, arm: 'B', brief: 'b', briefSha: 's', outDir: d, briefFormat: 1 }); eq(JSON.parse(fs.readFileSync(path.join(d, 'B.json'), 'utf8')).briefFormat, 1); void r1;
+  });
+  await t('R5-scorefix AC2: gapSecondsSince seeds the rep-2 gap from a prior finish time (retry pass); unknown stays null', () => {
+    eq(gapSecondsSince(Date.parse('2026-10-12T00:48:08.000Z'), Date.parse('2026-10-12T02:54:37.000Z')), 7589); eq(gapSecondsSince(undefined), null); eq(gapSecondsSince(NaN), null);
+    eq(gapSecondsSince(Date.parse('2026-01-01T00:00:00Z'), Date.parse('2026-01-01T00:01:30Z')), 90);
+  });
+  await t('R5-scorefix AC5: rescoreRecord reproduces a stored score unpatched, then flips only x2_parallel (batch pair) and c1_cache (out-of-TTL gap); a within-TTL gap or a sequential run does not flip', () => {
+    const spec = F.makeSpec({ seed: '20261011', arm: 'C', rep: 2 }); const e = F.expectedOf(spec);
+    const mk = (kids, gapMs, cache0) => { const obs = O.idealObservation('C', e, { rep: 2 }); obs.dispatch.p1Parallel = { sameTurn: true, overlapMs: -50000 }; obs.cache = { firstTurnCacheRead: cache0, gapSeconds: null };
+      return { runId: 'C2', arm: 'C', rep: 2, seed: '20261011', startedAt: new Date(Date.parse('2026-01-01T00:00:00Z') + gapMs).toISOString(), expected: { ...e, original: undefined }, observation: obs, score: O.scoreObservation(obs, e), metrics: { phases: [{ children: kids }] } }; };
+    const kid = (id, c, d) => ({ id, depth: 1, createdAt: new Date(Date.parse('2026-01-01T00:00:00Z') + c).toISOString(), completedAt: new Date(Date.parse('2026-01-01T00:00:00Z') + d).toISOString() });
+    const prior = { finishedAt: '2026-01-01T00:00:00Z' };
+    const batch = [kid('x', 0, 1000), kid('p', 10000, 20000), kid('q', 10001, 19000)];
+    const rec = mk(batch, 7_000_000, 0);
+    eq(rescoreRecord(rec, prior, { patch: false }).score.fields.x2_parallel.status, rec.score.fields.x2_parallel.status);
+    const r = rescoreRecord(rec, prior); eq([r.score.fields.x2_parallel.status, r.score.fields.c1_cache.status], ['pass', 'na']);
+    const warm = rescoreRecord(mk(batch, 100_000, 0), prior); eq(warm.score.fields.c1_cache.status, 'fail');
+    const seq = rescoreRecord(mk([kid('a', 0, 5000), kid('b', 6000, 12000)], 100_000, 5), prior); eq(seq.score.fields.x2_parallel.status, 'fail');
+  });
+
+
+  // ---- R6-prep AC3: peak context (real field) and C per-turn context from message_start
+  // Fixture numbers are the real R5 C1 phase-1 web_fetch turn (tmp/agent-mcp/parity/R5/live/out/runs/C1/logs/api): message_start cache_read 16,827 (ctx 17,730) vs the final
+  // message_delta cumulative over the server-tool iterations, cache_read 34,551 (ctx 35,654), web_fetch in the tool list.
+  const c1WebFetchTurn = [
+    'data: ' + JSON.stringify({ type: 'message_start', message: { id: 'm1', model: 'claude-haiku-4-5', usage: { input_tokens: 6, cache_creation_input_tokens: 897, cache_read_input_tokens: 16827, cache_creation: { ephemeral_5m_input_tokens: 897, ephemeral_1h_input_tokens: 0 }, output_tokens: 3 } } }),
+    'data: ' + JSON.stringify({ type: 'content_block_start', index: 0, content_block: { type: 'server_tool_use', id: 'srv1', name: 'web_fetch' } }), 'data: ' + JSON.stringify({ type: 'content_block_stop', index: 0 }),
+    'data: ' + JSON.stringify({ type: 'message_delta', delta: { stop_reason: 'tool_use' }, usage: { input_tokens: 13, cache_creation_input_tokens: 1090, cache_read_input_tokens: 34551, output_tokens: 232 } }), ''].join('\n');
+  await t('R6-prep AC3: a web_fetch turn reports context from message_start (17,730), not the cumulative message_delta (35,654); billing usage keeps the cumulative basis', () => {
+    const o = L.parseSse(c1WebFetchTurn);
+    eq(L.turnContextOf(o), 17730); eq(L.normUsage(o.usage).ctx, 35654);   // negative control: the pre-fix basis (usage) is exactly the inflated number
+    ok(L.normUsage(o.usage).cr === 34551 && L.normUsage(o.usage).out === 232, 'billing basis unchanged (cumulative cache_read, final output tokens)');
+    eq(L.turnContextOf({ usage: { input_tokens: 5, cache_read_input_tokens: 100 } }), 105);   // no message_start: falls back to the billing usage
+    eq(L.turnContextOf(null), 0);
+  });
+  await t('R6-prep AC3: drive.mjs builds arm C turns with turnContextOf (source guard, so the fixed basis is the one the record gets)', () => {
+    ok(/ctx: L\.turnContextOf\(t\.sse\)/.test(fs.readFileSync(path.join(HERE, 'drive.mjs'), 'utf8')), 'analyzeBC must override ctx with message_start context');
+  });
+  await t('R6-prep AC3: peakContextOf reads phases[].tokens.total.ctx (max over phases); null only when nothing is recorded', () => {
+    const rec = (a, b) => ({ metrics: { phases: [{ tokens: { total: { ctx: a } } }, { tokens: { total: { ctx: b } } }] } });
+    eq(MTt.peakContextOf(rec(21403, 26947)), 26947); eq(MTt.peakContextOf(rec(39869, 33390)), 39869);   // the R5 A1 / C1 true peaks (C1 after the message_start fix)
+    eq(MTt.peakContextOf({ metrics: { phases: [{ tokens: { total: {} } }] } }), null); eq(MTt.peakContextOf({}), null);
+    ok(MTt.peakContextOf(rec(1, 2)) !== null, 'negative control: the pre-fix reader returned null for exactly this shape');
+  });
+  await t('R6-prep AC3: peak context appears in the verdict line and the grid metric line (report-only, never gating)', () => {
+    const mk = (id, arm, peak, cost) => ({ runId: id, arm, wallMs: 1000, metrics: { phases: [{ costUsd: { total: cost, authoritative: cost }, turns: { parent: 1 }, calls: { total: 1 }, tokens: { total: { ctx: peak } } }] } });
+    const A = MTt.summarize(mk('A1', 'A', 39869, 1), { genuine: true, quality: 90 }), C = MTt.summarize(mk('C1', 'C', 26947, 1), { genuine: true, quality: 90 });
+    const rv = MTt.roundVerdict({ A, C });
+    ok(/peak ctx 26947\/39869/.test(MTt.formatVerdict(rv)), MTt.formatVerdict(rv));
+    ok(/peak ctx 26\.9k vs A 39\.9k/.test(GRt.renderGrid({}, rv)), GRt.renderGrid({}, rv));
+    eq(MTt.variantVerdict(A, { ...C, peakContext: 999999 }).verdict, MTt.variantVerdict(A, C).verdict);   // never gating
+  });
+
+  await t('R7-think AC1: thinking turns are report-only in the summary, the verdict line and the grid metric line, and never change a verdict', () => {
+    const mk = (id, arm, th) => ({ runId: id, arm, wallMs: 1000, thinking: th == null ? undefined : { configured: 'model default on every arm; not forced', observedThinkingTurns: th, parentTurns: th, allTasks: th }, metrics: { phases: [{ costUsd: { total: 1, authoritative: 1 }, turns: { parent: 1 }, calls: { total: 1 }, tokens: { total: { ctx: 1000 } } }] } });
+    const A = MTt.summarize(mk('A1', 'A', 4), { genuine: true, quality: 90 }), C = MTt.summarize(mk('C1', 'C', 0), { genuine: true, quality: 90 });
+    eq(MTt.thinkingTurnsOf(mk('x', 'A', 7)), 7); eq(MTt.thinkingTurnsOf(mk('x', 'A', null)), null);
+    const rv = MTt.roundVerdict({ A, C });
+    ok(/thinking turns 0\/4/.test(MTt.formatVerdict(rv)), MTt.formatVerdict(rv));
+    ok(/thinking turns 0 vs A 4/.test(GRt.renderGrid({}, rv)), GRt.renderGrid({}, rv));
+    eq(MTt.variantVerdict(A, { ...C, thinkingTurns: 999 }).verdict, MTt.variantVerdict(A, C).verdict);   // never gating (negative control: a huge count does not flip the verdict)
+  });
+  // ---- R7-think AC4: the scope gate reads the LOG from the main checkout
+  await t('R7-think AC4: resolveLogPath reads the MAIN checkout LOG from a worktree (git common dir), falls back to the worktree copy, and the gate sees the main-tree heading', () => {
+    const rel = 'docs/agent/parity/EXPERIMENT-LOG.md';
+    const wt = '/main/.worktrees/x'; const main = path.join('/main', rel);
+    eq(GTt.resolveLogPath(wt, rel, { runGit: () => '/main/.git', exists: (f) => f === main }), main);
+    eq(GTt.resolveLogPath(wt, rel, { runGit: () => '/main/.git', exists: () => false }), path.join(wt, rel));          // main copy missing -> worktree copy
+    eq(GTt.resolveLogPath(wt, rel, { runGit: () => '', exists: () => true }), path.join(wt, rel));                      // git unavailable -> worktree copy
+    eq(GTt.resolveLogPath('/main', rel, { runGit: () => '.git', exists: () => true }), path.join('/main', rel));        // in the main tree itself
+    // real git: this very worktree resolves to a path whose repo root contains .git
+    const real = GTt.resolveLogPath(path.resolve(HERE, '../../..'));
+    ok(path.basename(real) === 'EXPERIMENT-LOG.md', real);
+    // gate end to end: a stale worktree LOG (no heading) is red; the main-tree LOG (heading dated before startedAt) is green
+    const sc = { scenarioSha: 'b', previousSha: 'a', scopeChanges: ['SCOPE-R7-thinking-default'], startedAt: '2026-10-12T05:00:00Z' };
+    ok(GTt.checkScope({ ...sc, logText: '### 2026-10-12T04:31:43Z - SCOPE-R7-model-sonnet: x' }).ok === false, 'negative control: stale LOG must be red');
+    ok(GTt.checkScope({ ...sc, logText: '### 2026-10-12T04:46:11Z - SCOPE-R7-thinking-default: x' }).ok === true, 'main LOG must be green');
+  });
+  // ---- R9-meas (owner: "Report both (Recommended)"): wall stays graded, phase-sum is added report-only, harness overhead is broken out, fixtures can be paired
+  const R8T = { A: { runId: 'A1', arm: 'A', wallMs: 85322, metrics: { phases: [{ wallMs: 52568 }, { wallMs: 32169 }] } }, B: { runId: 'B1', arm: 'B', wallMs: 81144, metrics: { phases: [{ wallMs: 47586 }, { wallMs: 30046 }] } }, C: { runId: 'C1', arm: 'C', wallMs: 121117, metrics: { phases: [{ wallMs: 70167 }, { wallMs: 47589 }] } } };   // saved R8 A1/B1/C1 timings
+  await t('R9-meas AC1: wallMs stays the graded duration, phaseSumMs = sum of phases[].wallMs, overhead = wall - phase-sum, ratios under both metrics (R8 A1/B1/C1)', () => {
+    eq(MTt.durationMs(R8T.C), 121117); eq(MTt.phaseSumMs(R8T.A), 84737); eq(MTt.phaseSumMs(R8T.B), 77632); eq(MTt.phaseSumMs(R8T.C), 117756);
+    eq(MTt.harnessOverheadMs(R8T.A), 585); eq(MTt.harnessOverheadMs(R8T.B), 3512); eq(MTt.harnessOverheadMs(R8T.C), 3361);
+    const rd = MTt.rederiveDurations(R8T);
+    near(rd.ratios.C.wall, 121117 / 85322, 1e-12); near(rd.ratios.C.phaseSum, 117756 / 84737, 1e-12); near(rd.ratios.B.wall, 81144 / 85322, 1e-12); near(rd.ratios.B.phaseSum, 77632 / 84737, 1e-12);
+    eq([rd.ratios.C.wall, rd.ratios.C.phaseSum, rd.ratios.B.wall, rd.ratios.B.phaseSum].map((x) => x.toFixed(3)).join(), '1.420,1.390,0.951,0.916');
+    eq(MTt.phaseSumMs({ wallMs: 9, metrics: { phases: [{ wallMs: 4 }, {}] } }), null);   // negative control: a missing phase is null, never a partial sum
+    eq(MTt.phaseSumMs({ wallMs: 9, metrics: { phases: [] } }), null); eq(MTt.rederiveDurations({ B: R8T.B }).ratios.B.wall, null);
+  });
+  await t('R9-meas AC1: durationBreakdown splits a B/C run into setup, submit, between phases, accounting wait (fixed sleep), queries, teardown that sum to the overhead; no call log = unattributed', () => {
+    const base = Date.parse('2026-10-12T10:00:00.000Z'); const c = (name, end, ms, args = {}, text = '{}') => ({ t: new Date(base + end).toISOString(), ms, name, args, text });
+    const calls = [c('agent_list', 9003, 3), c('task', 9030, 14, { prompt: 'p1' }, '{"task_id":"T1"}'), c('result', 79030, 3, { task_id: 'T1' }), c('task', 79300, 5, { prompt: 'p2' }, '{"task_id":"T2"}'), c('result', 125300, 4, { task_id: 'T2' }), c('usage_query', 127309, 9, { task_id: 'T1' }), c('task_list', 127330, 1, { session_id: 's' }, '[]')];
+    const rec = { runId: 'C1', wallMs: 135000, finishedAt: new Date(base + 135000).toISOString(), metrics: { phases: [{ taskId: 'T1', wallMs: 70000 }, { taskId: 'T2', wallMs: 46000 }] } };
+    const b = MTt.durationBreakdown(rec, calls); const o = b.overhead;
+    eq(b.phaseSumMs, 116000); eq(b.overheadMs, 19000); ok(o.attributed === true, 'attributed');
+    eq([o.setupMs, o.submitMs, o.betweenPhasesMs, o.accountingWaitMs, o.fixedSleepMs, o.hiddenAndReadsMs, o.queriesMs, o.teardownMs, o.residualMs].join(), '9016,19,265,2000,1500,500,30,7670,0');
+    eq(o.setupMs + o.submitMs + o.betweenPhasesMs + o.accountingWaitMs + o.queriesMs + o.teardownMs + o.residualMs, b.overheadMs);
+    eq(MTt.durationBreakdown(rec, null).overhead.attributed, false); eq(MTt.durationBreakdown(rec, null).overhead.unattributedMs, 19000);
+    eq(MTt.durationBreakdown({ ...rec, duration: { phaseSumMs: 1 } }, null).phaseSumMs, 1);   // a stored value wins
+    // recordDuration stamps the record from a run dir and leaves wallMs alone; no log = unattributed
+    const d = fs.mkdtempSync(path.join(tmp, 'r9dur-')); fs.writeFileSync(path.join(d, 'mcp-calls.json'), JSON.stringify(calls));
+    const r2 = JSON.parse(JSON.stringify(rec)); recordDuration(r2, d); eq(r2.wallMs, 135000); eq(r2.duration.overhead.attributed, true); eq(r2.duration.graded, 'wallMs');
+    const r3 = JSON.parse(JSON.stringify(rec)); recordDuration(r3, path.join(d, 'none')); eq(r3.duration.overhead.attributed, false);
+  });
+  await t('R9-meas AC1: --rederive-duration over the saved R8 records is read-only (directory snapshot incl. mtimes unchanged) and prints C/A 1.420 vs 1.390 and B/A 0.951 vs 0.916', () => {
+    const snap = (dir) => { const out = []; const walk = (x) => { for (const e of fs.readdirSync(x, { withFileTypes: true }).sort((a, b) => (a.name < b.name ? -1 : 1))) { const f = path.join(x, e.name); if (e.isDirectory()) walk(f); else { const st = fs.statSync(f); out.push(`${f} ${st.size} ${st.mtimeMs} ${crypto.createHash('sha256').update(fs.readFileSync(f)).digest('hex')}`); } } }; walk(dir); return out.join('\n'); };
+    const root = fs.mkdtempSync(path.join(tmp, 'r9rd-'));
+    for (const [arm, rec] of Object.entries(R8T)) { fs.mkdirSync(path.join(root, 'live/out/runs', `${arm}1`), { recursive: true }); fs.writeFileSync(path.join(root, 'live/out/runs', `${arm}1`, 'record.json'), JSON.stringify(rec)); }
+    const before = snap(root); const txt = rederiveDurationReport(root, 'R8', 1);
+    eq(snap(root), before); ok(/C\/A[^\n]*1\.420[^\n]*1\.390/.test(txt) && /B\/A[^\n]*0\.951[^\n]*0\.916/.test(txt), txt);
+    fs.appendFileSync(path.join(root, 'live/out/runs/A1/record.json'), ' '); ok(snap(root) !== before, 'negative control: the snapshot detects a write');
+    const real = tmpRoot('R8'); if (fs.existsSync(path.join(real, 'live/out/runs/C1/record.json'))) { const b2 = snap(real); ok(/C\/A[^\n]*1\.420[^\n]*1\.390/.test(rederiveDurationReport(real, 'R8', 1)), 'real R8 records'); eq(snap(real), b2); }   // the saved R8 records are optional local evidence (gitignored tmp/)
+  });
+  await t('R9-meas AC2: the phase-sum is reported beside the graded wall and never gates (wall over with phase-sum under = FAIL; the converse = PASS)', () => {
+    const sm = (o) => ({ runId: 'x', arm: 'B', genuine: true, extra: false, extraRunReason: '', costBilled: 1, costCommon: 1, wallMs: 1000, phaseSumMs: 1000, quality: 80, turns: 5, toolCalls: 9, peakContext: 1000, ...o });
+    const A = sm({ arm: 'A' });
+    const v1 = MTt.variantVerdict(A, sm({ arm: 'C', wallMs: 1100, phaseSumMs: 1010 })); eq(v1.goals.duration.result, 'FAIL'); eq(v1.verdict, 'FAIL'); eq(v1.durationPhaseSum.gating, false);
+    const v2 = MTt.variantVerdict(A, sm({ arm: 'C', wallMs: 1010, phaseSumMs: 1200 })); eq(v2.goals.duration.result, 'PASS'); eq(v2.verdict, 'PASS');
+    const txt = MTt.formatVerdict(MTt.roundVerdict({ A, B: sm({ wallMs: 1100, phaseSumMs: 1010 }) }));
+    ok(/duration wall \(graded\) 1\.100 FAIL, phase-sum \(report-only\) 1\.010/.test(txt), txt);
+    ok(/dur wall \+10% \(graded\) \/ phase-sum \+1% \(report-only\)/.test(GRt.renderMetricLine(v1)), GRt.renderMetricLine(v1));
+  });
+  await t('R9-meas AC3: paired fixtures share every value across arms for one n; unpaired is byte-identical to the pre-change generator; the nonce stays per arm; the profile switch fails closed', () => {
+    const seed = '20261011'; const keys = ['pkg', 'taxRate', 'threshold', 'rate', 'ticketId', 'owner', 'handlingFee', 'carrierRate'];
+    const [a, b, c] = ['A', 'B', 'C'].map((arm) => F.makeSpec({ seed, arm, rep: 1, paired: true }));
+    for (const k of keys) { eq(b[k], a[k]); eq(c[k], a[k]); }
+    eq(JSON.stringify(F.hiddenTests(c)), JSON.stringify(F.hiddenTests(a))); eq(JSON.stringify(F.repoFiles(c)), JSON.stringify(F.repoFiles(a)));
+    ok(new Set([a.sysNonce, b.sysNonce, c.sysNonce]).size === 3 && [a.runId, b.runId, c.runId].join() === 'A1,B1,C1', 'nonce and runId stay per arm');
+    const [ua, uc] = ['A', 'C'].map((arm) => F.makeSpec({ seed, arm, rep: 1 })); ok(ua.ticketId !== uc.ticketId && ua.threshold !== uc.threshold, 'negative control: unpaired arms differ'); ok(!('paired' in ua), 'no paired key by default');
+    const blob = (sp) => crypto.createHash('sha256').update(JSON.stringify({ spec: sp, repo: F.repoFiles(sp), hidden: F.hiddenTests(sp), ticket: F.ticketText(sp), exp: F.expectedOf(sp) })).digest('hex');
+    eq(blob(ua), '569178d17d6ab078489e4af282caee6bcc445a5a1aafaa8133052c7bac263a83'); eq(blob(F.makeSpec({ seed, arm: 'C', rep: 1 })), 'c36118d2b6c10021f4928aaaed59bf34eebd5c6137eb50e1cb18d680c3acf8cd');   // frozen from fixtures.mjs at HEAD before R9-meas
+    ok(!('pairedFixtures' in LGt.profileOf({ profile: { arms: ['A', 'C'], model: 'claude-haiku-5-5' } })), 'absent unless true'); eq(LGt.profileOf({ profile: { arms: ['A', 'C'], model: 'claude-haiku-5-5', pairedFixtures: true } }).pairedFixtures, true);
+    let threw = false; try { LGt.profileOf({ profile: { arms: ['A', 'C'], model: 'claude-haiku-5-5', pairedFixtures: 'yes' } }); } catch (e) { threw = e instanceof LGt.LedgerError; } ok(threw, 'non-boolean fails closed');
+    eq(specFor({ seed, arm: 'C', rep: 1, profile: { pairedFixtures: true } }).ticketId, a.ticketId); eq(specFor({ seed, arm: 'C', rep: 1, profile: {} }).ticketId, uc.ticketId);
+    eq(fixturesFact({ pairedFixtures: true }).valueStream, 'seed|run|rep'); eq(fixturesFact({}).valueStream, 'seed|run|arm|rep');
+  });
+  fs.rmSync(tmp, { recursive: true, force: true });
+  const failed = results.filter((r) => !r.ok);
+  return { ok: failed.length === 0, total: results.length, failed, results };
+}

@@ -61,11 +61,11 @@ npm install @adhd/agent-mcp
 **Test command:** `npx nx test agent-mcp --run`  
 **Test framework:** Vitest  
 **Test files:**
-- src/__tests__/wiring.test.ts (5 unit tests)
-- src/__tests__/tool-advertisement.test.ts (14 unit tests)
-- src/__tests__/integration/live-dag.e2e.test.ts (skipped: AGENT_MCP_LIVE=1 only)
-- src/__tests__/integration/live-oauth.e2e.test.ts (skipped: AGENT_MCP_LIVE=1 only)
-- src/__tests__/integration/live-budget.e2e.test.ts (skipped: AGENT_MCP_LIVE=1 only)
+- test/unit/wiring.spec.ts (5 unit tests)
+- test/unit/tool-advertisement.spec.ts (14 unit tests)
+- test/e2e/integration/live-dag.e2e.ts (skipped: AGENT_MCP_LIVE=1 only)
+- test/e2e/integration/live-oauth.e2e.ts (skipped: AGENT_MCP_LIVE=1 only)
+- test/e2e/integration/live-budget.e2e.ts (skipped: AGENT_MCP_LIVE=1 only)
 
 **Current test status:** 19 passed, 4 skipped
 

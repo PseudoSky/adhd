@@ -1,6 +1,6 @@
 # @adhd/agent-plugin-sanitize
 
-Sub-agent output sanitization plugin for [@adhd/agent-mcp](https://github.com/anomalyco/adhd/tree/main/packages/ai/agent-mcp). Defends against prompt injection across agent boundaries by modifying delegation tool results before the parent model sees them.
+Sub-agent output sanitization plugin for [@adhd/agent-mcp](../../../entrypoint/agent-mcp/README.md). Defends against prompt injection across agent boundaries by modifying delegation tool results before the parent model sees them.
 
 ## Installation
 
@@ -41,7 +41,7 @@ ADHD_AGENT_PLUGINS="@adhd/agent-plugin-sanitize"
 | ----------------- | ---------------------------------- | ---------- | ---------------------------------------------------------------------------------------------------------------------- |
 | `defaultStrategy` | `"none"` \| `"prefix"` \| `"wrap"` | `"prefix"` | Default sanitization strategy                                                                                          |
 | `agents`          | `Record<string, strategy>`         | `{}`       | Per-agent overrides (agent name → strategy)                                                                            |
-| `delegationOnly`  | `boolean`                          | `true`     | Only sanitize delegation tool calls (`agent-mcp__task` / `agent-mcp__agent`); when `false`, sanitizes all tool results |
+| `delegationOnly`  | `boolean`                          | `true`     | Only sanitize delegation tool calls (`agent-mcp__task` / `agent-mcp__agent`); when `false`, sanitizes all tool results and also stops provider server-tool results from being stored (see below) |
 
 ## Strategies
 
@@ -58,3 +58,50 @@ When the orchestrator receives a delegation result in Phase 3 (before appending 
 conversation history), it emits this event. The handler mutates `payload.result` in
 place — the orchestrator reads the sanitized value when building the tool result
 message.
+
+## Provider server-tool results are NOT sanitized
+
+Some providers execute tools themselves. With the Anthropic provider these are the native
+`web_fetch` and `web_search` tools: the provider runs them and returns the fetched page or
+search results inside the assistant message. **That content is untrusted third-party
+content, and it bypasses `transform:tool_result` entirely, so this plugin cannot prefix,
+wrap or otherwise sanitize it** (the blocks are opaque and signed; rewriting them would
+invalidate them). It reaches the model unmodified.
+
+To keep that content from steering the model beyond the run that fetched it, the
+orchestrator keeps the provider-native blocks of each assistant message and replays them
+on later requests. By default, server-tool results are stored for a bounded idle window
+(`echo.serverResultTtlMinutes`, default 10 minutes), so a page injected into one task can
+influence later turns in the same session during that window (prompt-injection
+persistence).
+
+What this plugin does about it:
+
+- `delegationOnly: true` (default): nothing changes. Server-tool results follow the
+  orchestrator's normal retention.
+- `delegationOnly: false` ("sanitize all tool output"): the plugin registers a handler on
+  the `transform:server_result_persist` hook and sets `persist = false`. Server-tool
+  results are then replayed **within the producing run only** and are never stored. Other
+  provider-native blocks (thinking, text) are unaffected. This is a persistence veto, not
+  sanitization: inside the run the content is still unsanitized.
+
+If you need more than that, the opt-outs are:
+
+| Opt-out | Effect |
+| --- | --- |
+| `nativeWebTools: false` (agent setting) | The provider's own web tools are not offered, so no server-tool results exist at all. Use the engine's regular, sanitizable tools instead. |
+| `echo.serverResultTtlMinutes: 0` | Server-tool results are never stored, for every agent, independent of this plugin. |
+| `session_clear` | Purges a session's stored history, including any stored provider-native blocks. |
+
+### Hook contract (for plugin authors)
+
+`transform:server_result_persist` carries `{ sessionId, agentName?, serverBytes, persist }`
+and is emitted once per assistant message that has server-tool result bytes to store
+(`serverBytes` is their size), before its provider-native blocks are stored, with
+`persist: true`. Handlers mutate the payload by reference, like `transform:tool_result`.
+The veto is sticky: the orchestrator ignores any later write of `persist = true` once a
+handler has set it to `false`, so registration order cannot undo it. If emitting the hook
+throws, the orchestrator fails closed and stores no server-tool results for that message.
+A vetoed message is still replayed with its server-tool results for the rest of the run
+that produced it. See the orchestrator's
+[Provider echo](../agent-engine-orchestrator/README.md#provider-echo-anthropic) section.

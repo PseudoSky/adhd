@@ -73,22 +73,52 @@ export class EmitError extends Error {
  * JSON-Schema `#/$defs/<name>` (and legacy `#/definitions/<name>`) lookup
  * against a `root` document.
  *
+ * Two key conventions are accepted in the `$defs` / `definitions` bag: the
+ * bare definition name (`{ User: {...} }`, what `ts-json-schema-generator`
+ * emits) and the full ref-URI (`{ '#/$defs/User': {...} }`, what hand-built
+ * fixtures use). The bare name is tried first.
+ *
+ * Any other ref form is rejected up front with an `E_EMIT` "unsupported $ref
+ * form" error, distinct from a missing definition: a JSON-Pointer path into a
+ * definition (`#/$defs/A/properties/b`), a URI-qualified ref
+ * (`https://…#/definitions/A`), a `#/properties/…` pointer, or an empty name.
+ *
  * @param root The schema document holding `$defs` / `definitions`.
  * @returns A resolver suitable for {@link EmitCtx.resolve}.
  */
 export function rootRefResolver(root: SchemaNode): (ref: string) => SchemaNode {
   return (ref: string): SchemaNode => {
-    const m = /^#\/(\$defs|definitions)\/(.+)$/.exec(ref);
+    // A definition name is a single JSON-Pointer token: no raw `/` (a `/` inside
+    // a name is written `~1`). Anything else is an unsupported form, not a miss.
+    const m = /^#\/(\$defs|definitions)\/([^/]+)$/.exec(ref);
     if (!m) {
-      throw new EmitError(`E_EMIT: unresolvable $ref "${ref}"`, '');
+      throw new EmitError(
+        `E_EMIT: unsupported $ref form "${ref}"; supported forms are "#/$defs/<name>" and "#/definitions/<name>"`,
+        ''
+      );
     }
     const bag = root[m[1]] as Record<string, unknown> | undefined;
-    const def = bag?.[decodePointerToken(m[2])];
+    const def =
+      ownProperty(bag, decodePointerToken(m[2])) ?? ownProperty(bag, ref);
     if (def == null || typeof def !== 'object') {
       throw new EmitError(`E_EMIT: $ref "${ref}" has no $def target`, '');
     }
     return def as SchemaNode;
   };
+}
+
+/**
+ * Read `key` from a `$defs` / `definitions` bag only when it is an OWN property.
+ * A plain `bag[key]` read walks the prototype chain, so `#/$defs/__proto__` or
+ * `#/$defs/constructor` would resolve to `Object.prototype` / `Object` instead of
+ * failing as a missing definition.
+ */
+function ownProperty(
+  bag: Record<string, unknown> | undefined,
+  key: string
+): unknown {
+  if (typeof bag !== 'object' || bag === null) return undefined;
+  return Object.prototype.hasOwnProperty.call(bag, key) ? bag[key] : undefined;
 }
 
 /** Decode a single JSON-Pointer reference token (`~1`→`/`, `~0`→`~`). */

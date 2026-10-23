@@ -46,12 +46,12 @@ export default [
             // `better-sqlite3` is a TEST-SUPPORT-ONLY import: the guarded live runner
             // (`src/test/integration/run-live-guarded.ts`) reads the spawned agent-mcp's
             // real `task_usage`/`messages` telemetry to enforce the cost/turn/message
-            // guards. It is a non-spec `src/test/**` script (so it is outside the
+            // guards. It is a non-spec `test/**` script (so it is outside the
             // build's `tsconfig.lib.json`), but is NOT a `.spec`/`.test` file (so the
             // dependency analyzer's test-file exclusion misses it). It must NOT be a
             // runtime `dependency` of the published package — the shipped `dist` never
             // imports it — so it belongs on the ignore list, not in `dependencies`.
-            // (`live-dispatch-five-acs.e2e.test.ts` imports it too, but as a `.test.ts`
+            // (`live-dispatch-five-acs.e2e.ts` imports it too, but as a `.test.ts`
             // it is excluded from the check.)
             "@nx/dependency-checks": [
                 "error",

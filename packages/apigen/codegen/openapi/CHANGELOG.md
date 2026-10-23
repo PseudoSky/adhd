@@ -1,3 +1,11 @@
+## 0.2.7 (2026-10-21)
+
+This was a version bump only for apigen-codegen-openapi to align it with other projects, there were no code changes.
+
+## 0.2.6 (2026-10-15)
+
+This was a version bump only for apigen-codegen-openapi to align it with other projects, there were no code changes.
+
 ## 0.2.4 (2026-09-26)
 
 ### 🚀 Features

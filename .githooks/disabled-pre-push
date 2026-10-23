@@ -1,0 +1,216 @@
+#!/usr/bin/env sh
+#
+# Pre-push hook — the full, honest `nx affected` closure over the `test` lane
+# that used to live in `pre-commit` (DEBT-PROCESS-AFFECTED-TEST-001
+# Option 2 -> Option 3 migration; see `.githooks/pre-commit`'s Gate 3 header for
+# the incident that moved it here). The lane list is NOT hard-coded here: it is
+# `tools/gate/lane-gate.mjs`'s `GATE_TARGETS` minus `PRE_PUSH_EXCLUDED = ['e2e']`,
+# resolved by `.githooks/lib/pre-push-flags.mjs`. The `e2e` lane is NOT run by this
+# hook (too heavy per push); CI (`pull-request.yml`, `ci.yml`) consumes
+# `lane-gate.mjs` directly and still runs it, and AGENTS.md "Gates are blocking"
+# tells agents to run the full lane gate (including e2e) before any push.
+# `@adhd/backlog`'s `e2e` is deliberately NOT in `test.dependsOn` (2026-09-28,
+# backlog-e2e-cache-separation), so nothing local reaches it implicitly.
+# Reachability at the gate is the invariant, and
+# `tools/nx-plugins/test/executors/wiring/check-lane-reachability.mjs` (run
+# below, unconditionally) fails the push if a CI gate file stops invoking every
+# target in that list, or if this hook stops running `test` / starts running `e2e`.
+# `pre-commit`'s Gate 3 now runs a fast, staged-file-scoped
+# vitest pass (seconds); THIS hook runs the real, whole-project, full-affected
+# suite that gate used to run (minutes), but scoped by COMMIT RANGE rather
+# than a snapshot of the working tree — which is what makes it safe to run in
+# a worktree with other agents' concurrent, uncommitted edits: a commit range
+# can only ever contain COMMITTED history, so another agent's in-flight WIP
+# (uncommitted, by definition) can never appear in `--base`/`--head` here,
+# unlike the old Gate 3's `--files=<staged>` selection whose actual test
+# EXECUTION still read the dirty working tree off disk.
+#
+# git invokes pre-push with two args ($1 = remote name, $2 = remote URL) and
+# feeds ref-update lines on stdin: "<local-ref> <local-sha> <remote-ref>
+# <remote-sha>", one per ref being pushed. A deleted ref has local-sha =
+# all-zeroes (nothing to test). A brand-new remote branch has remote-sha =
+# all-zeroes (no upstream commit to diff against yet) — fall back to the
+# merge-base with origin/main so a first push of a feature branch is scoped
+# to just that branch's own commits, not all of history.
+#
+# Activated by the same `core.hooksPath=.githooks` as every other hook here.
+# Bypass for an emergency push: `git push --no-verify` (use sparingly — CI's
+# gate jobs on the PR run the SAME targets (`tools/gate/lane-gate.mjs`) and are
+# the real, non-bypassable backstop; see `.github/workflows/pull-request.yml`
+# and `ci.yml`).
+
+zero_sha="0000000000000000000000000000000000000000"
+hook_dir=$(dirname "$0")
+
+# 50e8c966: defense in depth against hook-exported GIT_* leaking into spec-spawned git.
+# shellcheck source=lib/git-env-guard.sh
+. "$hook_dir/lib/git-env-guard.sh"
+repo_root=$(cd "$hook_dir/.." && pwd -P)
+
+# The gate's affected-target list is canonicalised in ONE module
+# (`tools/gate/lane-gate.mjs`); this hook runs it minus `PRE_PUSH_EXCLUDED`
+# (`e2e`). Never hard-code `--target=…` here. `flags` is the shell rendering
+# ("--target=test"), reused in the run, echo, and inspect lines below.
+flags=$(node "$repo_root/.githooks/lib/pre-push-flags.mjs")
+if [ -z "$flags" ]; then
+  echo "✖ pre-push: .githooks/lib/pre-push-flags.mjs printed nothing — refusing to run a gate with no targets."
+  exit 1
+fi
+
+# Fail fast, before spending minutes running the gate (or trusting a green
+# result): prove every gate file still invokes every target in GATE_TARGETS.
+# `tools/nx-plugins/test/executors/wiring/check-lane-reachability.mjs` also
+# checks the e2e lanes are cached, that `test` never re-couples to `e2e`, and
+# that `publish` reaches every declared `e2e` lane. Node built-ins only, so it
+# runs even before `pnpm install`. Runs UNCONDITIONALLY (even a no-op push).
+if ! node "$repo_root/tools/nx-plugins/test/executors/wiring/check-lane-reachability.mjs"; then
+  echo ""
+  echo "✖ pre-push: lane-reachability check failed — the gate is mis-wired (a lane is unreachable or uncached)."
+  echo "  Fix tools/gate/lane-gate.mjs / the gate files, then re-push."
+  exit 1
+fi
+
+# 4f26493e AC2: pnpm-lock.yaml must match every package.json. The non-mutating
+# `pnpm install --frozen-lockfile --lockfile-only` probe takes ~0.4s, so it runs
+# UNCONDITIONALLY (even a no-op push), and names the offending package.json /
+# specifier on drift. A release that bumped versions without relocking (7b85fa37)
+# is exactly what this stops from reaching origin. `pnpm release:commit` now
+# regenerates the lockfile itself (e98bb455 AC1).
+if ! node "$repo_root/tools/nx-plugins/build/executors/lockfile/check-lockfile-fresh.mjs"; then
+  echo ""
+  echo "✖ pre-push: pnpm-lock.yaml is stale. Run: corepack pnpm install --lockfile-only --no-frozen-lockfile, commit pnpm-lock.yaml, then re-push."
+  exit 1
+fi
+
+any_ref=0
+overall_status=0
+
+# 50e8c966: snapshot the shared repo config; verified after every ref's test run.
+guard_snapshot
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+  [ -z "$local_ref" ] && continue
+  # Deleting a remote ref (local_sha all-zero) — nothing to test.
+  if [ "$local_sha" = "$zero_sha" ]; then
+    continue
+  fi
+  any_ref=1
+  guard_exclude_ref "$local_ref" # the ref being pushed may legitimately differ
+
+  base="$remote_sha"
+  # A remote tip this clone does not have (the remote was rewritten) cannot anchor a range: treat it as a new branch.
+  if [ "$remote_sha" = "$zero_sha" ] || ! git cat-file -e "${remote_sha}^{commit}" 2>/dev/null; then
+    # New remote branch: no remote tip to diff against yet. Scope to this
+    # branch's own commits by diffing against its merge-base with main,
+    # rather than the full repo history (which "affected" against a null
+    # base would otherwise fall back to).
+    base=$(git merge-base "$local_sha" origin/main 2>/dev/null || git merge-base "$local_sha" main 2>/dev/null)
+    if [ -z "$base" ]; then
+      echo "⚠ pre-push: could not resolve a merge-base for a new branch (no origin/main or main reachable)."
+      echo "  Falling back to running 'nx affected' with no explicit base (repo default)."
+      base=""
+    fi
+  fi
+
+  # 595965cc T43 (G12, STRATEGY 6.6): the change carries a rigor record, its recorded rigor is not below
+  # the rigor its paths and triggers derive, and a Standard or Deep change has a "not-testing" list.
+  # Commits authored before the IMPLEMENTATION's "Enforced from" date are exempt. Node built-ins only.
+  if [ -n "$base" ]; then
+    # G12 is advisory: a planning record is prose nothing downstream reads, so a miss warns and never blocks.
+    if ! node "$repo_root/tools/nx-plugins/test/routing/test-routing.mjs" check --range "$base..$local_sha"; then
+      echo ""
+      echo "⚠ pre-push: G12 planning record missing or below derived rigor for $base..$local_sha (advisory, not blocking) — see docs/standards/testing.md."
+    fi
+  fi
+
+  # 595965cc T32 (G4, STRATEGY 10): every skip/todo/disabled marker carries a tracking item and an
+  # unexpired date, or is a legacy marker the baseline records (the baseline only shrinks). Repo-wide, not
+  # range-based, so it runs whether or not a base resolved, and once per push (not once per ref). It reads the
+  # checked-out tree, which is the tree a normal `git push` publishes. Node built-ins only.
+  if [ -z "${g4_done:-}" ] && ! node "$repo_root/tools/nx-plugins/test/executors/wiring/check-skip-expiry.mjs"; then
+    echo ""
+    echo "✖ pre-push: G4 skip/todo expiry check failed — name a tracking item and an unexpired date on the marker ('backlog <8 hex id> until YYYY-MM-DD'), or remove it"
+    exit 1
+  fi
+  g4_done=1
+
+  # 595965cc T34 (G9, b87dcea0): each test's header tier is judged against its code (a spawning file headed tier S
+  # fails), tier P/H/X carry a fidelity-gap statement, and a new test has a header. Legacy files are baselined;
+  # the baseline only shrinks. Once per push. Node built-ins only.
+  if [ -z "${g9_done:-}" ] && ! node "$repo_root/tools/nx-plugins/test/executors/wiring/check-test-headers.mjs"; then
+    echo ""
+    echo "✖ pre-push: G9 test header check failed — give the test a header (guards, tier, cites; gap for tier P/H/X) whose tier matches what the code does; never reword a header to excuse the tier"
+    exit 1
+  fi
+  g9_done=1
+
+  echo "→ pre-push: nx affected $flags  (base=${base:-<default>}  head=$local_sha, ref=$local_ref)"
+
+  # ---------------------------------------------------------------------------
+  # Passive timing capture (no extra run, no reporter to configure).
+  #
+  # vitest's OWN default reporter already prints a per-file duration line for
+  # every spec it runs ("✓ src/x.spec.ts (12 tests) 6238ms"); nx's
+  # `--output-style=stream-without-prefixes` passes those lines through verbatim.
+  # So the data we want is already on stdout — the only missing piece is
+  # persistence. We tee it to a log and keep the newest N.
+  #
+  # WHY NOT `-- --reporter=json`: passing vitest flags through nx's `--`
+  # forwarding makes the task HANG after the work completes (verified
+  # 2026-09-23: the same command without forwarded args exits promptly; with
+  # `--reporter=…` it never exits, even with `--run` and CI=true). Forwarding
+  # is therefore unusable here, and the built-in output is captured instead.
+  #
+  # WHY NOT `nx ... | tee -a log` NAIVELY: a pipeline's exit status is its LAST
+  # command's, so that would make `status` tee's status (always 0) and a FAILING
+  # test run would report success — silently defeating this gate. So nx's real
+  # status is written to a file from INSIDE the piped subshell and read back out
+  # afterwards. This also keeps the gate intact if `tee` itself fails.
+  #
+  # Best-effort throughout: a full disk or unwritable HOME must never block a
+  # push, so every capture step is `|| true` and only `status` can fail the run.
+  # ---------------------------------------------------------------------------
+  timings_dir="${ADHD_TEST_TIMINGS_DIR:-$HOME/.adhd/test-timings}"
+  mkdir -p "$timings_dir" 2>/dev/null || true
+  timings_log="$timings_dir/$(date -u +%Y%m%dT%H%M%SZ)-$$.log"
+  status_file=$(mktemp 2>/dev/null || echo /tmp/adhd-pre-push-status.$$)
+
+  if [ -n "$base" ]; then
+    { no_hook_git_env env CI=true npx nx affected $flags --base="$base" --head="$local_sha" --output-style=stream-without-prefixes; echo $? > "$status_file"; } 2>&1 | tee "$timings_log"
+  else
+    { no_hook_git_env env CI=true npx nx affected $flags --head="$local_sha" --output-style=stream-without-prefixes; echo $? > "$status_file"; } 2>&1 | tee "$timings_log"
+  fi
+  # nx's TRUE status (the pipeline's status above is tee's, and is discarded).
+  status=$(cat "$status_file" 2>/dev/null)
+  rm -f "$status_file" 2>/dev/null || true
+  if ! guard_verify; then
+    exit 1
+  fi
+
+  # Keep the newest 50 captures; drop the rest. Best-effort.
+  ls -1t "$timings_dir"/*.log 2>/dev/null | tail -n +51 | while IFS= read -r old; do rm -f "$old" 2>/dev/null || true; done
+  echo "  (timings captured: $timings_log)"
+
+  if [ "$status" -ne 0 ]; then
+    echo ""
+    echo "✖ pre-push: affected test failed for $local_ref — fix and re-push."
+    if [ -n "$base" ]; then
+      echo "  Inspect: npx nx affected $flags --base=$base --head=$local_sha"
+    else
+      echo "  Inspect: npx nx affected $flags --head=$local_sha"
+    fi
+    echo "  (bypass in an emergency with: git push --no-verify)"
+    overall_status=1
+  fi
+done
+
+if [ "$any_ref" -eq 0 ]; then
+  exit 0
+fi
+
+if [ "$overall_status" -ne 0 ]; then
+  exit 1
+fi
+
+echo "✓ pre-push: affected test clean."
+exit 0

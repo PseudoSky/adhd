@@ -357,7 +357,13 @@ export interface GatewayHealth {
  * failure model around the adapter call.
  */
 export interface Gateway {
-  /** Spawn + begin supervising every host. Resolves once all `start()` calls settle. */
+  /**
+   * Spawn + begin supervising every host. Resolves once every host's `bringUp` settles.
+   * If any host fails, every host is stopped (supervision cancelled included) and the
+   * original error is rethrown; the gateway is then stopped and cannot be restarted.
+   * Calling `start()` on a stopped gateway (after {@link stop} or a failed `start()`) rejects;
+   * build a new gateway with {@link createGateway} instead.
+   */
   start(): Promise<void>;
 
   /**
@@ -390,6 +396,19 @@ interface HostEntry {
   unsubscribe: () => void;
   /** True once the gateway has been stopped — suppresses further restarts. */
   retired: boolean;
+  /**
+   * Cancels the pending supervision backoff timer, if a restart loop is sleeping.
+   * Set while {@link supervise} waits between attempts; cleared when the timer fires.
+   */
+  cancelBackoff?: () => void;
+  /** Number of `adapter.start()` calls currently awaiting settlement. */
+  startsInFlight: number;
+  /**
+   * Post-start stops still owed. Teardown adds one per `adapter.start()` that was in flight
+   * when it ran: that start may spawn a child after teardown's `adapter.stop()` already
+   * returned. Each such start consumes one owed stop when it settles ({@link startAdapter}).
+   */
+  owedStopsAfterStart: number;
 }
 
 /**
@@ -413,6 +432,12 @@ export function createGateway(opts: GatewayOptions): Gateway {
   };
 
   const hosts = new Map<string, HostEntry>();
+  /**
+   * True once the gateway has been stopped, explicitly or by a failed {@link Gateway.start}.
+   * A stopped gateway cannot be restarted: its hosts are retired, so a second start would
+   * otherwise resolve with every host silently down.
+   */
+  let stopped = false;
 
   for (const adapter of opts.adapters) {
     if (hosts.has(adapter.host)) {
@@ -426,18 +451,77 @@ export function createGateway(opts: GatewayOptions): Gateway {
       restarts: 0,
       unsubscribe: () => undefined,
       retired: false,
+      startsInFlight: 0,
+      owedStopsAfterStart: 0,
     });
   }
 
-  /** Sleep helper using the injected timer (deterministic in tests). */
-  function sleep(ms: number): Promise<void> {
+  /**
+   * Sleep helper using the injected timer (deterministic in tests). The pending timer is
+   * registered on `entry` so {@link teardown} can cancel it instead of leaving a restart
+   * scheduled for a host that has already been stopped.
+   */
+  function sleep(entry: HostEntry, ms: number): Promise<void> {
     return new Promise((resolve) => {
       if (ms <= 0) {
         resolve();
         return;
       }
-      timers.setTimeout(resolve, ms);
+      const handle = timers.setTimeout(() => {
+        entry.cancelBackoff = undefined;
+        resolve();
+      }, ms);
+      entry.cancelBackoff = () => {
+        timers.clearTimeout(handle);
+        entry.cancelBackoff = undefined;
+        resolve();
+      };
     });
+  }
+
+  /**
+   * Stop one host and cut off its supervision: marks it retired, drops the exit listener,
+   * cancels any pending restart timer, then tears the adapter down. Shared by
+   * {@link Gateway.stop} and by the partial-failure path of {@link Gateway.start}.
+   */
+  async function teardown(entry: HostEntry): Promise<void> {
+    entry.retired = true;
+    entry.unsubscribe();
+    entry.cancelBackoff?.();
+    entry.status = 'down';
+    // A start still in flight may spawn its child after this stop returns; record one
+    // owed post-start stop per such start before awaiting, so a start settling during
+    // this stop is not missed.
+    // Idempotent: repeated stops during the same start must not inflate the owed count
+    // beyond the number of starts that can still settle (one owed stop per in-flight start).
+    entry.owedStopsAfterStart = Math.max(entry.owedStopsAfterStart, entry.startsInFlight);
+    await entry.adapter.stop();
+  }
+
+  /**
+   * Invoke `adapter.start()` and track it so teardown can see a start that races it.
+   * When teardown ran during the start, the child may have been spawned after teardown's
+   * `adapter.stop()`: stop the adapter again once the start settles. Each owed stop is
+   * consumed exactly once, so no stop is repeated for a start teardown already covered.
+   */
+  async function startAdapter(entry: HostEntry): Promise<void> {
+    entry.startsInFlight += 1;
+    try {
+      await entry.adapter.start();
+    } finally {
+      entry.startsInFlight -= 1;
+      if (entry.owedStopsAfterStart > 0) {
+        entry.owedStopsAfterStart -= 1;
+        // A failing owed stop must not replace this start's outcome. On the failure path the
+        // start error keeps propagating; on the success path teardown already retired the host
+        // and marked it `down`, so a failed stop leaves nothing routable and is swallowed here.
+        try {
+          await entry.adapter.stop();
+        } catch {
+          // gateway.ts has no logging channel, so the failed stop is not recorded.
+        }
+      }
+    }
   }
 
   /**
@@ -453,7 +537,7 @@ export function createGateway(opts: GatewayOptions): Gateway {
       void supervise(entry, reason);
     });
 
-    await entry.adapter.start();
+    await startAdapter(entry);
 
     // Readiness gating: a host is `down` until its health probe reports ready.
     let isReady = false;
@@ -484,10 +568,10 @@ export function createGateway(opts: GatewayOptions): Gateway {
         entry.status = 'down';
         return;
       }
-      await sleep(backoff.delayMs(attempt));
+      await sleep(entry, backoff.delayMs(attempt));
       if (entry.retired) return;
       try {
-        await entry.adapter.start();
+        await startAdapter(entry);
         const ok = await entry.adapter.ready();
         if (entry.retired) return;
         if (ok) {
@@ -584,11 +668,30 @@ export function createGateway(opts: GatewayOptions): Gateway {
 
   return {
     async start() {
-      await Promise.all([...hosts.values()].map((entry) => bringUp(entry)));
+      if (stopped) {
+        throw new Error(
+          'apigen-gateway: gateway is stopped (it was stopped, or a previous start() failed); ' +
+            'build a new gateway with createGateway() to start again'
+        );
+      }
+      const entries = [...hosts.values()];
+      // allSettled, not all: a rejected bringUp must not leave its siblings running
+      // unobserved. Every host is awaited before anything is torn down.
+      const settled = await Promise.allSettled(entries.map((entry) => bringUp(entry)));
+      const failure = settled.find(
+        (r): r is PromiseRejectedResult => r.status === 'rejected'
+      );
+      if (failure === undefined) return;
+      // Partial failure: stop every host this start touched (a rejected start may still
+      // have spawned a child), then rethrow the original error. The gateway is left
+      // stopped; build a new gateway to retry.
+      stopped = true;
+      await Promise.allSettled(entries.map((entry) => teardown(entry)));
+      throw failure.reason;
     },
 
     async route(req, signal) {
-      const host = req.operation.host;
+      const host = req.operation.binding ?? req.operation.host;
       const entry = hosts.get(host);
       // No adapter for this host → unavailable (partial availability, not whole-surface).
       if (entry == null) {
@@ -645,14 +748,8 @@ export function createGateway(opts: GatewayOptions): Gateway {
     },
 
     async stop() {
-      await Promise.all(
-        [...hosts.values()].map(async (entry) => {
-          entry.retired = true;
-          entry.unsubscribe();
-          entry.status = 'down';
-          await entry.adapter.stop();
-        })
-      );
+      stopped = true;
+      await Promise.all([...hosts.values()].map((entry) => teardown(entry)));
     },
   };
 }

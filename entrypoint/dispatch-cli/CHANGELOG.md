@@ -1,3 +1,29 @@
+## 0.1.11 (2026-10-21)
+
+### 🩹 Fixes
+
+- **dispatch-orchestrator:** publish the dispatch lock with an exclusive wx write when the filesystem cannot hard-link ([b9a9c5e9](https://github.com/PseudoSky/adhd/commit/b9a9c5e9))
+- **dispatch-orchestrator:** review corrections for dag lock reclaim and serializer cleanup (0b80a7b5) ([59e3628a](https://github.com/PseudoSky/adhd/commit/59e3628a))
+- **dispatch-orchestrator:** reclaim stale dispatch locks without deleting a competitor's lock, unique temp files in dag serializer, dry runs take the dag lock (0b80a7b5) ([108f0a2d](https://github.com/PseudoSky/adhd/commit/108f0a2d))
+
+### ❤️ Thank You
+
+- pseudosky
+
+## 0.1.10 (2026-10-19)
+
+### 🩹 Fixes
+
+- **dispatch-cli:** resolve the entry script's real path before walking up to the checkout ([2eb81cdc](https://github.com/PseudoSky/adhd/commit/2eb81cdc))
+
+### ❤️ Thank You
+
+- pseudosky
+
+## 0.1.9 (2026-10-15)
+
+This was a version bump only for dispatch-cli to align it with other projects, there were no code changes.
+
 ## 0.1.8 (2026-10-11)
 
 This was a version bump only for dispatch-cli to align it with other projects, there were no code changes.

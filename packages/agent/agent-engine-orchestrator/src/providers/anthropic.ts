@@ -1,17 +1,23 @@
+import { createTtfbProbe } from "./call-timing.js";
 import Anthropic from "@anthropic-ai/sdk";
-import type { ContentBlockParam, MessageParam, Tool } from "@anthropic-ai/sdk/resources/messages";
+import type { ContentBlock, ContentBlockParam, MessageParam, Tool } from "@anthropic-ai/sdk/resources/messages";
 
 import { generateId } from "../utils/ids.js";
 import { nowIso } from "../utils/timestamps.js";
 import { resolveToolCallName } from "../clients/tool-naming.js";
 
 import type { ProviderConfig, Message, ToolCall } from "../validation/index.js";
-import type { TokenUsage } from "@adhd/agent-base-types";
+import type { IProviderEcho, TokenUsage } from "@adhd/agent-base-types";
 import { ToolError } from "../validation/errors.js";
 import type { EngineLogger, EngineConfig } from "../interfaces.js";
 import { DEFAULT_PROVIDER_TIMEOUT_MS } from "../interfaces.js";
 import { sdkFetchOption } from "./wire.js";
 import { applyCacheBreakpoints } from "./anthropic-cache.js";
+import { toToolResultContent } from "./anthropic-tool-result.js";
+import { normalizeToolForWire } from "./tool-schema.js";
+import { assistantBlocks, captureEcho, isEchoRejection, replayedEchoFamilies, sanitizeServerToolPairs, type EchoBlockFamily } from "./anthropic-echo.js";
+import { runWithPauseTurn, type IPauseCall } from "./anthropic-pause.js";
+import { type ProviderTokenUsage } from "./partial-usage.js";
 import {
     DEFAULT_RETRY_POLICY,
     ProviderCallError,
@@ -40,7 +46,11 @@ const MODEL_MAX_TOKENS: [prefix: string, maxTokens: number][] = [
     ["claude-opus-4-1",          32_000],
     ["claude-opus-4-0",          32_000],
     ["claude-opus-4",           128_000],
+    // Sonnet 5 family: catalog `max_output_tokens.upper` 128000 (default 128000 on 5-5, 64000 on 5), claude 2.1.296 model catalog.
+    ["claude-sonnet-5",         128_000],
     ["claude-sonnet-4",          64_000],
+    // Haiku 5 family: catalog `max_output_tokens: {default: 128000, upper: 128000}` for claude-haiku-5-5 (claude 2.1.296 baked model catalog).
+    ["claude-haiku-5",          128_000],
     ["claude-haiku-4",           64_000],
     ["claude-3-5-sonnet",         8_192],
     ["claude-3-5-haiku",          8_192],
@@ -111,10 +121,20 @@ interface AnthropicClientParts {
     useOauthIdentity: boolean;
 }
 
+/**
+ * The SDK `baseURL` option for a resolved provider endpoint. An unset value
+ * yields no key at all, so the SDK keeps its own default (`ANTHROPIC_BASE_URL`,
+ * else `https://api.anthropic.com`).
+ */
+function baseURLOption(baseURL: string | undefined): { baseURL?: string } {
+    return baseURL ? { baseURL } : {};
+}
+
 function buildAnthropicClient(
     secret: string,
     timeoutMs: number | undefined,
-    config?: EngineConfig
+    config?: EngineConfig,
+    baseURL?: string
 ): AnthropicClientParts {
     // Fall back to the raised per-call budget so the SDK client timeout never
     // undercuts the orchestrator's AbortSignal (which uses the same constant).
@@ -128,7 +148,7 @@ function buildAnthropicClient(
     const effectiveTimeout = timeoutMs ?? DEFAULT_PROVIDER_TIMEOUT_MS;
     if (secret.startsWith("sk-ant-api")) {
         return {
-            client: new Anthropic({ apiKey: secret, timeout: effectiveTimeout, maxRetries: 0, ...sdkFetchOption(config) }),
+            client: new Anthropic({ apiKey: secret, timeout: effectiveTimeout, maxRetries: 0, ...baseURLOption(baseURL), ...sdkFetchOption(config) }),
             useOauthIdentity: false,
         };
     }
@@ -138,6 +158,7 @@ function buildAnthropicClient(
             authToken: secret,
             timeout: effectiveTimeout,
             maxRetries: 0,
+            ...baseURLOption(baseURL),
             ...sdkFetchOption(config),
             ...(isOauth ? { defaultHeaders: { "anthropic-beta": "oauth-2025-04-20" } } : {}),
         }),
@@ -145,20 +166,69 @@ function buildAnthropicClient(
     };
 }
 
+/**
+ * The `tools` array entries for the client-executed tools. A top-level `oneOf` / `anyOf` / `allOf` in a tool's
+ * `inputSchema` is flattened by {@link normalizeToolForWire} (the API rejects the whole request with HTTP 400 for one
+ * such tool, 020307a5); a schema that cannot be flattened throws a `PROVIDER_INVALID_REQUEST` naming `tools.<n>`.
+ * The registered definitions are never mutated.
+ */
 function toAnthropicTools(tools?: ToolDefinition[]): Tool[] | undefined {
     if (!tools) return undefined;
 
-    return tools.map(tool => ({
-        name: tool.name,
-        description: tool.description || "",
-        input_schema: (tool.inputSchema || {
-            type: "object",
-            properties: {},
-        }) as Tool["input_schema"],
-    }));
+    return tools.map((tool, index) => {
+        const wire = normalizeToolForWire(tool, index);
+        return {
+            name: tool.name,
+            description: wire.description,
+            input_schema: wire.inputSchema as Tool["input_schema"],
+        };
+    });
 }
 
-function toAnthropicMessages(messages: Message[]): MessageParam[] {
+/**
+ * The name an echoed assistant `tool_use` block carries: the SAME `server__tool` string `toAnthropicTools` advertised
+ * (P1-toolname; OpenAI's `toOpenAIMessages` does the identical join). A stored ToolCall holds the resolved
+ * `{server, tool}` pair, so history must re-join it, not drop the prefix, or the model sees names it was never offered.
+ *
+ * A tool advertised WITHOUT a server prefix resolves (`resolveToolCallName`) to `{server: name, tool: name}`; it is
+ * echoed as the bare name, not `name__name`. The advertised set disambiguates that from a real `echo__echo` tool.
+ */
+function echoedToolName(tc: ToolCall, advertised: ReadonlySet<string>): string {
+    const qualified = `${tc.server}__${tc.tool}`;
+    if (advertised.has(qualified)) return qualified;
+    if (advertised.has(tc.tool)) return tc.tool;
+    return tc.server === tc.tool ? tc.tool : qualified;
+}
+
+/** What {@link toAnthropicMessages} replayed from echoes (R9-hist): assistant messages sent with echoed blocks and their JSON bytes. */
+interface IEchoReplayStats {
+    messages: number;
+    bytes: number;
+}
+
+interface IEchoReplayOptions {
+    /** Provider-native assistant content keyed by `Message.id`; absent/empty => legacy rebuild for every message. */
+    echoes?: ReadonlyMap<string, IProviderEcho>;
+    /** The configured model of THIS request; an echo captured under another model is not replayed. */
+    model: string;
+    /** Accumulates what was replayed. Bytes are counted as assembled (after `tool_use` re-qualification, before pair sanitising). */
+    replay: IEchoReplayStats;
+}
+
+/**
+ * The API rejects an empty `text` block in a request. A response can (rarely) carry one, and the legacy rebuild never
+ * emits one (`if (message.content)`), so an echo replay drops it; every other block, thinking included, is untouched.
+ */
+function withoutEmptyText(blocks: ContentBlockParam[]): ContentBlockParam[] {
+    return blocks.filter(b => !(b.type === "text" && b.text === ""));
+}
+
+function toAnthropicMessages(
+    messages: Message[],
+    advertisedToolNames: readonly string[] = [],
+    opts?: IEchoReplayOptions
+): MessageParam[] {
+    const advertised: ReadonlySet<string> = new Set(advertisedToolNames);
     const nonSystem = messages.filter(m => m.role !== "system");
 
     return nonSystem.map((message): MessageParam => {
@@ -173,11 +243,29 @@ function toAnthropicMessages(messages: Message[]): MessageParam[] {
                     {
                         type: "tool_result",
                         tool_use_id: toolResult.toolCallId,
-                        content: JSON.stringify(toolResult.result),
+                        // R10 S1 P5: the text the model should read, never a JSON string of the MCP content array.
+                        content: toToolResultContent(toolResult.result),
                         is_error: toolResult.isError,
                     },
                 ],
             };
+        }
+
+        if (message.role === "assistant" && opts?.echoes) {
+            // R9-hist: replay the turn exactly as the API produced it (thinking, server blocks, order). `undefined` =>
+            // no usable echo (absent, other provider/model, disagrees with `toolCalls`) => the legacy rebuild below.
+            const echoed = assistantBlocks(
+                message,
+                opts.echoes.get(message.id),
+                opts.model,
+                tc => echoedToolName(tc, advertised)
+            );
+            const blocks = echoed ? withoutEmptyText(echoed) : [];
+            if (blocks.length > 0) {
+                opts.replay.messages += 1;
+                opts.replay.bytes += Buffer.byteLength(JSON.stringify(blocks));
+                return { role: "assistant", content: blocks };
+            }
         }
 
         if (message.role === "assistant" && message.toolCalls?.length) {
@@ -189,7 +277,7 @@ function toAnthropicMessages(messages: Message[]): MessageParam[] {
                 contentBlocks.push({
                     type: "tool_use",
                     id: tc.id,
-                    name: tc.tool,
+                    name: echoedToolName(tc, advertised),
                     input: tc.arguments as Record<string, unknown>,
                 });
             }
@@ -207,6 +295,36 @@ function toAnthropicMessages(messages: Message[]): MessageParam[] {
         throw new Error(`Unsupported message role for Anthropic: ${message.role}`);
     });
 }
+
+/**
+ * The API's rejection text, made safe to log and to put on an event: long opaque runs (a signature, an
+ * `encrypted_content` blob, base64 page data) are cut, and the whole is bounded. Anthropic's own 400 text names the
+ * offending block (`messages.3.content.0: Invalid `signature` in `thinking` block`) and does not quote its payload;
+ * this is the belt to that braces.
+ */
+export function redactApiMessage(text: string): string {
+    return text.replace(/[A-Za-z0-9+/=_-]{32,}/g, "[redacted]").slice(0, 500);
+}
+
+/** The `ToolError` for a paused turn that holds a client `tool_use` (nothing can answer it mid-turn). Ids only, never inputs. */
+function danglingClientToolUse(pausedBlocks: readonly unknown[]): ToolError | undefined {
+    const ids = pausedBlocks.flatMap(b => {
+        const block = b as { type?: unknown; id?: unknown };
+        return block.type === "tool_use" ? [String(block.id)] : [];
+    });
+    if (ids.length === 0) return undefined;
+    return new ToolError(
+        "PROVIDER_ERROR",
+        `provider paused the turn while ${ids.length} client tool call(s) were pending (${ids.join(", ")}); ` +
+            `a paused turn cannot be continued past an unanswered tool_use`,
+        { kind: "pause_turn_pending_tool_use", toolUseIds: ids }
+    );
+}
+
+/** Anthropic `stop_reason` -> the normalised reason `normaliseAnthropicUsage` records (anything else, `pause_turn` included: "unknown"). */
+const STOP_REASON: Record<string, string> = {
+    end_turn: "stop", max_tokens: "length", tool_use: "tool_calls",
+};
 
 const CLAUDE_CODE_IDENTITY = "You are Claude Code, Anthropic's official CLI for Claude.";
 
@@ -264,7 +382,8 @@ export class AnthropicProvider implements LLMProvider {
         const { client, useOauthIdentity } = buildAnthropicClient(
             resolved.secret,
             providerConfig.timeoutMs,
-            config
+            config,
+            resolved.baseURL
         );
 
         this.client = client;
@@ -277,7 +396,52 @@ export class AnthropicProvider implements LLMProvider {
         const systemMessages = request.messages.filter(m => m.role === "system");
         const systemPrompt = systemMessages.map(m => m.content || "").join("\n") || undefined;
 
-        const run = async (): Promise<ProviderChatResponse> => {
+        const effectiveModel = this.providerConfig.model ?? "";
+        if (!effectiveModel) {
+            this.logger.warn("AnthropicProvider: no model configured; API will likely reject");
+        }
+        const maxTokens = this.providerConfig.maxTokens ?? defaultMaxTokens(effectiveModel, this.config);
+        const advertisedToolNames = (request.tools ?? []).map(t => t.name);
+
+        const timeoutMs = this.providerConfig.timeoutMs ?? DEFAULT_PROVIDER_TIMEOUT_MS;
+        const wireModel = effectiveModel;
+        const ctx = {
+            providerType: "anthropic" as const,
+            modelRef: wireModel,
+            wireModel,
+            credentialKey: this.credentialKey,
+            credentialScope: this.credentialKey,
+        };
+        /** ONE API call under the shared fault policy. The pause loop calls this per request, never around the loop. */
+        const callOnce = <T>(run: () => Promise<T>): Promise<T> =>
+            callWithRetry(run, {
+                runtime: this.retryRuntime,
+                policy: {
+                    retries: retryConfig?.retries ?? DEFAULT_RETRY_POLICY.retries,
+                    minTimeout: retryConfig?.minTimeout ?? DEFAULT_RETRY_POLICY.minTimeout,
+                    maxTimeout: retryConfig?.maxTimeout ?? DEFAULT_RETRY_POLICY.maxTimeout,
+                    factor: retryConfig?.factor ?? DEFAULT_RETRY_POLICY.factor,
+                    // Waiting is bounded by the provider timeout (or a tighter operator window).
+                    windowMs: Math.min(timeoutMs, (retryConfig as { retryWindowMs?: number } | undefined)?.retryWindowMs ?? timeoutMs),
+                },
+                target: { providerType: "anthropic", credentialScope: ctx.credentialScope, wireModel },
+                signal: request.signal,
+                classify: (err) => classifySdkError(err, ctx, request.signal?.aborted === true),
+                onRetry: ({ attempt, failure, waitMs }) =>
+                    this.logger.warn({ attempt, class: failure.class, status: failure.status, waitMs }, "anthropic: transient failure, retrying"),
+            });
+
+        // What the current attempt replayed and which request of its pause loop was last sent: the degrade decision
+        // below needs both (a rejection of a CONTINUATION is not a history fault: the history already passed call 0).
+        let replayedMessages = 0;
+        let replayedFamilies: ReadonlySet<EchoBlockFamily> = new Set();
+        let lastSentN = 0;
+
+        /**
+         * One logical model turn: build the history (echoed or legacy), then run it through the pause loop. Throws
+         * whatever the API / loop throws; the degrade decision is the caller's.
+         */
+        const attempt = async (useEchoes: boolean): Promise<ProviderChatResponse> => {
             const effectiveSystem = this.useOauthIdentity
                 ? [
                       { type: "text" as const, text: CLAUDE_CODE_IDENTITY },
@@ -286,11 +450,6 @@ export class AnthropicProvider implements LLMProvider {
                           : []),
                   ]
                 : systemPrompt;
-
-            const effectiveModel = this.providerConfig.model ?? "";
-            if (!effectiveModel) {
-                this.logger.warn("AnthropicProvider: no model configured; API will likely reject");
-            }
 
             // Custom (client-executed) tools plus any provider-native
             // (server-executed) tools from the default web toolset
@@ -301,12 +460,27 @@ export class AnthropicProvider implements LLMProvider {
                 ...((request.serverSideTools ?? []) as unknown as Tool[]),
             ];
 
+            const replay: IEchoReplayStats = { messages: 0, bytes: 0 };
+            // R9-hist: replay echoed assistant turns, then make the server-tool blocks pair up (a history windowed or
+            // compacted mid-pair must never 400). With no echo the rebuild is the legacy one and the sanitiser is a no-op.
+            const messages = sanitizeServerToolPairs(
+                toAnthropicMessages(
+                    request.messages,
+                    advertisedToolNames,
+                    useEchoes && request.echoes && request.echoes.size > 0
+                        ? { echoes: request.echoes, model: effectiveModel, replay }
+                        : undefined
+                )
+            );
+            replayedMessages = replay.messages;
+            replayedFamilies = replayedEchoFamilies(messages);
+
             // BK3 (ae62e6b0): <=3 five-minute cache breakpoints, each guarded by the model's
             // minimum cacheable prefix. The OAuth identity block (first system block) is protected.
             const prepared = {
                 tools: mergedTools.length > 0 ? mergedTools : undefined,
                 system: effectiveSystem,
-                messages: toAnthropicMessages(request.messages),
+                messages,
             };
             const wire = this.promptCaching
                 ? applyCacheBreakpoints({
@@ -316,32 +490,80 @@ export class AnthropicProvider implements LLMProvider {
                   })
                 : prepared;
 
-            const stream = this.client.messages.stream(
-                {
-                    model: effectiveModel,
-                    system: wire.system,
-                    temperature: this.providerConfig.temperature,
-                    max_tokens: this.providerConfig.maxTokens ?? defaultMaxTokens(effectiveModel, this.config),
-                    messages: wire.messages,
-                    tools: wire.tools,
+            let firstTtfbMs: number | undefined;
+            const streamOnce = async (wireMessages: MessageParam[], isFirstCall: boolean) => {
+                const ttfbProbe = createTtfbProbe();
+                ttfbProbe.start();
+                const stream = this.client.messages.stream(
+                    {
+                        model: effectiveModel,
+                        system: wire.system,
+                        temperature: this.providerConfig.temperature,
+                        max_tokens: maxTokens,
+                        messages: wireMessages,
+                        tools: wire.tools,
+                        // R8-AC: an explicit reasoning-effort level rides as `output_config.effort`; unset sends no
+                        // `output_config` key at all, so the request is byte-identical to the pre-change body.
+                        ...(this.providerConfig.effort !== undefined && { output_config: { effort: this.providerConfig.effort } }),
+                        // R10 S1 P7: an explicit `thinking` option rides verbatim; unset sends no `thinking` key at all,
+                        // so the request is byte-identical to the pre-change body (the API default applies).
+                        ...(this.providerConfig.thinking !== undefined && { thinking: this.providerConfig.thinking }),
+                    },
+                    { signal: request.signal }
+                );
+                // P6: first streamed SSE event marks the time to first byte.
+                if (typeof stream.on === "function") stream.on("streamEvent", () => ttfbProbe.firstByte());
+                const response = await stream.finalMessage();
+                if (isFirstCall) firstTtfbMs = ttfbProbe.ttfbMs();
+                return response;
+            };
+
+            // R9-pause: `send` is ONE API call. Call 0 is the original request; a continuation appends the paused
+            // content as the final assistant message (untouched, unsanitised, unmarked: the cache breakpoint stays on
+            // the last user entry of the base history) with the same tools and system.
+            let pausedSoFar: unknown[] = [];
+            const send = async ({ n, pausedBlocks }: IPauseCall) => {
+                lastSentN = n;
+                const response =
+                    n === 0
+                        ? await callOnce(() => streamOnce(wire.messages, true))
+                        : await callOnce(() =>
+                              streamOnce(
+                                  [...wire.messages, { role: "assistant", content: pausedBlocks as ContentBlockParam[] }],
+                                  false
+                              )
+                          );
+                if (response.stop_reason === "pause_turn") pausedSoFar = pausedSoFar.concat(response.content);
+                return response;
+            };
+
+            const result = await runWithPauseTurn({
+                send,
+                signal: request.signal,
+                // A paused turn that holds a client tool_use cannot be continued (nothing can answer it mid-turn): fail
+                // loudly BEFORE the engine's per-continuation hook (budget enforcement, progress event) and before a request.
+                beforeContinuation: async n => {
+                    const dangling = danglingClientToolUse(pausedSoFar);
+                    if (dangling) throw dangling;
+                    await request.beforeContinuation?.(n);
                 },
-                { signal: request.signal }
-            );
-            const response = await stream.finalMessage();
+                usageOf: (r): ProviderTokenUsage =>
+                    normaliseAnthropicUsage(r.usage, STOP_REASON[r.stop_reason ?? ""] ?? "unknown", maxTokens),
+                onContinuation: ({ n, pauses }) =>
+                    this.logger.info({ n, pauses }, "anthropic: pause_turn, continuing the turn"),
+            });
+            const response = result.last;
 
             const toolCalls: ToolCall[] = [];
             const contentParts: string[] = [];
 
-            for (const block of response.content) {
+            for (const block of result.blocks as ContentBlock[]) {
                 if (block.type === "text") {
                     contentParts.push(block.text);
                 }
 
                 if (block.type === "tool_use") {
-                    const { server, tool } = resolveToolCallName(
-                        block.name,
-                        (request.tools ?? []).map((t) => t.name)
-                    );
+                    const { server, tool } = resolveToolCallName(block.name, advertisedToolNames);
 
                     toolCalls.push({
                         id: block.id,
@@ -361,50 +583,40 @@ export class AnthropicProvider implements LLMProvider {
                 createdAt: nowIso(),
             };
 
-            const sdkUsage = response.usage;
-            const STOP_REASON: Record<string, string> = {
-                end_turn: "stop", max_tokens: "length", tool_use: "tool_calls",
-            };
-            const normalisedStopReason: string = STOP_REASON[response.stop_reason ?? ""] ?? "unknown";
+            const echo = captureEcho(result.blocks, effectiveModel);
             return {
                 message,
                 stopReason: toolCalls.length > 0 ? "tool_calls" : "completed",
-                rawUsage: sdkUsage,
+                rawUsage: response.usage,
                 responseModel: response.model || undefined,
-                usage: normaliseAnthropicUsage(
-                    sdkUsage,
-                    normalisedStopReason,
-                    this.providerConfig.maxTokens ?? defaultMaxTokens(effectiveModel, this.config)
-                ),
+                ...(firstTtfbMs !== undefined ? { ttfbMs: firstTtfbMs } : {}),
+                // Every continuation is a real model call (the usage above is already their sum).
+                ...(result.modelCalls > 1 ? { reportedModelCalls: result.modelCalls } : {}),
+                usage: result.usage,
+                ...(echo ? { echo } : {}),
+                ...(replay.messages > 0 ? { echoReplay: { messages: replay.messages, bytes: replay.bytes } } : {}),
             };
         };
 
-        const timeoutMs = this.providerConfig.timeoutMs ?? DEFAULT_PROVIDER_TIMEOUT_MS;
-        const wireModel = this.providerConfig.model ?? "";
-        const ctx = {
-            providerType: "anthropic" as const,
-            modelRef: wireModel,
-            wireModel,
-            credentialKey: this.credentialKey,
-            credentialScope: this.credentialKey,
-        };
         try {
-            return await callWithRetry(() => run(), {
-                runtime: this.retryRuntime,
-                policy: {
-                    retries: retryConfig?.retries ?? DEFAULT_RETRY_POLICY.retries,
-                    minTimeout: retryConfig?.minTimeout ?? DEFAULT_RETRY_POLICY.minTimeout,
-                    maxTimeout: retryConfig?.maxTimeout ?? DEFAULT_RETRY_POLICY.maxTimeout,
-                    factor: retryConfig?.factor ?? DEFAULT_RETRY_POLICY.factor,
-                    // Waiting is bounded by the provider timeout (or a tighter operator window).
-                    windowMs: Math.min(timeoutMs, (retryConfig as { retryWindowMs?: number } | undefined)?.retryWindowMs ?? timeoutMs),
-                },
-                target: { providerType: "anthropic", credentialScope: ctx.credentialScope, wireModel },
-                signal: request.signal,
-                classify: (err) => classifySdkError(err, ctx, request.signal?.aborted === true),
-                onRetry: ({ attempt, failure, waitMs }) =>
-                    this.logger.warn({ attempt, class: failure.class, status: failure.status, waitMs }, "anthropic: transient failure, retrying"),
-            });
+            try {
+                return await attempt(true);
+            } catch (err) {
+                // H3 degrade-once: the API rejected the REPLAYED history (an `invalid_request` naming an echoed block
+                // type that was actually replayed; a context-length rejection or a fault naming only client tool blocks is not one).
+                // Echoes are deleted by the engine only on `echoDegraded`, which is set solely after THIS retry succeeded. Retry exactly once with the legacy rebuild. Only a
+                // rejection of call 0 qualifies: a continuation carries the same history that call 0 already passed.
+                if (replayedMessages === 0 || lastSentN !== 0 || !isEchoRejection(err, replayedFamilies)) throw err;
+                const detail = err as { message?: string; data?: { message?: string } };
+                const apiMessage = redactApiMessage(detail.data?.message ?? detail.message ?? "");
+                const echoedMessages = replayedMessages;
+                this.logger.warn(
+                    { echoedMessages, apiMessage },
+                    "anthropic: API rejected the replayed assistant history, retrying once without echoed blocks"
+                );
+                const degraded = await attempt(false);
+                return { ...degraded, echoDegraded: { apiMessage, echoedMessages } };
+            }
         } catch (err) {
             if (err instanceof ProviderCallError && err.data.class === "auth") {
                 throw new ProviderCallError(

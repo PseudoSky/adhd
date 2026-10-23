@@ -1,0 +1,23 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": "../../dist/out-tsc",
+    "types": [
+      "vitest/globals",
+      "vitest/importMeta",
+      "vite/client",
+      "node",
+      "vitest"
+    ],
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "allowJs": true
+  },
+  "include": [
+    "test/**/*.ts",
+    "test/**/*.tsx",
+    "src/**/*.d.ts"
+  ],
+  "exclude": [
+  ]
+}

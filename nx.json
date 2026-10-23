@@ -2,9 +2,11 @@
   "$schema": "./node_modules/nx/schemas/nx-schema.json",
   "useDaemonProcess": false,
   "defaultBase": "main",
-  "cacheDirectory": ".nx/cache",
   "sync": {
     "disabledTaskSyncGenerators": ["@nx/js:typescript-sync"]
+  },
+  "tui": {
+    "enabled": false
   },
   "namedInputs": {
     "default": [
@@ -29,6 +31,7 @@
       "!{projectRoot}/eslint.config.mjs",
       "!{projectRoot}/eslint.config.js",
       "!{projectRoot}/**/?(*.)+(spec|test).[jt]s?(x)?(.snap)",
+      "!{projectRoot}/test/**/*",
       "!{projectRoot}/tsconfig.spec.json",
       "!{projectRoot}/jest.config.[jt]s",
       "!{projectRoot}/src/test-setup.[jt]s",
@@ -161,6 +164,17 @@
           "configName": "tsconfig.build-bin.json"
         }
       }
+    },
+    {
+      "plugin": "@nx/eslint/plugin",
+      "options": {
+        "targetName": "lint"
+      },
+      "include": [
+        "packages/agent/agent-plugin-tracing/**/*",
+        "packages/apigen/apigen-plugin-policy/**/*",
+        "packages/policy/policy-core-client/**/*"
+      ]
     }
   ],
   "generators": {
@@ -203,7 +217,9 @@
       },
       {
         "//": "Publishable projects (tagged `inputs:runtime-closure` by tools/nx-plugins/build/plugin.js) hash only the RUNTIME closure of their dependencies — `depsProduction`, a per-project named input of literal globs — instead of `^production`, which widens over devDependency/test-only edges (0b9505ff). `test` keeps `^production` on purpose: tests execute dev-dependency source.",
-        "filter": { "projects": ["tag:inputs:runtime-closure"] },
+        "filter": {
+          "projects": ["tag:inputs:runtime-closure"]
+        },
         "inputs": ["production", "depsProduction"]
       }
     ],
@@ -234,7 +250,9 @@
         "inputs": ["production", "^production"]
       },
       {
-        "filter": { "projects": ["tag:inputs:runtime-closure"] },
+        "filter": {
+          "projects": ["tag:inputs:runtime-closure"]
+        },
         "inputs": ["production", "depsProduction"]
       }
     ],
@@ -244,7 +262,9 @@
         "inputs": ["production", "^production"]
       },
       {
-        "filter": { "projects": ["tag:inputs:runtime-closure"] },
+        "filter": {
+          "projects": ["tag:inputs:runtime-closure"]
+        },
         "inputs": ["production", "depsProduction"]
       }
     ],
@@ -258,7 +278,9 @@
         "publish-hygiene"
       ]
     },
-    "sync-deps-check": { "cache": true },
+    "sync-deps-check": {
+      "cache": true
+    },
     "lint": {
       "cache": true,
       "dependsOn": ["sync-deps-check"]

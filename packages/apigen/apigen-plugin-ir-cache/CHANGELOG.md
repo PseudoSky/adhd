@@ -1,3 +1,23 @@
+## Unreleased
+
+### 🩹 Fixes
+
+- **apigen-plugin-ir-cache:** docs and comments state that the layer awaits the MISS write-through and never walks imports (a source-only key when the extractor reports no `sourceFiles`)
+
+## 0.1.6 (2026-10-21)
+
+This was a version bump only for apigen-plugin-ir-cache to align it with other projects, there were no code changes.
+
+## 0.1.5 (2026-10-15)
+
+### 🩹 Fixes
+
+- **apigen-plugin-ir-cache:** extraction reports the files it read; cache keys the whole call and tracks installed-package deps ([0bf369d5](https://github.com/PseudoSky/adhd/commit/0bf369d5))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 0.1.4 (2026-10-03)
 
 ### 🩹 Fixes

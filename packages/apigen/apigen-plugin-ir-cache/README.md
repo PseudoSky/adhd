@@ -44,13 +44,14 @@ flowchart TD
 
 1. **Missing file**, or a mismatched `formatVersion`/`extractorVersion` → MISS.
 2. **Fast gate** — `stat()` the recorded source path and every recorded
-   transitive-import dep path directly (no `collectLocalImportPaths` call, no
-   hashing). All current `mtimeMs` match the recorded snapshot → **HIT**,
+   dependency path directly (no `collectLocalImportPaths` call, no
+   hashing), and compare the call's recorded `callKey`. All current `mtimeMs`
+   match the recorded snapshot and the `callKey` matches → **HIT**,
    `O(deps)` cheap `stat()` calls only.
 3. **Slow gate** (a `staleness` snapshot exists but at least one mtime
    disagrees) — recompute the full content/version-addressed key
-   (`computeCacheKey`: sha256 of the source and every transitive local
-   import, plus `extractorVersion`/`formatVersion`). Match → HIT (a `touch`
+   (`computeCacheKey`: sha256 of the source and every recorded dependency,
+   plus `extractorVersion`/`formatVersion` and the call's identity). Match → HIT (a `touch`
    with no real edit, e.g. a fresh git checkout that didn't preserve mtimes)
    — the entry's `staleness` mtimes are then rewritten fire-and-forget so the
    NEXT read takes the fast path again. Mismatch → MISS.
@@ -185,8 +186,19 @@ factory, exactly as before — `createLayer`/`opts` only matters for a
 
 - The full content/version-addressed key (`computeCacheKey`, used on the
   slow gate and by ARTIFACT-mode-compatible reads) covers: entry file
-  content, all transitive local (non-`node_modules`) imports,
-  `extractorVersion`, `formatVersion`, `host`, `namespace`.
+  content; every dependency file the extractor **reported reading**
+  (`ExtractResult.sourceFiles`, which `@adhd/apigen-core-client`'s `extract()`
+  fills in; an extractor that reports nothing gets a source-only key; the cache
+  never walks imports itself) — for an entry installed under
+  `node_modules`, that includes its own package's files; the tsconfig file the
+  call names (the extractor's reported `sourceFiles` already include the resolved
+  tsconfig `extends` chain, so no walk is needed); `extractorVersion`; `formatVersion`; and the call's identity
+  (`callIdentity`: `host`, `namespace`, `versionHint`, and every
+  `extractorOptions` entry except the run-scoped `session`). An option that
+  changes the extracted IR (e.g. `dropFileSegment`) must therefore travel in the
+  `ExtractCall`, not live only inside the terminal extractor's closure. The
+  fast gate also compares the call identity, so a changed option misses instead
+  of returning the entry written under different options.
 - The fast gate trusts mtime as a *sufficient* condition for freshness
   (matching make/Nx/tsc's own incremental-build convention) — a genuinely
   reverted-but-touched file is caught by the slow gate's real rehash, which
@@ -196,8 +208,10 @@ factory, exactly as before — `createLayer`/`opts` only matters for a
 - `extractorVersion` is what busts the cache when the extractor's output
   changes for the same input — including a future DEBT-003 fix (Path 2
   morph-walk correctness), which must bump it.
-- `versionHint` on `ExtractCall` is deliberately ignored — a shared cache
-  must never key on an unverified caller-supplied identity.
+- `versionHint` on `ExtractCall` is folded into the key as extra material only
+  — a different hint causes a MISS, but the layer never trusts a hint in place
+  of hashing the real file contents (a shared cache must never key on an
+  unverified caller-supplied identity alone).
 - **Known gap:** a dependency (`node_modules`) version bump that changes a
   named type's shape without touching any locally-tracked file is a false
   HIT. `extractorVersion` covers extractor-side changes only, not

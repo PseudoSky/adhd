@@ -1,3 +1,15 @@
+## 0.1.5 (2026-10-21)
+
+### 🩹 Fixes
+
+- **apigen-base-logical:** detect run-mode cycles and align emit with batch encoding ([5fcf5ade](https://github.com/PseudoSky/adhd/commit/5fcf5ade))
+- **apigen-base-logical:** guard $ref alias cycles and host cycles; own-property $defs lookup ([1368b124](https://github.com/PseudoSky/adhd/commit/1368b124))
+- **apigen-engine-runtime:** resolve $ref against the op schema root in run-mode dispatch ([373f1b0f](https://github.com/PseudoSky/adhd/commit/373f1b0f))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 0.1.3 (2026-09-26)
 
 ### 🚀 Features

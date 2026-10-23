@@ -217,7 +217,7 @@ async function runEmbedRoundTrip(
   } catch (err) {
     auditAction = 'embedding_failed';
     note = err instanceof Error ? err.message : String(err);
-    // eslint-disable-next-line no-console -- §4b: "the observer logs the error for operator visibility" — this IS that log, there being no separate observer process.
+     
     console.error(
       `scheduleIssueEmbedding: embed round-trip failed for issue uid="${input.subjectUid}" (action="${input.action}") — degrading to an "embedding_failed" audit row.`,
       err
@@ -238,7 +238,7 @@ async function runEmbedRoundTrip(
       });
     });
   } catch (auditErr) {
-    // eslint-disable-next-line no-console
+     
     console.error(
       `scheduleIssueEmbedding: failed to persist "${auditAction}" audit row for issue uid="${input.subjectUid}" — the embedding outcome itself is unrecorded.`,
       auditErr
@@ -292,7 +292,7 @@ export async function recordUnsettledEmbedsAsFailed(
     } catch (auditErr) {
       entry.outcome = 'unrecorded';
       unrecorded.push(entry);
-      // eslint-disable-next-line no-console
+       
       console.error(
         `recordUnsettledEmbedsAsFailed: could not persist the "embedding_failed" audit row for issue uid="${entry.subjectUid}" — this embed outcome is UNRECORDED.`,
         auditErr

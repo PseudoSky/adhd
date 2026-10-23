@@ -3,6 +3,11 @@
  * performance-metrics facility (BUILD-TOOLING-METRICS-001).
  *
  * Run: node --test tools/nx-plugins/lib/metrics.spec.mjs
+ *
+ * guards: the per-task metrics recorder loses, corrupts or double-writes a record, or its CPU guard trips wrongly, stays silent when it should trip, or masks the task's own error
+ * tier: S
+ * cites: BUILD-TOOLING-METRICS-001; qa-variance (docs/discovery/qa-test-variance-tail-policy-backlog-nx.md)
+ * teeth: red: pending (verification pending, tests not run per user; the busy-loop teeth test above still drives a real trip)
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -234,14 +239,17 @@ test('MetricsRecorder.phase: accumulates elapsed time since the last checkpoint 
   const rec = new MetricsRecorder('t', { projectName: 'p' });
   await new Promise((r) => setTimeout(r, 5));
   rec.phase('a');
+  const firstA = rec.phases.a;
   await new Promise((r) => setTimeout(r, 5));
   rec.phase('b');
   await new Promise((r) => setTimeout(r, 5));
   rec.phase('a'); // accumulates into the same key
-  assert.ok(rec.phases.a > 0);
+  assert.ok(firstA > 0);
   assert.ok(rec.phases.b > 0);
-  // 'a' now holds two accumulated intervals, so it should be roughly >= a single interval.
-  assert.ok(rec.phases.a >= rec.phases.b * 0.5);
+  // qa-variance: 'a' ACCUMULATED (grew past its first interval, did not reset) -
+  // compared with itself, not with b's separately timed interval, which a
+  // loaded machine can stretch arbitrarily.
+  assert.ok(rec.phases.a > firstA, `phase 'a' must accumulate: ${firstA} -> ${rec.phases.a}`);
 });
 
 test('MetricsRecorder.subprocess: counts + sums ms, broken down by command', () => {
@@ -655,15 +663,19 @@ test('withMetrics + CPU GUARD: a normal (non-CPU-bound) task never trips, even m
 test('withMetrics + CPU GUARD: the guard runs even when ADHD_NX_METRICS=0 disables recording', async () => {
   const root = makeRoot();
   try {
+    // qa-variance: the measured CPU is injected (not a 30 ms real busy loop whose
+    // wall time stretches under machine load); the real-measurement trip stays
+    // covered by the busy-loop teeth test above.
     await withEnv({ ADHD_NX_METRICS_MAX_CPU_PCT: '1', ADHD_NX_METRICS: '0' }, async () => {
-      await assert.rejects(
-        () =>
-          withMetrics('busy-task', { root }, async () => {
-            busyLoopMs(30);
-            return { success: true };
-          }),
-        /CPU guard tripped/
-      );
+      await withFakeCpuUsage({ cpuUserMs: 1e6 }, async () => {
+        await assert.rejects(
+          () =>
+            withMetrics('busy-task', { root }, async () => {
+              return { success: true };
+            }),
+          /CPU guard tripped/
+        );
+      });
     });
     assert.equal(existsSync(metricsPath(root)), false, 'recording stays off; the guard is independent of it');
   } finally {
@@ -674,15 +686,18 @@ test('withMetrics + CPU GUARD: the guard runs even when ADHD_NX_METRICS=0 disabl
 test('withMetrics + CPU GUARD: a thrown task error is NOT masked by the guard — original error wins', async () => {
   const root = makeRoot();
   try {
+    // qa-variance: injected CPU delta (guard WOULD trip: 1e6 ms over any real wall
+    // time is far above 1%) instead of a 30 ms real busy loop.
     await withEnv({ ADHD_NX_METRICS_MAX_CPU_PCT: '1' }, async () => {
-      await assert.rejects(
-        () =>
-          withMetrics('busy-task', { root }, async () => {
-            busyLoopMs(30);
-            throw new Error('the real task failed');
-          }),
-        /the real task failed/
-      );
+      await withFakeCpuUsage({ cpuUserMs: 1e6 }, async () => {
+        await assert.rejects(
+          () =>
+            withMetrics('busy-task', { root }, async () => {
+              throw new Error('the real task failed');
+            }),
+          /the real task failed/
+        );
+      });
     });
   } finally {
     rmSync(root, { recursive: true, force: true });

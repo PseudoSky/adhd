@@ -1,5 +1,6 @@
 /// <reference types='vitest' />
 import { defineConfig } from 'vite';
+import { configDefaults } from 'vitest/config';
 import dts from 'vite-plugin-dts';
 import * as path from 'path';
 import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin';
@@ -10,6 +11,7 @@ import {
 } from '../../workspace/workspace-base-vite-paths/src/index';
 import { importMetaUrlCjs } from '../../../tools/vite-plugins/import-meta-url-cjs.mjs';
 import { externalizeRealDeps } from '../../../tools/vite-plugins/externalize.mjs';
+import { E2E_FILE_EXCLUDES, UNIT_FILE_INCLUDES } from '../../../tools/vite-plugins/e2e-globs.mjs';
 import { nxCopyAssetsPlugin } from '@nx/vite/plugins/nx-copy-assets.plugin';
 
 export default defineConfig(() => ({
@@ -63,7 +65,9 @@ export default defineConfig(() => ({
     watch: false,
     globals: true,
     environment: 'node',
-    include: ['{src,tests}/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
+    include: UNIT_FILE_INCLUDES,
+    // The loopback-socket suites (tier P) are `*.e2e.ts` and run in the `e2e` target (vitest.e2e.config.mts), never here (ADR 0009).
+    exclude: [...configDefaults.exclude, ...E2E_FILE_EXCLUDES],
     reporters: ['default'],
     coverage: {
       reportsDirectory: projectCoverage(__dirname),

@@ -31,7 +31,7 @@ from collections import defaultdict
 from pathlib import Path
 
 # The span paths `CORE_MAPPINGS` in packages/agent/agent-plugin-tracing/src/lib/mappings.ts emits.
-# `packages/agent/agent-plugin-tracing/src/lib/audit-declared.test.ts` fails if this list drifts
+# `packages/agent/agent-plugin-tracing/test/unit/lib/audit-declared.spec.ts` fails if this list drifts
 # from that table.
 DECLARED_PATHS = (
     "agent.session",
@@ -46,6 +46,9 @@ DECLARED_PATHS = (
     "agent.provider.recovered",
     "agent.budget.warning",
     "agent.budget.block",
+    "agent.task.startup",
+    "agent.dispatch",
+    "agent.background.delivered",
 )
 # Paths that occur only when something specific happens (a tool is invoked, a permission policy is consulted, a run is
 # suspended for human input, a provider attempt fails or its breaker trips/recovers, a budget
@@ -61,6 +64,11 @@ CONDITIONAL_PATHS = (
     "agent.provider.recovered",
     "agent.budget.warning",
     "agent.budget.block",
+    # R10 trace signals: a dispatch only when a task tool call completes, and delivery only by
+    # background auto-delivery (no emitter yet). `agent.task.startup` is NOT here: the engine emits it
+    # exactly once per task, so every traced run has one and a run without it is a regression.
+    "agent.dispatch",
+    "agent.background.delivered",
 )
 # Paths every traced run emits: the session, its task, and at least one model call (c536ce29 FIX-M1).
 ALWAYS_EXPECTED_PATHS = tuple(p for p in DECLARED_PATHS if p not in CONDITIONAL_PATHS)

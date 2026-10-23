@@ -37,6 +37,13 @@ const agentConfig = agentCreateSchema.parse({
 - `src/validation/` — Zod schemas for all inputs
 - `src/index.ts` — public exports
 
+## R10 trace-signal types (additive, all optional)
+
+- **Hook events** (`HookEventMap` in `src/hooks.ts`): `task:startup` (`TaskStartupPayload`: per-server MCP connect ms, tools-ready ms, queue wait, session ms, tool count), `dispatch:completed` (`DispatchCompletedPayload`: kind, sync/background mode, child task ids, parent blocked ms) and `background:delivered` (`BackgroundDeliveredPayload`; type only, no emitter yet). `HookEvent` is `keyof HookEventMap`, so these are accepted by `HookRegistry` with no further registration.
+- **Payload fields:** `PreToolCallPayload` gains `concurrencyClass`, `turnIndex`, `groupIndex`, `queuedMs`; `PostToolCallPayload` gains `errorClass`, `resultBytes`, `noteAppended`; the `post:model_response` payload gains `thinkingConfig`, `thinkingBlocks`, `toolResultBytesIn`, `turnIndex` (it already carried `ttfbMs`).
+- **`ToolDefinition.annotations`** (`IToolAnnotations`: `readOnlyHint`, `destructiveHint`, `idempotentHint`): engine-internal metadata. It must never be serialized onto a provider wire request or into the canonical tool hash.
+- **`IAnthropicThinking`** (`{ type: 'adaptive'; display?: 'summarized' | 'omitted' } | { type: 'disabled' }`) on the anthropic `ProviderConfig` and `PartialBinding` as `thinking`. Unset by default; validated by the orchestrator's `providerConfigSchema`.
+
 ## 2.0.2 changes
 
 - **TokenUsage expansion** — adds `uncachedInputTokens`, `cacheReadTokens`, `cacheCreationTokens`, `reasoningTokens` fields (provider-neutral accounting)

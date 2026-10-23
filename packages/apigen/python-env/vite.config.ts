@@ -1,4 +1,5 @@
 /// <reference types='vitest' />
+import { UNIT_FILE_INCLUDES } from '../../../tools/vite-plugins/e2e-globs.mjs';
 import { defineConfig, type Plugin } from 'vite';
 import dts from 'vite-plugin-dts';
 import * as fs from 'fs';
@@ -83,9 +84,9 @@ export default defineConfig({
       entryRoot: 'src',
       tsconfigPath: path.join(__dirname, 'tsconfig.lib.json'),
       // `*.e2e.ts` suites are resource-consuming tests (see their `.spec.ts`
-      // stubs); like `src/test/**` they must never emit declarations into
+      // stubs); like `test/**` they must never emit declarations into
       // dist/.
-      exclude: ['src/test/**', 'src/**/*.e2e.ts'],
+      exclude: ['test/**', 'test/e2e/**/*.e2e.ts'],
     }),
     copyPythonPackagePlugin(),
   ],
@@ -123,7 +124,7 @@ export default defineConfig({
     // `nx affected -t test` or the pre-commit/pre-push hooks. This project has
     // exclusively `*.spec.ts` test files, so narrowing the glob is
     // behaviour-preserving and makes the `.e2e.ts` exclusion structural.
-    include: ['src/**/*.spec.ts'],
+    include: UNIT_FILE_INCLUDES,
 
     reporters: ['default'],
     coverage: {

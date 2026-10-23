@@ -30,7 +30,7 @@
       "src/test/generate.spec.ts — writes JSON schema files to output directory",
       "src/test/generate.spec.ts — passes --opt transport=sse into plugin options"
     ],
-    "verify": "node dist/entrypoint/apigen-cli/index.js generate --source entrypoint/apigen-cli/src/test/fixtures/api.ts --type jsonschema --out-dir /tmp/apigen-test-schema",
+    "verify": "node dist/entrypoint/apigen-cli/index.js generate --source entrypoint/apigen-cli/test/fixtures/api.ts --type jsonschema --out-dir /tmp/apigen-test-schema",
     "verified_output": "Writes getUser.schema.json and sendEmail.schema.json to <out-dir>/<namespace>/, plus package.json and tsconfig.json scaffolding. JSON schemas contain input/output objects with typed properties and envelope (data wrapper).",
     "last_verified_sha": "e06cd253ee609d229ba7c00e8812a822ad424880",
     "last_verified_at": "2026-07-03T02:36:43-05:00",

@@ -1,0 +1,337 @@
+{
+  "//": "Legacy skip/todo markers with no tracking item, per file. It may only shrink (rule C) and must be emptied by reviewBy (rule D). Regenerate with check-skip-expiry.mjs --write-baseline.",
+  "reviewBy": "2027-01-31",
+  "recordedAt": "2026-10-15",
+  "commit": "970cc6c8791c105fd684a2089d6a8f8c55c6866c",
+  "counts": {
+    "skipMarkers": 48,
+    "todoMarkers": 809,
+    "stubSpecFiles": 80,
+    "tracked": 14,
+    "unannotated": 843,
+    "expired": 0
+  },
+  "files": {
+    "entrypoint/agent-mcp/test/e2e/integration/agent-portability-live.e2e.ts": {
+      "skip": 1
+    },
+    "entrypoint/agent-mcp/test/e2e/integration/live-budget.e2e.ts": {
+      "skip": 1
+    },
+    "entrypoint/agent-mcp/test/e2e/integration/live-dag.e2e.ts": {
+      "skip": 1
+    },
+    "entrypoint/agent-mcp/test/e2e/integration/live-oauth.e2e.ts": {
+      "skip": 1
+    },
+    "entrypoint/agent-mcp/test/e2e/integration/native-tooling-adoption.e2e.ts": {
+      "skip": 1
+    },
+    "entrypoint/agent-mcp/test/e2e/integration/native-tooling-real-ops.e2e.ts": {
+      "skip": 1
+    },
+    "entrypoint/agent-mcp/test/e2e/live/tracing-live.e2e.ts": {
+      "skip": 1
+    },
+    "entrypoint/apigen-cli/test/unit/bug-apigen-033-anonymous-default-dispatch.spec.ts": {
+      "todo": 3
+    },
+    "entrypoint/apigen-cli/test/unit/dist-entry-no-argv-side-effect.spec.ts": {
+      "todo": 3
+    },
+    "entrypoint/apigen-cli/test/unit/import-source-cjs-format.spec.ts": {
+      "todo": 1
+    },
+    "entrypoint/apigen-cli/test/e2e/real-consumer.e2e.ts": {
+      "skip": 3
+    },
+    "entrypoint/apigen-cli/test/unit/real-consumer.spec.ts": {
+      "todo": 3
+    },
+    "entrypoint/apigen-cli/test/unit/ts-types.spec.ts": {
+      "todo": 2
+    },
+    "entrypoint/apigen-cli/test/unit/generate.spec.ts": {
+      "todo": 33
+    },
+    "entrypoint/apigen-cli/test/unit/integration/batch-plugin-e2e-express.spec.ts": {
+      "todo": 2
+    },
+    "entrypoint/apigen-cli/test/unit/integration/batch-plugin-e2e.spec.ts": {
+      "todo": 2
+    },
+    "entrypoint/apigen-cli/test/unit/integration/canonical.spec.ts": {
+      "todo": 2
+    },
+    "entrypoint/apigen-cli/test/unit/integration/cross-host-response-envelope.spec.ts": {
+      "todo": 2
+    },
+    "entrypoint/apigen-cli/test/unit/integration/envelope-capability-use-plugin.spec.ts": {
+      "todo": 1
+    },
+    "entrypoint/apigen-cli/test/unit/integration/export-shape-matrix.spec.ts": {
+      "todo": 7
+    },
+    "entrypoint/apigen-cli/test/unit/integration/gateway-mixed-host.spec.ts": {
+      "todo": 2
+    },
+    "entrypoint/apigen-cli/test/unit/integration/ir-cache-cross-target.spec.ts": {
+      "todo": 1
+    },
+    "entrypoint/apigen-cli/test/unit/integration/ir-cache-plugin-registration.spec.ts": {
+      "todo": 6
+    },
+    "entrypoint/apigen-cli/test/e2e/integration/java-ts-decimal-parity.e2e.ts": {
+      "skip": 1
+    },
+    "entrypoint/apigen-cli/test/unit/integration/java-ts-decimal-parity.spec.ts": {
+      "todo": 2
+    },
+    "entrypoint/apigen-cli/test/unit/integration/mount-delegation-conformance.spec.ts": {
+      "todo": 4
+    },
+    "entrypoint/apigen-cli/test/unit/integration/schema.spec.ts": {
+      "todo": 2
+    },
+    "entrypoint/apigen-cli/test/unit/integration/streaming.spec.ts": {
+      "todo": 2
+    },
+    "entrypoint/apigen-cli/test/unit/orchestrator.spec.ts": {
+      "todo": 34
+    },
+    "entrypoint/apigen-cli/test/e2e/perf.e2e.ts": {
+      "skip": 1
+    },
+    "entrypoint/apigen-cli/test/unit/perf.spec.ts": {
+      "todo": 3
+    },
+    "entrypoint/apigen-cli/test/e2e/run.e2e.ts": {
+      "skip": 1
+    },
+    "entrypoint/apigen-cli/test/unit/run.spec.ts": {
+      "todo": 24
+    },
+    "entrypoint/apigen-cli/test/e2e/serve.e2e.ts": {
+      "skip": 1
+    },
+    "entrypoint/apigen-cli/test/unit/serve.spec.ts": {
+      "todo": 20
+    },
+    "entrypoint/backlog/test/unit/api.semantic-production-seam.spec.ts": {
+      "todo": 3
+    },
+    "entrypoint/backlog/test/unit/api.surface.spec.ts": {
+      "todo": 5
+    },
+    "entrypoint/backlog/test/unit/batch-adoption.spec.ts": {
+      "todo": 1
+    },
+    "entrypoint/backlog/test/unit/cli-envelope.spec.ts": {
+      "todo": 7
+    },
+    "entrypoint/backlog/test/unit/cli.spec.ts": {
+      "todo": 52
+    },
+    "entrypoint/backlog/test/unit/cli.store-check.spec.ts": {
+      "todo": 2
+    },
+    "entrypoint/backlog/test/unit/install-skill-usage.spec.ts": {
+      "todo": 8
+    },
+    "entrypoint/backlog/test/unit/install.mocked.spec.ts": {
+      "todo": 3
+    },
+    "entrypoint/backlog/test/unit/install.published-layout.spec.ts": {
+      "todo": 4
+    },
+    "entrypoint/backlog/test/unit/ir-cache.durability.spec.ts": {
+      "todo": 2
+    },
+    "entrypoint/backlog/test/unit/ir-cache.integration.spec.ts": {
+      "todo": 2
+    },
+    "entrypoint/backlog/test/unit/ir-cache.perf.spec.ts": {
+      "todo": 1
+    },
+    "entrypoint/backlog/test/unit/query/meta-wire.spec.ts": {
+      "todo": 3
+    },
+    "entrypoint/backlog/test/unit/query/paging-wire.spec.ts": {
+      "todo": 3
+    },
+    "entrypoint/backlog/test/unit/query/registry-wire.spec.ts": {
+      "todo": 11
+    },
+    "entrypoint/backlog/test/unit/query/views/registry.spec.ts": {
+      "todo": 33
+    },
+    "entrypoint/backlog/test/unit/search-shortcut-wire.spec.ts": {
+      "todo": 3
+    },
+    "entrypoint/backlog/test/unit/serve.singleton.spec.ts": {
+      "todo": 1
+    },
+    "entrypoint/backlog/test/unit/serve.spec.ts": {
+      "todo": 3
+    },
+    "entrypoint/backlog/test/unit/server.mcp.spec.ts": {
+      "todo": 2
+    },
+    "entrypoint/backlog/test/unit/server.published-layout.spec.ts": {
+      "todo": 2
+    },
+    "entrypoint/backlog/test/unit/server.spec.ts": {
+      "todo": 2
+    },
+    "entrypoint/backlog/test/unit/server.startup-path.spec.ts": {
+      "todo": 2
+    },
+    "entrypoint/backlog/test/unit/server.tracing-required.spec.ts": {
+      "skip": 1
+    },
+    "entrypoint/backlog/test/unit/server.verbs.spec.ts": {
+      "todo": 15
+    },
+    "entrypoint/backlog/test/unit/stats-surface.wire.spec.ts": {
+      "todo": 3
+    },
+    "entrypoint/backlog/test/unit/store/acked-write-durability.spec.ts": {
+      "todo": 2
+    },
+    "entrypoint/backlog/test/unit/store/embed-funnel-watchdog.spec.ts": {
+      "todo": 2
+    },
+    "entrypoint/backlog/test/unit/store/embed-funnel.spec.ts": {
+      "todo": 2
+    },
+    "entrypoint/backlog/test/unit/store/graph-backlog-store.spec.ts": {
+      "skip": 1
+    },
+    "entrypoint/backlog/test/unit/store/vocabulary-guard.spec.ts": {
+      "todo": 10
+    },
+    "entrypoint/backlog/test/unit/helpers/spawn-isolated-bin.spec.ts": {
+      "todo": 4
+    },
+    "entrypoint/backlog/test/unit/vocabulary-gate.spec.ts": {
+      "todo": 7
+    },
+    "entrypoint/backlog/test/unit/web-ui.spec.ts": {
+      "todo": 8
+    },
+    "entrypoint/backlog/test/unit/write/catalog-verbs.spec.ts": {
+      "todo": 34
+    },
+    "entrypoint/backlog/test/unit/write/claim.spec.ts": {
+      "todo": 18
+    },
+    "entrypoint/backlog/test/unit/write/cross-process-write-safety.spec.ts": {
+      "todo": 4
+    },
+    "entrypoint/dispatch-cli/test/e2e/integration/live-dispatch-five-acs.e2e.ts": {
+      "skip": 5
+    },
+    "packages/apigen/apigen-core-client/test/unit/additional-properties.spec.ts": {
+      "todo": 4
+    },
+    "packages/apigen/apigen-core-client/test/unit/dist-artifact-smoke.spec.ts": {
+      "todo": 2
+    },
+    "packages/apigen/apigen-core-client/test/unit/extract-classes.spec.ts": {
+      "todo": 28
+    },
+    "packages/apigen/apigen-core-client/test/unit/extract.spec.ts": {
+      "todo": 71
+    },
+    "packages/apigen/apigen-core-client/test/unit/extraction-session.spec.ts": {
+      "todo": 13
+    },
+    "packages/apigen/apigen-core-client/test/unit/format-alias.spec.ts": {
+      "todo": 8
+    },
+    "packages/apigen/apigen-core-client/test/unit/required-fields.spec.ts": {
+      "todo": 5
+    },
+    "packages/apigen/apigen-core-client/test/unit/schema-cache-stampede.spec.ts": {
+      "todo": 4
+    },
+    "packages/apigen/apigen-core-client/test/unit/startup-lazy-load.spec.ts": {
+      "todo": 3
+    },
+    "packages/apigen/apigen-core-client/test/unit/ts-json-schema.spec.ts": {
+      "todo": 40
+    },
+    "packages/apigen/apigen-engine-runtime/test/e2e/isolated-git.e2e.ts": {
+      "skip": 1
+    },
+    "packages/apigen/apigen-engine-runtime/test/unit/test-support/isolated-git.spec.ts": {
+      "todo": 5
+    },
+    "packages/apigen/apigen-engine-runtime/test/e2e/parity-harness.e2e.ts": {
+      "skip": 2
+    },
+    "packages/apigen/apigen-engine-runtime/test/unit/test-support/parity-harness.spec.ts": {
+      "todo": 11
+    },
+    "packages/apigen/apigen-plugin-api-express/test/unit/plugin.spec.ts": {
+      "todo": 30
+    },
+    "packages/apigen/apigen-plugin-api-express/test/unit/route-parity.spec.ts": {
+      "todo": 9
+    },
+    "packages/apigen/apigen-plugin-api-fastify/test/unit/plugin.spec.ts": {
+      "todo": 36
+    },
+    "packages/apigen/apigen-plugin-cli-output/test/unit/hyphenated-namespace.spec.ts": {
+      "skip": 1
+    },
+    "packages/apigen/apigen-plugin-cli-output/test/unit/relative-import-path.spec.ts": {
+      "skip": 1
+    },
+    "packages/apigen/apigen-plugin-cli-output/test/unit/run-cli-integration.spec.ts": {
+      "todo": 11
+    },
+    "packages/apigen/apigen-plugin-java-javalin/test/unit/plugin.spec.ts": {
+      "todo": 6
+    },
+    "packages/apigen/apigen-plugin-java-javalin/test/unit/process-cleanup.spec.ts": {
+      "todo": 1
+    },
+    "packages/apigen/apigen-plugin-mcp/test/e2e/run.e2e.ts": {
+      "skip": 9
+    },
+    "packages/apigen/apigen-plugin-mcp/test/unit/run.spec.ts": {
+      "todo": 33
+    },
+    "packages/apigen/apigen-plugin-mcp/test/e2e/transport-http-parity.e2e.ts": {
+      "skip": 3
+    },
+    "packages/apigen/apigen-plugin-mcp/test/unit/transport-http-parity.spec.ts": {
+      "todo": 9
+    },
+    "packages/apigen/apigen-plugin-py-flask/test/e2e/plugin.e2e.ts": {
+      "skip": 1
+    },
+    "packages/apigen/apigen-plugin-py-flask/test/unit/plugin.spec.ts": {
+      "todo": 20
+    },
+    "packages/apigen/apigen-plugin-py-grpc/test/e2e/plugin.e2e.ts": {
+      "skip": 1
+    },
+    "packages/apigen/apigen-plugin-py-grpc/test/unit/plugin.spec.ts": {
+      "todo": 16
+    },
+    "packages/apigen/python-env/test/e2e/python-env.e2e.ts": {
+      "skip": 1
+    },
+    "packages/apigen/python-env/test/unit/python-env.spec.ts": {
+      "todo": 9
+    },
+    "packages/ui-react/ui-react-base-hooks/test/unit/lib/use-file-download/compression.spec.ts": {
+      "skip": 1
+    },
+    "packages/ui-react/ui-react-base-hooks/test/unit/lib/use-file-download/index.spec.tsx": {
+      "skip": 2
+    }
+  }
+}

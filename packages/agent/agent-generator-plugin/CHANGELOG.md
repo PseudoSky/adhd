@@ -1,3 +1,11 @@
+## 0.1.9 (2026-10-21)
+
+This was a version bump only for agent-generator-plugin to align it with other projects, there were no code changes.
+
+## 0.1.8 (2026-10-19)
+
+This was a version bump only for agent-generator-plugin to align it with other projects, there were no code changes.
+
 ## 0.1.7 (2026-10-11)
 
 This was a version bump only for agent-generator-plugin to align it with other projects, there were no code changes.

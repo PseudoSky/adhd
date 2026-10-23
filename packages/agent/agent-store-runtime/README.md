@@ -9,7 +9,7 @@ Persistent state store for @adhd/agent-mcp. Manages SQLite schema, migrations, a
 ## What it does
 
 - **SQLite persistence** — agents, sessions, messages, task_events, task_usage tables with proper indexing
-- **Migrations** — drizzle-kit migrations (0000–0012, in `entrypoint/agent-mcp/drizzle/`) applied on server startup; tracks schema evolution
+- **Migrations** — drizzle-kit migrations (0000–0017, in `entrypoint/agent-mcp/drizzle/`) applied on server startup; tracks schema evolution
 - **Query API** — type-safe Drizzle ORM wrappers for all read/write operations
 - **Transaction support** — atomic multi-table operations for consistency
 - **Usage tracking** — accumulates token counts, cost, and execution traces per task
@@ -27,7 +27,8 @@ For store access (rare), the exported stores are `SessionStore`, `TaskStore` and
 - `agents` — registered agent configs
 - `sessions` — conversation instances
 - `messages` — chat history (role, content, tool_calls, tool_results)
-- `task_events` — MODEL_REQUEST, TOOL_CALL, TASK_COMPLETED events, plus the typed `budget:unpriced_model` and `provider:builtin_bypass` warnings (see [provider parity](../../../docs/agent/provider-parity.md#task-events))
+- `task_events` — MODEL_REQUEST, TOOL_CALL, TASK_COMPLETED events, plus the typed `budget:unpriced_model`, `provider:builtin_bypass`, `provider:history_degraded` and `provider:pause_continued` events (see [provider parity](../../../docs/agent/provider-parity.md#task-events))
+- `message_provider_echo` — one row per assistant message (migration 0017): provider-native content for faithful replay (thinking, redacted thinking, text, client `tool_use` as tier T; `server_tool_use` and `*_tool_result` blocks as tier S, which expire once the session has been idle past the TTL). Keyed by `message_id` with `ON DELETE CASCADE`; written through `SessionStore.appendMessageEcho`, read with `getMessageEchoes`, swept by `sweepEchoes`, purged by `deleteMessageEchoes` and `clearMessages`. See the [orchestrator README](../agent-engine-orchestrator/README.md#provider-echo-anthropic)
 - `task_usage` — token counts, cost estimates, execution stats
 - `model_price_history` — append-only observed prices ($ per million tokens); BEFORE UPDATE/DELETE triggers abort, a correction is a new row
 - `price_pull_ledger` — one row per price-pull attempt (`running`, `ok`, `failed`, `rejected_shrink`, `rejected_invalid`)
@@ -53,7 +54,7 @@ pulling server, not as effective at the vendor.
 ## Key files
 
 - `src/db/schema.ts` — Drizzle ORM schema
-- migrations (0000–0012) live in `entrypoint/agent-mcp/drizzle/`
+- migrations (0000–0017) live in `entrypoint/agent-mcp/drizzle/`
 - `src/store/` — `SessionStore`, `TaskStore`, `PriceHistoryStore`
 
 ## 2.0.2 changes

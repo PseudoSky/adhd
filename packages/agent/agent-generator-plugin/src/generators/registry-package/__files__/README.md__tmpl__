@@ -25,7 +25,7 @@ src/
   db/
     schema.ts         Drizzle tables — all prefixed `<%= tablePrefix %>`
     migrate-runner.ts FK-safe migrator (reused by tests + callers)
-  __tests__/          real-DB, close+reopen store tests
+  (tests live in test/unit/, outside src/: real-DB, close+reopen store tests)
   index.ts            public barrel (no db/sqlite singleton export)
 drizzle/              drizzle-kit generated migrations (shipped in the package)
 ```
@@ -69,4 +69,4 @@ from the workspace `nx.json` `targetDefaults` — do not redefine `cache` or
 1. Define it in `src/db/schema.ts` with the `<%= tablePrefix %>` prefix.
 2. `nx db:generate <%= projectName %>` to write the migration into `drizzle/`.
 3. Export the table (and any store class) from `src/index.ts`.
-4. Add a real-DB, close+reopen test under `src/__tests__/`.
+4. Add a real-DB, close+reopen test under `test/unit/`.

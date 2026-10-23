@@ -5,9 +5,7 @@
   "projectType": "library",
   "release": {
     "version": {
-      "manifestRootsToUpdate": [
-        "dist/{projectRoot}"
-      ],
+      "manifestRootsToUpdate": ["dist/{projectRoot}"],
       "currentVersionResolver": "git-tag",
       "fallbackCurrentVersionResolver": "disk"
     }
@@ -23,19 +21,16 @@
   ],
   "targets": {
     "nx-release-publish": {
-      "options": {
-        "packageRoot": "{projectRoot}/dist"
-      },
       "dependsOn": [
         "build",
         "test",
         "verify-dist-load",
         "dist-manifest",
         "publish-hygiene"
-      ]
-    },
-    "lint": {
-      "executor": "@nx/eslint:lint"
+      ],
+      "options": {
+        "packageRoot": "{projectRoot}/dist"
+      }
     },
     "typecheck": {
       "executor": "nx:run-commands",
@@ -50,9 +45,7 @@
       "inputs": [
         "default",
         {
-          "externalDependencies": [
-            "typescript"
-          ]
+          "externalDependencies": ["typescript"]
         }
       ],
       "options": {
@@ -62,21 +55,32 @@
     },
     "test": {
       "//": "Partial override — executor/cache/outputs still come from the inferred @nx/vitest target; dependsOn is replaced wholesale, so lint/^build are relisted, plus typecheck-spec (the spec-corpus ratchet). The command is overridden because this package's vitest config is `.mts` while the workspace targetDefaults hardcodes `.ts`. No `build` dependency: the built-artifact proof is the default-running verify-dist-load gate.",
-      "dependsOn": [
-        "lint",
-        "^build",
-        "typecheck-spec"
-      ],
+      "dependsOn": ["lint", "^build", "typecheck-spec"],
       "options": {
         "cwd": ".",
         "command": "vitest run --config packages/agent/agent-plugin-tracing/vite.config.mts"
       }
     },
+    "e2e": {
+      "//": "Real-server lane (docs/decisions/0009-test-lanes-unit-vs-e2e.md). Runs ONLY src/**/*.e2e.ts and src/**/*.e2e.ts via vitest.e2e.config.mts: the tier P suites that drive the real provider adapters over a loopback HTTP socket (r10-dispatch-trace, r10-s5b-engine-trace). The unit `test` target excludes those files. Reached by CI (`nx affected -t e2e --parallel=1`), never by the local pre-push hook; not env-gated. Cached on content (lane-reachability rule 3); declares no outputs. dependsOn mirrors `test` (the suites import src, so only ^build).",
+      "executor": "nx:run-commands",
+      "dependsOn": ["^build"],
+      "cache": true,
+      "inputs": [
+        "default",
+        "^production",
+        {
+          "externalDependencies": ["vitest", "better-sqlite3"]
+        }
+      ],
+      "options": {
+        "cwd": ".",
+        "command": "vitest run --config {projectRoot}/vitest.e2e.config.mts"
+      }
+    },
     "build": {
       "//": "Override of the `build` target inferred by @nx/js/typescript (registered for this package in nx.json). Emits CommonJS-only (tsconfig.build.json -> tsconfig.lib.json, module=commonjs) into {projectRoot}/dist/index.js + index.d.ts per adhd ADR-0003; rootDir=src so the entry lands at dist/index.js. tsconfig.build.json maps the one workspace dep (@adhd/agent-base-types) to its BUILT declaration, which ^build guarantees, so compilation never depends on an optional per-package node_modules symlink (adhd ADR-0002). Same shape as agent-core-native-tooling.",
-      "outputs": [
-        "{projectRoot}/dist"
-      ],
+      "outputs": ["{projectRoot}/dist"],
       "options": {
         "cwd": ".",
         "command": "node node_modules/typescript/bin/tsc -p {projectRoot}/tsconfig.build.json --outDir {projectRoot}/dist --rootDir {projectRoot}/src --composite false --noEmitOnError"

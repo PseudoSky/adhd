@@ -1,0 +1,9 @@
+== WALL-GAP RECONCILIATION (C1 vs A1; graded wall wallMs) ==
+phase 1 task time | C1 58.125 (server task interval (completedAt - createdAt)) | A1 48.879 (phase wall (spawn -> exit)) | +9.246
+phase 2 task time | C1 34.795 (server task interval (completedAt - createdAt)) | A1 31.246 (phase wall (spawn -> exit)) | +3.549
+client poll lag (inside the phase sum) | C1 2.208 | A1 0.000 | +2.208
+harness overhead | C1 3.397 | A1 0.620 | +2.777
+  C1 overhead split: setup 1.283, submit 0.020, between phases 0.224, accounting wait 1.800 (fixed sleep 1.500 + hidden/reads 0.300), usage queries 0.025, teardown 0.044, residual 0.001
+  A1 overhead split: unattributed 0.620 (no marks; not split)
+graded wall | C1 98.525 | A1 80.745 | gap +17.780 = +9.246 +3.549 +2.208 +2.777 (residual 0 ms)
+measurement-path time carried by C1 and not by A1: 4.985 s (28.0% of the gap); task execution: 12.795 s

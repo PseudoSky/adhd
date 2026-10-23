@@ -1,4 +1,5 @@
 /// <reference types='vitest' />
+import { UNIT_FILE_INCLUDES } from '../../../tools/vite-plugins/e2e-globs.mjs';
 import { defineConfig } from 'vite';
 import dts from 'vite-plugin-dts';
 import * as path from 'path';
@@ -50,7 +51,7 @@ export default defineConfig({
     //   fileParallelism: false — serialize files so DB finalization can't race.
     pool: 'forks',
     fileParallelism: false,
-    include: ['src/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
+    include: UNIT_FILE_INCLUDES,
 
     reporters: ['default'],
     coverage: {

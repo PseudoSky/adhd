@@ -1,4 +1,5 @@
 /// <reference types='vitest' />
+import { UNIT_FILE_INCLUDES } from '../../../tools/vite-plugins/e2e-globs.mjs';
 import { defineConfig } from 'vite';
 import dts from 'vite-plugin-dts';
 import * as path from 'path';
@@ -8,7 +9,7 @@ import { nxViteTsPathsPre } from '../../../tools/vite-plugins/source-resolution.
 import {
   projectCacheDir,
   projectCoverage,
-} from '../../workspace/workspace-base-vite-paths/src/index';
+} from './src/index';
 import { externalizeRealDeps } from '../../../tools/vite-plugins/externalize.mjs';
 
 export default defineConfig({
@@ -60,7 +61,7 @@ export default defineConfig({
       dir: '../../../node_modules/.vitest',
     },
     environment: 'jsdom',
-    include: ['src/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
+    include: UNIT_FILE_INCLUDES,
 
     reporters: ['default'],
     coverage: {

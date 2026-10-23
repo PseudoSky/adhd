@@ -87,9 +87,9 @@ Measured: `attestation`/`obligation` present in `src/store/vocabulary-guard.ts:7
 
 | AC | Test that proves it | Level | Live? | Existing candidate |
 |----|--------------------|-------|-------|--------------------|
-| 1 kinds admitted, catalog 15 | `list kind` (target) / catalog read returns 15 incl. attestation+obligation | contract | yes | `src/write/catalog.spec.ts` (12 pass) |
-| 2 internal edges writable, absent from `relate` | write `attests`/`has_obligation`/`satisfies`; `relate` with `attests` → typed error | integration | yes | `src/store/vocabulary-guard.spec.ts` (**10 todo**) |
-| 3 unknown-kind mint unchanged | create with unknown kind still mints | integration | no | `src/write/catalog-verbs.spec.ts` (**34 todo**) |
+| 1 kinds admitted, catalog 15 | `list kind` (target) / catalog read returns 15 incl. attestation+obligation | contract | yes | `test/unit/write/catalog.spec.ts` (12 pass) |
+| 2 internal edges writable, absent from `relate` | write `attests`/`has_obligation`/`satisfies`; `relate` with `attests` → typed error | integration | yes | `test/unit/store/vocabulary-guard.spec.ts` (**10 todo**) |
+| 3 unknown-kind mint unchanged | create with unknown kind still mints | integration | no | `test/unit/write/catalog-verbs.spec.ts` (**34 todo**) |
 | 4 `nx test` + `verify-dist-load` exit 0 | the two commands | gate | yes | measured §5 |
 | 5 per-kind identity (case not collapsed) | two case-variant content fields → not collapsed | integration | no | **none** |
 
@@ -100,14 +100,14 @@ implementation; the target verbs are absent. Testable **only** for the shipped s
 
 | AC | Test that proves it | Level | Live? | Status |
 |----|--------------------|-------|-------|--------|
-| 1 ambiguous prefix → candidate set | 8-hex-prefix collides → typed `ambiguous_reference` with candidates | contract | yes | partial — `src/query/uid-prefix.spec.ts` exists |
+| 1 ambiguous prefix → candidate set | 8-hex-prefix collides → typed `ambiguous_reference` with candidates | contract | yes | partial — `test/unit/query/uid-prefix.spec.ts` exists |
 | 2 merge Redirect + soft-retire + resolve chain-head | `merge issue` → one Redirect; source resolves to head | integration | yes | surface-absent |
 | 3 dedupe never auto-links; `duplicates` read | default `same-project`; explicit `link-duplicate` required | integration | yes | surface-absent (`link-duplicate` 0) |
 | 4 every uid-taking verb resolves chain | resolution-invariant sweep across verbs | contract | yes | surface-absent |
-| 5 C1 citation verifies EXISTS (breaking) | out-of-root existing locator accepted, sha recorded | integration | yes | partial — `src/write/citation-path.spec.ts` (16 pass) |
+| 5 C1 citation verifies EXISTS (breaking) | out-of-root existing locator accepted, sha recorded | integration | yes | partial — `test/unit/write/citation-path.spec.ts` (16 pass) |
 | 6 never drop/abort an unverifiable citation | persisted `unverified-with-reason` | integration | yes | partial |
 | 7 `url:`/`registry:`/`query:` anchors | each recorded with an outcome | integration | no | surface-absent |
-| 8 project-identity de-dup | `list project` returns each once | contract | yes | partial — `src/query/views/registry.spec.ts` (**33 todo**) |
+| 8 project-identity de-dup | `list project` returns each once | contract | yes | partial — `test/unit/query/views/registry.spec.ts` (**33 todo**) |
 | 9 SUPERSEDED reason enum | reasonless transition → typed error | contract | yes | surface-absent |
 | 10 traversable successor (`supersedes` edge) | cascade-scan reaches successor | integration | no | partial |
 | 11 backfill 15 SUPERSEDED nodes | each has reason + successor-or-none | integration | yes | surface-absent (data migration) |
@@ -121,19 +121,19 @@ implementation; the target verbs are absent. Testable **only** for the shipped s
 
 | AC | Test that proves it | Level | Live? | Existing candidate |
 |----|--------------------|-------|-------|--------------------|
-| 1 completeness meta on every view | `total/returned/limit/offset?/truncated?/has_more` | contract | yes | `src/query/c7-envelopes.spec.ts` (pass), `meta-wire.spec.ts` |
-| 2 `direction:"desc"` works; `score_kind` | desc order; derived reads carry `score_kind` | integration | no | `src/query/sort-priority-direction.spec.ts` (the one red→green control, D3 `9a95be96`) |
-| 3 `view:"order"` scopes all member kinds | includes outbound `blocks` + dependent count; 2nd `part_of` typed error | integration | yes | `src/query/c2-legibility.spec.ts` |
-| 4 C1 contradiction closed | `related` matches its own contract; stale comment gone | unit | no | `src/query/c1-reference.spec.ts`, `card.spec.ts` |
-| 5 joins render in the default card | default card shows project/component sets | contract | yes | `src/query/card.spec.ts` |
-| 6 structured/FTS precedence + documented params | structured branch never shadowed; params documented | integration | no | `src/query/text-routing.spec.ts` |
+| 1 completeness meta on every view | `total/returned/limit/offset?/truncated?/has_more` | contract | yes | `test/unit/query/c7-envelopes.spec.ts` (pass), `meta-wire.spec.ts` |
+| 2 `direction:"desc"` works; `score_kind` | desc order; derived reads carry `score_kind` | integration | no | `test/unit/query/sort-priority-direction.spec.ts` (the one red→green control, D3 `9a95be96`) |
+| 3 `view:"order"` scopes all member kinds | includes outbound `blocks` + dependent count; 2nd `part_of` typed error | integration | yes | `test/unit/query/c2-legibility.spec.ts` |
+| 4 C1 contradiction closed | `related` matches its own contract; stale comment gone | unit | no | `test/unit/query/c1-reference.spec.ts`, `card.spec.ts` |
+| 5 joins render in the default card | default card shows project/component sets | contract | yes | `test/unit/query/card.spec.ts` |
+| 6 structured/FTS precedence + documented params | structured branch never shadowed; params documented | integration | no | `test/unit/query/text-routing.spec.ts` |
 | 7 spec-append CAS/head agreement | CAS head == `get`/`spec-check` head | integration | no | `src/write/spec-revision.ts` tests; `983f5971` marked shipped |
 
 ### S04 — Anchored attestation & work-product citizenship (9 ACs) — **partly shipped, B1/B2 absent**
 
 | AC | Test that proves it | Level | Live? | Status |
 |----|--------------------|-------|-------|--------|
-| 1 anchored attestation + `stale` on changed anchor | `attest {subject,claim,anchor}`; recheck → `stale` | integration | yes | `src/write/contract-anchors.spec.ts` (2 pass) |
+| 1 anchored attestation + `stale` on changed anchor | `attest {subject,claim,anchor}`; recheck → `stale` | integration | yes | `test/unit/write/contract-anchors.spec.ts` (2 pass) |
 | 2 SPEC item citizen; export verified/drifted/gone | `part_of` work item; export reads revision+digest | integration | yes | partial |
 | 3 B1 fragment read (`get state`) | returns revision fragment, not pointer | contract | yes | **surface-absent** (`get state` 0, `state-revision` 0) |
 | 4 B2 `byCitationPath` | `list citation --path` returns citing items | contract | yes | **surface-absent** |
@@ -147,9 +147,9 @@ implementation; the target verbs are absent. Testable **only** for the shipped s
 
 | AC | Test that proves it | Level | Live? | Status |
 |----|--------------------|-------|-------|--------|
-| 1 `obligate` closed predicate core | predicate grammar accepted; no-obligation item unaffected | integration | no | `src/query/verdict.spec.ts`, `card.obligations.spec.ts` |
+| 1 `obligate` closed predicate core | predicate grammar accepted; no-obligation item unaffected | integration | no | `test/unit/query/verdict.spec.ts`, `card.obligations.spec.ts` |
 | 2 terminal transition refused typed `{code,required_kind}` | unsatisfied `block` refuses; commit ref alone insufficient | integration | yes | partial — `ObligationUnsatisfiedError` (U1 grounded) |
-| 3 `claim` fails on block; verdict derived | refusal typed; `Verdict`/`Condition` never stored | integration | yes | `src/query/verdict.spec.ts` |
+| 3 `claim` fails on block; verdict derived | refusal typed; `Verdict`/`Condition` never stored | integration | yes | `test/unit/query/verdict.spec.ts` |
 | 4 every gate has a negative control | deliberately-broken variant goes red, reverted | e2e | yes | scattered; not systematized |
 | 5 harness fidelity (self-skip without reason fails) | a reason-less skip fails the gate | gate | no | surface-absent |
 | 6 spec-lanes real count | count computed from the real suite | gate | no | `spec-lanes.mjs` removed (`f613472b` PARTIAL) |
@@ -159,7 +159,7 @@ implementation; the target verbs are absent. Testable **only** for the shipped s
 | AC | Test that proves it | Level | Live? | Status |
 |----|--------------------|-------|-------|--------|
 | 1 `list kind` machine-readable | every term + lifecycle/replacement; no absent advertised verb | contract | yes | partial — `c8-vocabulary.spec.ts` |
-| 2 docs regenerated + drift check | drift check fails on divergence | gate | no | `src/store/vocabulary-drift.spec.ts` (2 pass) |
+| 2 docs regenerated + drift check | drift check fails on divergence | gate | no | `test/unit/store/vocabulary-drift.spec.ts` (2 pass) |
 | 3 vocabulary cleanup | EPIC retired; bug/BUG reconciled; undefined/MEDIUM removed | integration | no | partial |
 | 4 D2 `73d3b97d` repaired | ADR-0006 records `ambiguous_reference`, no invented `update` | doc-gate | no | `73d3b97d` resolved |
 | 5 S6 correct docs/model | 1:1 sentence absent; drift check fails if it reappears | doc-gate | no | surface-absent |
@@ -173,11 +173,11 @@ implementation; the target verbs are absent. Testable **only** for the shipped s
 
 | AC | Test that proves it | Level | Live? | Status |
 |----|--------------------|-------|-------|--------|
-| 1 exactly-one claim; typed `E_CLAIM_HELD` | two processes race one node with latches | cross-process | **yes** | `src/write/cross-process-write-safety.e2e.ts`, `src/write/claim.spec.ts` (**18 todo**) — **measured defect §5** |
-| 2 interrupted write no split WAL; reopen shows pre-write | kill mid-write; reopen; assert | cross-process | yes | `src/store/acked-write-durability.e2e.ts` |
+| 1 exactly-one claim; typed `E_CLAIM_HELD` | two processes race one node with latches | cross-process | **yes** | `test/e2e/write/cross-process-write-safety.e2e.ts`, `test/unit/write/claim.spec.ts` (**18 todo**) — **measured defect §5** |
+| 2 interrupted write no split WAL; reopen shows pre-write | kill mid-write; reopen; assert | cross-process | yes | `test/e2e/store/acked-write-durability.e2e.ts` |
 | 3 FTS rebuild idempotent + shadow detected | rebuild twice; detect shadow | integration | no | partial |
 | 4 failed write reports failure (no false-success) | negative control | integration | yes | partial |
-| 5 R1 rollup counts non-terminal | `resolved` child not counted open | integration | no | `src/query/verdict-list-bound.e2e.ts` |
+| 5 R1 rollup counts non-terminal | `resolved` child not counted open | integration | no | `test/e2e/query/verdict-list-bound.e2e.ts` |
 | 6 R2 orphaned-parent signal | retired parent with live children surfaced | integration | no | surface-absent |
 | 7 R3 direction recoverable | `related`/`part_of` distinguish parent/child | unit | no | partial |
 | 8 memory-server write races | facet-admit atomic; outcome idempotent by key | cross-repo | no | sibling (`memory-core`) |
@@ -191,11 +191,11 @@ implementation; the target verbs are absent. Testable **only** for the shipped s
 | 1 stale `dist/` fails the release-manifest backstop | publish with mismatched dist → fail | gate | yes | `tools/nx-plugins/build/**` |
 | 2 `verify-dist-load` default + apigen divergence fails | command + apigen contract gate | gate | yes | **measured: exit 0** |
 | 3 pnpm/nx pinned | mismatch fails, no re-resolve | gate | no | `packageManager` pinned |
-| 4 runmode strictness + tracing | unsupported runmode errors; trace per op | integration | yes | `src/ir-artifact.spec.ts` (15 pass) |
+| 4 runmode strictness + tracing | unsupported runmode errors; trace per op | integration | yes | `test/unit/ir-artifact.spec.ts` (15 pass) |
 | 5 apigen plugin docs/help/test contract | contradiction fails gate | cross-repo | no | `packages/apigen/*` |
 | 6 runmode undeclared vs malformed | two distinct typed errors | unit | no | surface-absent |
 | 7 install/upgrade dependency-absence | fails loudly non-zero typed | integration | yes | partial |
-| 8 baked-IR cache hashes `.d.ts` | edit `.d.ts` invalidates cache | integration | no | `src/ir-cache.durability.e2e.ts` |
+| 8 baked-IR cache hashes `.d.ts` | edit `.d.ts` invalidates cache | integration | no | `test/e2e/ir-cache.durability.e2e.ts` |
 | 9 release/publish drift | every task+duration; mis-inserted version fails | gate | no | surface-absent |
 
 ### S09 — Durable runtime lifecycle & truthful telemetry (7 ACs) — **partly shipped; sibling-heavy**
@@ -204,8 +204,8 @@ implementation; the target verbs are absent. Testable **only** for the shipped s
 |----|--------------------|-------|-------|--------|
 | 1 durable lifecycle record survives restart | persisted health record | integration | yes | `src/store/embed-drain.e2e.ts` |
 | 2 recall stable across reopen | same store, reopen, same result | integration | yes | `src/store/embed-*.e2e.ts` |
-| 3 telemetry never reports success for failure | false-metric negative control red | unit | no | `src/server.tracing-six-tags.spec.ts` |
-| 4 idempotent start/stop, no orphan | start/stop twice; no orphan socket | integration | yes | `src/serve.readiness.e2e.ts` |
+| 3 telemetry never reports success for failure | false-metric negative control red | unit | no | `test/unit/server.tracing-six-tags.spec.ts` |
+| 4 idempotent start/stop, no orphan | start/stop twice; no orphan socket | integration | yes | `test/e2e/serve.readiness.e2e.ts` |
 | 5 memory-core recall leaks | read-only FTS → typed failure | cross-repo | no | sibling |
 | 6 hybrid-search loadability decision | ADR recorded; optional path loads | cross-repo | no | `91f57dc3` open |
 | 7 mass-mislabel guard | threshold guard + negative control | cross-repo | no | sibling (`memory-core/src/cluster.ts`) |
@@ -321,12 +321,12 @@ alone (no `--skip-nx-cache`, per `AGENTS.md` §5); the `test` target itself ran.
 - **The lanes are green, but the green is thin.** `266 todo` + **35 fully-skipped files** in the
   default lane are the 1:1 `*.spec.ts` stubs for the 42 `e2e` files (the `Resource lane:` separation).
   The heavy behaviour runs in the e2e lane; the default lane's apparent coverage overstates what is
-  asserted. Several **high-value** specs are *entirely* `todo`: `src/cli.spec.ts` (52),
-  `src/write/catalog-verbs.spec.ts` (34), `src/query/views/registry.spec.ts` (33),
-  `src/write/claim.spec.ts` (18), `src/server.verbs.spec.ts` (15),
-  `src/store/vocabulary-guard.spec.ts` (10), `src/cli-envelope.spec.ts` (7),
-  `src/api.surface.spec.ts` (5), `src/write/cross-process-write-safety.spec.ts` (4),
-  `src/server.mcp.spec.ts` (2).
+  asserted. Several **high-value** specs are *entirely* `todo`: `test/unit/cli.spec.ts` (52),
+  `test/unit/write/catalog-verbs.spec.ts` (34), `test/unit/query/views/registry.spec.ts` (33),
+  `test/unit/write/claim.spec.ts` (18), `test/unit/server.verbs.spec.ts` (15),
+  `test/unit/store/vocabulary-guard.spec.ts` (10), `test/unit/cli-envelope.spec.ts` (7),
+  `test/unit/api.surface.spec.ts` (5), `test/unit/write/cross-process-write-safety.spec.ts` (4),
+  `test/unit/server.mcp.spec.ts` (2).
 - **The e2e lane passes _while its own negative controls report a real defect_.** From the e2e
   stdout (measured, not inferred):
   - `[cross-process-write-safety] attempted=400 a.ok=200 a.threw=0 b.ok=191 b.threw=9
@@ -346,10 +346,10 @@ alone (no `--skip-nx-cache`, per `AGENTS.md` §5); the `test` target itself ran.
   row is a *candidate* — a real (non-`it.todo`) test file that exercises the surface but does not
   name the AC id; no row records a `red_sha`/`green_sha`, so `proven` is 0. The design corpus is
   still marked `VERIFIED` with no readable test evidence (`73d0b9c6` citations:0) (see §6).
-- **The MCP host path is now driven — C-C is PROVEN.** `entrypoint/backlog/src/mcp-host.e2e.ts`
+- **The MCP host path is now driven — C-C is PROVEN.** `entrypoint/backlog/test/e2e/mcp-host.e2e.ts`
   (4 tests) spawns the **unmodified built server** (`node dist/index.js serve --transport mcp`),
   performs a real `initialize`, then `tools/list` + `tools/call` against a real store, and runs by
-  default in the `e2e` lane (exit 0). `entrypoint/backlog/src/contract-matrix.e2e.ts` (6 tests) runs
+  default in the `e2e` lane (exit 0). `entrypoint/backlog/test/e2e/contract-matrix.e2e.ts` (6 tests) runs
   the same success/failure envelopes across **both** transports (CLI process + MCP stdio, exit 0).
   (Both files were added after this section's `7adea399` baseline; the table above is the
   pre-ship snapshot.)
@@ -382,10 +382,10 @@ docs/plan/backlog-consolidation/ac-traceability.json
       "ac": "AC1",
       "item": "4679369b",
       "claim": "two processes racing to claim one node yield exactly one claim; a distinct caller gets typed E_CLAIM_HELD",
-      "test": "src/write/cross-process-write-safety.e2e.ts::<test name>",
+      "test": "test/e2e/write/cross-process-write-safety.e2e.ts::<test name>",
       "level": "cross-process",
       "live": true,
-      "negative_control": "src/write/claim.spec.ts::<control name>",
+      "negative_control": "test/unit/write/claim.spec.ts::<control name>",
       "red_sha": "<sha where it fails>",
       "green_sha": "<sha where it passes>",
       "evidence": "<command + exit + counts>"

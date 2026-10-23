@@ -1,4 +1,4 @@
-export const __apigen_pkg = '@adhd/apigen-gateway';
+export const __apigen_pkg = '@adhd/apigen-engine-gateway';
 
 // SPEC §13 / §13.1 — the sidecar gateway public API.
 export {
@@ -27,3 +27,6 @@ export {
   makeDeadlineExceededError,
   isGatewayError,
 } from './lib/gateway';
+
+// T08 / OD-32 — `bin:` source kind (argv fallback D-07, stdio-MCP serving D-08).
+export * from './lib/sources';

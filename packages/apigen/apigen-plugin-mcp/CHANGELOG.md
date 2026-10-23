@@ -1,3 +1,27 @@
+## Unreleased
+
+### 🚀 Features
+
+- `options.terminal`: serve `RunInput.operations` through a dispatch terminal (gateway or proxy routes) with flat `arguments`, the `--use` Layer stack around the terminal, and `CallToolResult` results passed through unchanged.
+- `options.hostTransport`: serve `stdio` mode over a caller-supplied MCP SDK `Transport`.
+- `options.serverInfo`: override the identity advertised in the `initialize` response.
+
+## 0.3.5 (2026-10-21)
+
+### 🩹 Fixes
+
+- **apigen-plugin-mcp:** route generateIndex literals through the shared engine-naming escapers ([933992e0](https://github.com/PseudoSky/adhd/commit/933992e0))
+- **apigen-plugin-mcp:** update generate ([754f49fd](https://github.com/PseudoSky/adhd/commit/754f49fd))
+- **apigen-plugin-mcp:** sanitise generated identifiers from package ids in generate ([a286b457](https://github.com/PseudoSky/adhd/commit/a286b457))
+
+### ❤️ Thank You
+
+- pseudosky
+
+## 0.3.4 (2026-10-15)
+
+This was a version bump only for apigen-plugin-mcp to align it with other projects, there were no code changes.
+
 ## 0.3.3 (2026-10-09)
 
 ### 🩹 Fixes

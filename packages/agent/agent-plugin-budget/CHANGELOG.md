@@ -1,3 +1,17 @@
+## 0.2.11 (2026-10-21)
+
+### 🩹 Fixes
+
+- **agent-plugin-budget:** reserve the truncation notice inside the response limit ([ce70a11d](https://github.com/PseudoSky/adhd/commit/ce70a11d))
+
+### ❤️ Thank You
+
+- pseudosky
+
+## 0.2.10 (2026-10-15)
+
+This was a version bump only for agent-plugin-budget to align it with other projects, there were no code changes.
+
 ## 0.2.9 (2026-10-11)
 
 ### 🚀 Features

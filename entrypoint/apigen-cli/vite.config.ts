@@ -1,4 +1,5 @@
 /// <reference types='vitest' />
+import { UNIT_FILE_INCLUDES } from '../../tools/vite-plugins/e2e-globs.mjs';
 import { defineConfig } from 'vite';
 import dts from 'vite-plugin-dts';
 import * as path from 'path';
@@ -94,7 +95,7 @@ export default defineConfig({
     // exclusion structural rather than an emergent property of glob semantics.
     // The resource lane runs only via `nx run apigen-cli:e2e` (see the sibling
     // `vitest.e2e.config.ts`, which is the only place that includes `.e2e.ts`).
-    include: ['src/**/*.spec.ts'],
+    include: UNIT_FILE_INCLUDES,
     // perf.e2e.ts asserts heap flatness across repeated buildDescriptor runs;
     // it needs a real global.gc so heap measurements are deterministic.
     // worker_threads reject V8 flags in execArgv (ERR_WORKER_INVALID_EXEC_ARGV),

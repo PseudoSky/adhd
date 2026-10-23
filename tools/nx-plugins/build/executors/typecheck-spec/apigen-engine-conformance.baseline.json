@@ -3,7 +3,7 @@
   "total": 7,
   "files": {
     "packages/apigen/apigen-engine-conformance/src/lib/gate.ts": 1,
-    "packages/apigen/apigen-engine-conformance/src/test/vectors.spec.ts": 1,
+    "packages/apigen/apigen-engine-conformance/test/unit/vectors.spec.ts": 1,
     "packages/apigen/apigen-engine-conformance/vite.config.ts": 4,
     "packages/apigen/apigen-engine-conformance/vitest.e2e.config.ts": 1
   }

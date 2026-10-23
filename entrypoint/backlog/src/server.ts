@@ -34,6 +34,7 @@
  */
 import { join } from 'node:path';
 import { existsSync } from 'node:fs';
+import { log } from '@adhd/sox-telemetry';
 import type { Scope } from '@adhd/environment-base-spec';
 import {
   composeSchemas,
@@ -147,6 +148,106 @@ export function testSilentLogger(): Logger | undefined {
   };
   silent['child'] = () => silent;
   return silent as unknown as Logger;
+}
+
+/** Numeric threshold per `ADHD_BACKLOG_LOG_LEVEL` value (`env.ts`'s `logging.level` enum). */
+const CLI_LOG_THRESHOLD: Readonly<Record<string, number>> = {
+  trace: 10,
+  debug: 20,
+  info: 30,
+  warn: 40,
+  error: 50,
+  fatal: 60,
+  silent: Number.POSITIVE_INFINITY,
+};
+
+/** Rank of each pino-surface method, for the threshold gate. */
+const CLI_METHOD_RANK: Readonly<Record<string, number>> = {
+  trace: 10,
+  debug: 20,
+  info: 30,
+  warn: 40,
+  error: 50,
+  fatal: 60,
+};
+
+/** Serialise an `err` field so sox's JSON record keeps the name/message/stack. */
+function serialiseCliFields(obj: Record<string, unknown>): Record<string, unknown> {
+  const err = obj['err'];
+  if (!(err instanceof Error)) return obj;
+  return { ...obj, err: { name: err.name, message: err.message, stack: err.stack } };
+}
+
+/**
+ * The logger the one-shot CLI hands `apigen run` (`cli.ts`), backed by
+ * sox-telemetry's log channel (`log.<level>(event, fields)`).
+ *
+ * `@adhd/apigen-plugin-cli-output` falls back to its own pino logger — JSON
+ * to stderr at `info` — whenever `input.logger` is absent, which printed a
+ * `{"level":30,...,"msg":"→ backlog query"}` line on every invocation and
+ * polluted any `2>&1` pipe. Its per-call trace records now land in the sox
+ * durable log (`~/.adhd/sox-ecosystem/backlog/logs`, the sink `index.ts`
+ * initialises) and stdout/stderr carry only the result envelope.
+ *
+ * `@adhd/apigen-plugin-cli-output` calls only `logger.info` and `logger.error`
+ * (run.ts: the per-call trace and the failure paths). The other pino members
+ * are kept so the adapter stays a drop-in pino surface, gated by
+ * `ADHD_BACKLOG_LOG_LEVEL` (default `info`; `silent` disables). Under vitest
+ * this defers to {@link testSilentLogger}, the same no-op contract.
+ */
+export function cliLogger(): Logger {
+  const silentForTests = testSilentLogger();
+  if (silentForTests !== undefined) return silentForTests;
+  const raw = process.env['ADHD_BACKLOG_LOG_LEVEL'];
+  const threshold =
+    raw !== undefined && Object.prototype.hasOwnProperty.call(CLI_LOG_THRESHOLD, raw)
+      ? (CLI_LOG_THRESHOLD[raw] as number)
+      : (CLI_LOG_THRESHOLD['info'] as number);
+
+  // printf-style interpolation (`logger.info('%s', x)`) is not supported; apigen does not use it.
+  // pino's call shapes: `logger.info(msg)`, `logger.info(fields, msg)` and
+  // `logger.error(err)`. A bare string or Error must not be spread as a fields
+  // object (that garbles it into character-indexed keys or drops the stack).
+  const build = (bindings: Record<string, unknown>): Record<string, unknown> => {
+    const method =
+      (name: string) =>
+      (objOrMsg: Record<string, unknown> | Error | string, msg?: string): void => {
+        const rank = CLI_METHOD_RANK[name] as number;
+        if (rank < threshold) return;
+        let fields: Record<string, unknown>;
+        let text: string;
+        if (typeof objOrMsg === 'string') {
+          fields = {};
+          text = objOrMsg;
+        } else if (objOrMsg instanceof Error) {
+          fields = { err: objOrMsg };
+          text = msg ?? objOrMsg.message;
+        } else {
+          fields = objOrMsg ?? {};
+          text = msg ?? (typeof fields['msg'] === 'string' ? fields['msg'] : '');
+        }
+        // `cliLevel`, not `level`: sox-telemetry spreads caller fields over its own `level`,
+        // so a field named `level` would replace the sink level (trace would land as "trace").
+        const record = { ...bindings, ...serialiseCliFields(fields), cliLevel: name, msg: text };
+        if (rank >= 50) log.error('backlog.cli.log', record);
+        else if (rank >= 40) log.warn('backlog.cli.log', record);
+        else if (rank >= 30) log.info('backlog.cli.log', record);
+        else log.debug('backlog.cli.log', record);
+      };
+
+    const logger: Record<string, unknown> = {
+      trace: method('trace'),
+      debug: method('debug'),
+      info: method('info'),
+      warn: method('warn'),
+      error: method('error'),
+      fatal: method('fatal'),
+    };
+    // pino's child(bindings) merges its bindings into every record it emits.
+    logger['child'] = (childBindings?: Record<string, unknown>) => build({ ...bindings, ...(childBindings ?? {}) });
+    return logger;
+  };
+  return build({}) as unknown as Logger;
 }
 
 // ---------------------------------------------------------------------------
@@ -848,7 +949,7 @@ export async function createBacklogServer(
         }),
       // The write layer's only sink is stderr (`write/bootstrap.ts`'s own
       // latched notices); a structured logger is out of scope for this slice.
-      // eslint-disable-next-line no-console
+       
       log: (_level, message) => console.error(message),
     }),
   };

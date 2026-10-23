@@ -1,3 +1,13 @@
+## 0.1.8 (2026-10-21)
+
+### 🩹 Fixes
+
+- **nx-test:** review corrections for the repo-wide spawn-isolation guard (0945d1b9) ([1a92065c](https://github.com/PseudoSky/adhd/commit/1a92065c))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 0.1.6 (2026-09-26)
 
 ### 🚀 Features

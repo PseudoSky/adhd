@@ -1,0 +1,702 @@
+// PARITY-INSTRUMENT-ONLY
+// Round 2 driver helpers: cost model, stream / API-log parsers, call metrics, secret scan, process sweep,
+// env allowlist. Everything here is local and model-free.
+import fs from 'node:fs';
+import path from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { PIN_MODEL } from './fixtures.mjs';
+
+// ---------------------------------------------------------------------------------------------------
+// Cost model (LEARNINGS item 1): tier-aware cache writes. USD per million tokens, keyed by the model under test (R7-model AC3).
+// The "common rate card" recompute prices every arm at ONE card chosen by the pinned model. A model with no card here is NEVER priced at another
+// model's rates: `rateCardFor` returns null, `priceNorm` returns usd null with `unmeasured`, and the recorded cost reads 'unmeasured: no rate card for <model>'.
+// Arm A's authoritative cost is the claude CLI's own total_cost_usd; the card is the cross-arm common denominator and the fallback.
+// ---------------------------------------------------------------------------------------------------
+export const RATE_CARDS = Object.freeze({
+  'claude-haiku-4-5': { rates: Object.freeze({ input: 1.0, output: 5.0, cacheRead: 0.10, write5m: 1.25, write1h: 2.0 }),
+    source: 'Anthropic list rates; packages/agent/agent-core-provider/src/pricing/rate-card.ts RATE_CARD.claude_haiku_4_5 (vendor-direct)' },
+  // R7-model: no vendor-direct RATE_CARD entry exists for claude_sonnet_5_5 (rate-card.ts has only claude_sonnet_4_6, $3/$15). The only committed Sonnet 5.5 price is the
+  // OpenRouter feed snapshot packages/agent/agent-core-provider/src/pricing/pricing.json, id anthropic/claude-sonnet-5.5 (fetched_at 2026-10-08T18:57:29Z): prompt 2e-6,
+  // completion 1e-5, input_cache_read 1e-7, input_cache_write 2.5e-6, input_cache_write_1h 4e-6 per token. It agrees with the claude CLI model catalog tag
+  // pricing:"tier_2_10_cache_read_0_10" (claude 2.1.296). Snapshot-sourced, NOT vendor-verified; no long-context override tier is applied.
+  'claude-sonnet-5-5': { rates: Object.freeze({ input: 2.0, output: 10.0, cacheRead: 0.10, write5m: 2.5, write1h: 4.0 }),
+    source: 'agent-core-provider pricing.json OpenRouter snapshot anthropic/claude-sonnet-5.5 fetched 2026-10-08 (snapshot-sourced, not vendor-verified)' },
+  // R8-model: Haiku 5.5. Like Sonnet 5.5 there is no vendor-direct RATE_CARD entry; the only committed price is the OpenRouter feed snapshot
+  // packages/agent/agent-core-provider/src/pricing/pricing.json, id anthropic/claude-haiku-5.5 (fetched_at 2026-10-08T18:57:29Z): prompt 1e-7, completion 5e-7,
+  // input_cache_read 1e-8, input_cache_write 1.25e-7, input_cache_write_1h 2e-7 per token. The same record carries a >=100k-prompt-token override tier
+  // (prompt 5e-7, completion 2.5e-6, cache read 5e-8, write 6.25e-7 / 1h 1e-6); like the product (rate-card.ts: overrides "stored, never applied") and the sonnet card
+  // it is NOT applied, but it is recorded here as `tierOverride` so a run whose requests exceed it can say so (record.model.pricing). Snapshot-sourced, NOT vendor-verified:
+  // the claude CLI's own total_cost_usd (arm A authoritative, arm B cliReportedParent) is the cross-check.
+  'claude-haiku-5-5': { rates: Object.freeze({ input: 0.10, output: 0.50, cacheRead: 0.01, write5m: 0.125, write1h: 0.20 }),
+    tierOverride: Object.freeze({ minPromptTokens: 100_000, rates: Object.freeze({ input: 0.50, output: 2.50, cacheRead: 0.05, write5m: 0.625, write1h: 1.0 }) }),
+    source: 'agent-core-provider pricing.json OpenRouter snapshot anthropic/claude-haiku-5.5 fetched 2026-10-08, the same rates as the product rate-card.ts claude_haiku_5_5 entry, which reproduces the CLI total_cost_usd of a recorded run to 8 digits (not vendor-docs-verified; >=100k-prompt-token override tier recorded, not applied)' },
+});
+/** The card for `model` (a dated snapshot suffix `-YYYYMMDD` is stripped), or null when none exists. Never falls back to another model. */
+export function rateCardFor(model) {
+  const k = String(model ?? '').replace(/-\d{8}$/, '');
+  return Object.prototype.hasOwnProperty.call(RATE_CARDS, k) ? { model: k, ...RATE_CARDS[k] } : null;
+}
+export const unmeasuredNote = (model) => `unmeasured: no rate card for ${model}`;
+/** Rates for the pinned model (null = unmeasured). Every default-rate recompute below uses this. */
+export const RATES_PER_M = rateCardFor(PIN_MODEL)?.rates ?? null;
+/**
+ * R8-model AC3: the rates a turn is priced at follows the model the RESPONSE reported (the resolved id when the run asked for an alias such as `haiku`), not the
+ * round's pin. No observed model (absent/empty) = `fallback` (the pin's rates); an observed model with no card = null (unmeasured), never another model's price.
+ */
+export function ratesForModel(model, fallback = RATES_PER_M) {
+  if (model == null || String(model).trim() === '') return fallback;
+  return rateCardFor(model)?.rates ?? null;
+}
+
+/** Normalise an Anthropic usage object into the fields the cost model prices. */
+export function normUsage(u) {
+  u = u || {};
+  const cc = u.cache_creation || null;
+  const total = u.cache_creation_input_tokens || 0;
+  let w5m = 0, w1h = 0, untiered = 0;
+  if (cc && (cc.ephemeral_5m_input_tokens != null || cc.ephemeral_1h_input_tokens != null)) {
+    w5m = cc.ephemeral_5m_input_tokens || 0; w1h = cc.ephemeral_1h_input_tokens || 0;
+    untiered = Math.max(0, total - w5m - w1h);
+  } else untiered = total;
+  const inp = u.input_tokens || 0, cr = u.cache_read_input_tokens || 0, out = u.output_tokens || 0;
+  return { in: inp, cr, w5m, w1h, wUntiered: untiered, out, ctx: inp + cr + w5m + w1h + untiered };
+}
+/** Price a normalised usage. Untiered writes are priced at the 5m rate AND flagged (never silently 1h). */
+export function priceNorm(n, rates = RATES_PER_M) {
+  if (!rates) return { usd: null, parts: null, untieredFlag: n.wUntiered > 0, unmeasured: true };
+  const parts = {
+    input: n.in * rates.input / 1e6, cacheRead: n.cr * rates.cacheRead / 1e6,
+    write5m: (n.w5m + n.wUntiered) * rates.write5m / 1e6, write1h: n.w1h * rates.write1h / 1e6, output: n.out * rates.output / 1e6,
+  };
+  return { usd: parts.input + parts.cacheRead + parts.write5m + parts.write1h + parts.output, parts, untieredFlag: n.wUntiered > 0 };
+}
+export const priceUsage = (u, rates) => priceNorm(normUsage(u), rates);
+export function sumNorm(list) {
+  const t = { in: 0, cr: 0, w5m: 0, w1h: 0, wUntiered: 0, out: 0, ctx: 0 };
+  for (const n of list) for (const k of Object.keys(t)) if (k !== 'ctx') t[k] += n[k] || 0;
+  t.ctx = Math.max(0, ...list.map((n) => n.ctx));
+  return t;
+}
+/**
+ * The arm's expected write tier. Parent turns of A and B (claude CLI) write 1h; C (anthropic OAuth) writes 5m. Native subagent turns
+ * of A legitimately write 5m (Round 2 evidence), so for A only the PARENT turns are asserted: pass `parentTotal`. Returns warnings.
+ */
+export function tierAssertion(arm, total, parentTotal = null) {
+  const w = [];
+  if (arm === 'C' && total.w1h > 0) w.push(`arm C wrote ${total.w1h} 1h-tier tokens (expected 5m only)`);
+  if (arm === 'A') { const p = parentTotal || total; if (p.w5m > 0) w.push(`arm A parent turns wrote ${p.w5m} 5m-tier tokens (expected 1h only)`); }
+  if (arm === 'B' && total.w5m > 0) w.push(`arm B wrote ${total.w5m} 5m-tier tokens (expected 1h only)`);
+  if (total.wUntiered > 0) w.push(`${total.wUntiered} cache-write tokens carried no tier split (priced at 5m)`);
+  return w;
+}
+
+// ---------------------------------------------------------------------------------------------------
+// Tool-name normalisation: bridged CLI names `mcp__srv__tool`, engine names `srv__tool`, native `Bash`.
+// ---------------------------------------------------------------------------------------------------
+export function splitToolName(name) {
+  let n = String(name || '');
+  if (n.startsWith('mcp__')) n = n.slice(5);
+  const i = n.lastIndexOf('__');
+  return i === -1 ? { server: null, tool: n } : { server: n.slice(0, i), tool: n.slice(i + 2) };
+}
+export const isDispatchName = (name) => { const s = splitToolName(name); return (s.server == null && /^(Agent|Task)$/.test(s.tool)) || (s.server != null && /^agent[-_]mcp$/.test(s.server) && /^(agent|task)$/.test(s.tool)); };
+/**
+ * R5-scorefix AC3: text of a server-executed tool result block's `content` (web_fetch_result: content.source.data; web_search_result[]: title/url/snippet lines;
+ * *_tool_result_error / *_tool_error: `ERROR <error_code>`). Strings and text-block arrays go through blockText. Returns '' when nothing readable is present.
+ */
+export function serverResultText(c) {
+  if (c == null) return '';
+  if (typeof c === 'string' || Array.isArray(c) && !c.some((b) => b && /^web_search_result$/.test(b.type))) return blockText(c);
+  if (Array.isArray(c)) return c.map((b) => [b.title, b.url, b.page_age].filter(Boolean).join(' | ')).join('\n');
+  if (/_error$/.test(String(c.type))) return `ERROR ${c.error_code ?? c.type}`;
+  const doc = c.content; const data = doc?.source?.data ?? (typeof doc === 'string' ? doc : blockText(doc));
+  return [c.url ? `url: ${c.url}` : '', data].filter(Boolean).join('\n');
+}
+export const blockText = (c) => typeof c === 'string' ? c : Array.isArray(c) ? c.map((b) => (b && typeof b.text === 'string') ? b.text : '').join('') : '';
+
+// ---------------------------------------------------------------------------------------------------
+// claude stream-json (arm A stdout, and arm B's spawn.stdout reassembled from the API log)
+// ---------------------------------------------------------------------------------------------------
+export function parseJsonLines(text) {
+  const out = [];
+  for (const l of String(text || '').split('\n')) { const t = l.trim(); if (!t.startsWith('{')) continue; try { out.push(JSON.parse(t)); } catch { /* partial line */ } }
+  return out;
+}
+export function parseCliStream(events) {
+  const o = { init: null, result: null, results: [], rate: [], msgs: new Map(), order: [], toolUses: new Map(), toolResults: new Map(), denials: [], assistantTexts: [] };
+  for (const e of events) {
+    if (e.type === 'system' && e.subtype === 'init') o.init = e;
+    else if (e.type === 'system' && e.subtype === 'permission_denied') o.denials.push(e);
+    else if (e.type === 'rate_limit_event' && e.rate_limit_info) o.rate.push(e.rate_limit_info);
+    else if (e.type === 'result') { o.result = e; o.results.push(e); }
+    else if (e.type === 'assistant' && e.message) {
+      const m = e.message; const id = m.id || `anon${o.order.length}`;
+      let rec = o.msgs.get(id);
+      if (!rec) { rec = { id, model: m.model, parent: e.parent_tool_use_id ?? null, usage: null, stop: null, tools: [], thinking: false }; o.msgs.set(id, rec); o.order.push(id); }
+      if (m.usage) rec.usage = m.usage;                       // LAST usage per message id wins (first-seen is a partial)
+      if (m.stop_reason) rec.stop = m.stop_reason;
+      for (const b of m.content || []) {
+        if (b.type === 'tool_use') { if (!o.toolUses.has(b.id)) { o.toolUses.set(b.id, { id: b.id, name: b.name, input: b.input, parent: rec.parent, msgId: id, seq: o.toolUses.size }); rec.tools.push(b.name); } }
+        else if (b.type === 'text' && b.text && !o.assistantTexts.some((t) => t.msgId === id && t.text === b.text)) o.assistantTexts.push({ msgId: id, parent: rec.parent, text: b.text });
+        else if (b.type === 'thinking') rec.thinking = true;
+      }
+    } else if (e.type === 'user' && Array.isArray(e.message?.content)) {
+      for (const b of e.message.content) if (b.type === 'tool_result') o.toolResults.set(b.tool_use_id, { isError: !!b.is_error, text: blockText(b.content), parent: e.parent_tool_use_id ?? null });
+    }
+  }
+  return o;
+}
+/** Per-turn rows + totals from a parsed stream. `parent`: null = the main agent; else a child (Agent subagent) turn. */
+export function turnsFromCliStream(p) {
+  return p.order.map((id, i) => {
+    const r = p.msgs.get(id); const n = normUsage(r.usage);
+    return { idx: i + 1, id, parent: r.parent, model: r.model, ...n, stop: r.stop, tools: r.tools, thinkingBlock: r.thinking, usd: priceNorm(n, ratesForModel(r.model)).usd };
+  });
+}
+const ZERO_CUM = { usd: 0, in: 0, out: 0, cr: 0, cw: 0 };
+/** Sum a CLI `modelUsage` map over all models. */
+export function sumModelUsage(mu) {
+  const t = { in: 0, out: 0, cr: 0, cw: 0, usd: 0, models: Object.keys(mu || {}) };
+  for (const m of Object.values(mu || {})) { t.in += m.inputTokens || 0; t.out += m.outputTokens || 0; t.cr += m.cacheReadInputTokens || 0; t.cw += m.cacheCreationInputTokens || 0; t.usd += m.costUSD || 0; }
+  return t;
+}
+/**
+ * The claude CLI's own accounting for one phase (AUTHORITATIVE for arm A). A phase can emit several `result` events and each is cumulative
+ * (Round 2: A1 p1 emitted two), and a resumed session is cumulative across phases, so: take the LAST result of the phase, sum `modelUsage`
+ * over all models (parent + subagents), and subtract the previous phase's cumulative (`prior`) to get the phase increment.
+ * Returns { cumulative, increment, nResults } or null without a result. `increment.usd` is null when the CLI reported no cost.
+ */
+export function cliPhaseAccounting(results, prior = null) {
+  const list = Array.isArray(results) ? results : results ? [results] : [];
+  const last = list[list.length - 1]; if (!last) return null;
+  const mu = sumModelUsage(last.modelUsage);
+  const hasMu = mu.models.length > 0;
+  const usd = last.total_cost_usd ?? (hasMu ? mu.usd : null);
+  // without modelUsage (old CLI) fall back to the parent-only usage of every result event
+  const out = hasMu ? mu.out : list.reduce((a, r) => a + (r.usage?.output_tokens || 0), 0);
+  const cumulative = { usd, in: hasMu ? mu.in : 0, out, cr: hasMu ? mu.cr : 0, cw: hasMu ? mu.cw : 0, models: mu.models, fromModelUsage: hasMu };
+  const b = prior || ZERO_CUM;
+  return { cumulative, increment: { usd: usd == null ? null : usd - b.usd, in: cumulative.in - b.in, out: cumulative.out - b.out, cr: cumulative.cr - b.cr, cw: cumulative.cw - b.cw }, nResults: list.length };
+}
+/** Price explicit token counts (with the cache-write tier split) at list rates. */
+export function priceTokens({ in: i = 0, out = 0, cr = 0, w5m = 0, w1h = 0 }, rates = RATES_PER_M) {
+  if (!rates) return null;
+  return (i * rates.input + out * rates.output + cr * rates.cacheRead + w5m * rates.write5m + w1h * rates.write1h) / 1e6;
+}
+/**
+ * Per-message `output_tokens` in a claude stream-json are mid-stream placeholders (Round 1: 31 summed vs 2473 in the result); input and cache
+ * counts are exact. Scale the per-turn output so the phase sums to `want` (an ESTIMATE per turn, exact in total) and re-price.
+ * `want` is the phase's authoritative output: cliPhaseAccounting().increment.out (whole phase, parent + subagents). A number or a bare
+ * result/array is also accepted (legacy callers: result.usage.output_tokens). A non-positive target is a no-op (never scale to <= 0).
+ */
+export function reconcileCliOutput(turns, wantOrResult) {
+  let want = wantOrResult;
+  if (want && typeof want === 'object') { const acc = cliPhaseAccounting(want); want = acc ? acc.cumulative.out : undefined; }
+  const have = turns.reduce((a, t) => a + t.out, 0);
+  if (!(want > 0) || !turns.length || want === have) return turns;
+  const f = have > 0 ? want / have : null;
+  return turns.map((t, i) => { const out = f != null ? t.out * f : (i === 0 ? want : 0); const n = { ...t, out, outScaled: true }; return { ...n, usd: priceNorm(n, ratesForModel(t.model)).usd }; });
+}
+/** Parent-level calls (parent === null) joined with their results, in order. */
+export function callsFromCliStream(p) {
+  return [...p.toolUses.values()].filter((t) => t.parent == null).map((t) => {
+    const r = p.toolResults.get(t.id);
+    return { id: t.id, name: t.name, input: t.input, isError: r ? r.isError : null, resultText: r ? r.text : null, seq: t.seq };
+  });
+}
+/** EVERY tool call of the stream, parent AND child (native subagent) level, with `depth` 0 for the parent and 1 for a child (R2.AC8 / R6 need the workers' calls too). */
+export function allCallsFromCliStream(p) {
+  return [...p.toolUses.values()].map((t) => {
+    const r = p.toolResults.get(t.id);
+    return { id: t.id, name: t.name, input: t.input, isError: r ? r.isError : null, resultText: r ? r.text : null, seq: t.seq, depth: t.parent == null ? 0 : 1 };
+  });
+}
+
+// ---------------------------------------------------------------------------------------------------
+// Anthropic SSE (arm C http.response bodies)
+// ---------------------------------------------------------------------------------------------------
+/**
+ * R6-prep AC3: the CONTEXT a turn sent = the usage of the request as sampled, i.e. `message_start` (what the model read). The final `message_delta` usage is
+ * CUMULATIVE over a server-tool turn's internal sampling iterations (web_fetch re-reads the prefix), so it is the right basis for BILLING (`sse.usage`) but ~2x too
+ * large for context. Falls back to the billing usage when a stream carries no message_start. Pure.
+ */
+export function turnContextOf(sse) { return normUsage(sse?.startUsage ?? sse?.usage).ctx; }
+export function parseSse(text) {
+  const o = { id: null, model: null, usage: {}, startUsage: null, stop: null, texts: [], toolUses: [], thinking: false, outputTokens: null, serverResults: new Map() };
+  const blocks = new Map();
+  for (const line of String(text || '').split('\n')) {
+    if (!line.startsWith('data:')) continue;
+    let d; try { d = JSON.parse(line.slice(5).trim()); } catch { continue; }
+    if (d.type === 'message_start') { o.id = d.message.id; o.model = d.message.model; o.usage = { ...d.message.usage }; o.startUsage = { ...d.message.usage }; }
+    else if (d.type === 'content_block_start') { blocks.set(d.index, { type: d.content_block.type, name: d.content_block.name, id: d.content_block.id, json: '', text: '' }); if (d.content_block.type === 'thinking') o.thinking = true;
+      if (/_tool_result$/.test(String(d.content_block.type)) && d.content_block.tool_use_id) o.serverResults.set(d.content_block.tool_use_id, { isError: /_tool_error$/.test(String(d.content_block.content?.type)), text: serverResultText(d.content_block.content) }); }
+    else if (d.type === 'content_block_delta') {
+      const b = blocks.get(d.index); if (!b) continue;
+      if (d.delta.type === 'text_delta') b.text += d.delta.text; else if (d.delta.type === 'input_json_delta') b.json += d.delta.partial_json;
+    } else if (d.type === 'message_delta') {
+      if (d.delta?.stop_reason) o.stop = d.delta.stop_reason;
+      if (d.usage) { if (d.usage.output_tokens != null) o.outputTokens = d.usage.output_tokens; for (const k of ['input_tokens', 'cache_read_input_tokens', 'cache_creation_input_tokens']) if (d.usage[k] != null && d.usage[k] > 0) o.usage[k] = d.usage[k]; }
+    }
+  }
+  for (const b of blocks.values()) {
+    if (b.type === 'text' && b.text) o.texts.push(b.text);
+    else if (b.type === 'tool_use' || b.type === 'server_tool_use') { let input = {}; try { input = b.json ? JSON.parse(b.json) : {}; } catch { input = { _unparsed: b.json }; } o.toolUses.push({ id: b.id, name: b.name, input, server: b.type === 'server_tool_use' }); }
+  }
+  // message_start carries a placeholder output count; the LAST message_delta is authoritative (LEARNINGS item 1)
+  o.usage = { ...o.usage, output_tokens: o.outputTokens != null ? o.outputTokens : o.usage.output_tokens };
+  return o;
+}
+
+// ---------------------------------------------------------------------------------------------------
+// agent-mcp API log (<logs>/api/*.jsonl): per-task views for arms B and C
+// ---------------------------------------------------------------------------------------------------
+export function readJsonlFiles(dir, filter = () => true) {
+  const out = []; if (!fs.existsSync(dir)) return out;
+  for (const f of fs.readdirSync(dir).sort()) {
+    if (!filter(f)) continue; const p = path.join(dir, f); if (!fs.statSync(p).isFile()) continue;
+    for (const l of fs.readFileSync(p, 'utf8').split('\n')) { if (!l.trim()) continue; try { out.push(JSON.parse(l)); } catch { /* ignore */ } }
+  }
+  return out;
+}
+export function findApiLogs(logsDir) {
+  const d = path.join(logsDir, 'api');
+  const direct = readJsonlFiles(d, (f) => f.endsWith('.jsonl'));
+  if (direct.length) return direct;
+  // some layouts nest by namespace: walk one level
+  const all = [];
+  if (fs.existsSync(logsDir)) for (const sub of fs.readdirSync(logsDir)) { const p = path.join(logsDir, sub, 'api'); if (fs.existsSync(p)) all.push(...readJsonlFiles(p, (f) => f.endsWith('.jsonl'))); }
+  return all;
+}
+/** Arm B: the claude stream of one task, reassembled from `spawn.stdout` chunks (chunks are NOT line-aligned). */
+/**
+ * Round 4 thinking invariant: count thinking content blocks across EVERY task of an agent-mcp run (parent AND worker/grandchild tasks), not just the
+ * root. B: assistant messages in every spawn.stdout stream (deduped per message id); C: thinking blocks in every http.response SSE body.
+ */
+export function thinkingBlocksInApiLogs(apiEvents) {
+  const stdout = new Map(); let n = 0;
+  for (const e of apiEvents || []) {
+    if (e.event === 'spawn.stdout') { const k = `${e.task_id}|${e.call_id}`; stdout.set(k, (stdout.get(k) || '') + (e.body || '')); }
+    else if (e.event === 'http.response' && e.body && parseSse(e.body).thinking) n++;
+  }
+  for (const text of stdout.values()) {
+    const seen = new Set();
+    for (const ev of parseJsonLines(text)) if (ev.type === 'assistant' && ev.message) for (const b of ev.message.content || []) if ((b.type === 'thinking' || b.type === 'redacted_thinking') && !seen.has(`${ev.message.id}|${b.thinking ?? ''}`)) { seen.add(`${ev.message.id}|${b.thinking ?? ''}`); n++; }
+  }
+  return n;
+}
+export function cliEventsForTask(apiEvents, taskId) {
+  const byCall = new Map(); let truncated = false;
+  for (const e of apiEvents) if (e.event === 'spawn.stdout' && e.task_id === taskId) { byCall.set(e.call_id, (byCall.get(e.call_id) || '') + (e.body || '')); if (e.truncated) truncated = true; }
+  const events = []; for (const text of byCall.values()) events.push(...parseJsonLines(text));
+  const start = apiEvents.find((e) => e.event === 'spawn.start' && e.task_id === taskId);
+  return { events, truncated, spawn: start ? { args: start.args, cwd: start.cwd, env_names: start.env_names } : null, spawns: byCall.size };
+}
+/** Arm C: one entry per model request of a task: request body, parsed SSE, response headers/status. */
+export function httpTurnsForTask(apiEvents, taskId) {
+  const reqs = new Map(), resps = new Map();
+  for (const e of apiEvents) { if (e.task_id !== taskId) continue; if (e.event === 'http.request') reqs.set(e.call_id, e); else if (e.event === 'http.response') resps.set(e.call_id, e); }
+  const turns = [];
+  for (const [callId, rq] of reqs) {
+    const rs = resps.get(callId); let body = null;
+    try { body = typeof rq.body === 'string' ? JSON.parse(rq.body) : rq.body; } catch { body = null; }
+    turns.push({ callId, ts: rq.ts, body, truncatedReq: !!rq.truncated, status: rs?.status ?? null, headers: rs?.headers ?? {}, sse: rs ? parseSse(rs.body) : null, truncatedResp: !!rs?.truncated });
+  }
+  return turns.sort((a, b) => String(a.ts).localeCompare(String(b.ts)));
+}
+/** Calls + results of an http-turn sequence: tool_use from each response, result from the NEXT request's trailing tool_result blocks. */
+export function callsFromHttpTurns(turns) {
+  const calls = []; const results = new Map();
+  for (const t of turns) {
+    const msgs = t.body?.messages || [];
+    for (const m of msgs) if (Array.isArray(m.content)) for (const b of m.content) if (b.type === 'tool_result') results.set(b.tool_use_id, { isError: !!b.is_error, text: blockText(b.content) });
+      else if (/_tool_result$/.test(String(b.type)) && b.tool_use_id) results.set(b.tool_use_id, { isError: /_error$/.test(String(b.content?.type)), text: serverResultText(b.content) });   // R5-scorefix AC3: server-executed tool results round-trip in the assistant message
+  }
+  for (const t of turns) for (const [id, r] of t.sse?.serverResults || []) if (!results.has(id)) results.set(id, r);
+  for (const t of turns) for (const u of t.sse?.toolUses || []) { const r = results.get(u.id); calls.push({ id: u.id, name: u.name, input: u.input, isError: r ? r.isError : null, resultText: r ? r.text : null, server: u.server }); }
+  return calls;
+}
+export function rateLimitFromHeaders(h) {
+  const get = (k) => h?.[`anthropic-ratelimit-unified-${k}`];
+  if (!h || get('status') == null) return null;
+  return { status: get('status'), representative: get('representative-claim'), five_hour: { utilization: num(get('5h-utilization')), status: get('5h-status'), reset: get('5h-reset') }, seven_day: { utilization: num(get('7d-utilization')), status: get('7d-status'), reset: get('7d-reset') } };
+}
+const num = (x) => x == null ? null : Number(x);
+export function rateLimitFromCli(info) {
+  if (!info) return null; const w = info.unifiedWindows || {};
+  return { status: info.status, representative: info.rateLimitType, five_hour: { utilization: w.five_hour?.utilization ?? null, reset: w.five_hour?.resetsAt ?? null }, seven_day: { utilization: w.seven_day?.utilization ?? null, reset: w.seven_day?.resetsAt ?? null } };
+}
+
+// ---------------------------------------------------------------------------------------------------
+// Call metrics (LEARNINGS 7.6): wasted / error / duplicate calls, parallelism
+// ---------------------------------------------------------------------------------------------------
+/**
+ * Process metrics for one phase (not pass/fail traps). `wasted` = parent-level calls issued AFTER the last green test run
+ * (a result containing `fail 0`), i.e. after the work was demonstrably done; null when the tests never went green.
+ * `errors` = calls whose result was an error; `duplicates` = identical (name,input) repeats.
+ */
+export function callMetrics(calls, exp, _phase) {
+  const advertised = exp?.advertisedTools ?? [];
+  const facts = calls.map((c) => toolNameFacts(c.name, advertised, { server: c.server === true }));
+  let completeAt = null;
+  calls.forEach((c, i) => { if (/(?:^|\s)fail 0\b/m.test(c.resultText || '') && /(^|__)(Bash|shell_execute|shell)$/.test(splitToolName(c.name).tool)) completeAt = i; });
+  // I-toolname: duplicates and byTool key on the CANONICAL tool name, so one tool reached through two spellings is one tool.
+  const seen = new Set(); let dup = 0;
+  calls.forEach((c, i) => { const key = `${facts[i].canonical}|${JSON.stringify(c.input)}`; if (seen.has(key)) dup++; seen.add(key); });
+  return { total: calls.length, errors: calls.filter((c) => c.isError === true).length, duplicates: dup, ...toolTally(facts), completeAt, wasted: completeAt == null ? null : calls.length - completeAt - 1 };
+}
+
+// ---------------------------------------------------------------------------------------------------
+// I-toolname: one canonical identity for a tool across the three spellings the arms show the model.
+//   A  native built-ins            Bash, Read, Edit, Write, Agent, WebFetch ...            (kept as-is)
+//   B  claudecli bridged servers   mcp__<server>__<tool>                                    (mcp__ stripped)
+//   C  anthropic provider          <server>__<tool> (the model sometimes drops the prefix; the engine tolerates it)
+// Canonical form is `<server>__<tool>` for server tools and the native name for built-ins. The RAW spelling stays visible (rawNames,
+// bareNameCalls) so the product defect "the model emits a bare name" is measured, never normalised away.
+// ---------------------------------------------------------------------------------------------------
+/** Claude Code built-in tools are PascalCase and never `server__tool`; this set is documentation, the PascalCase test is the rule. */
+export const NATIVE_TOOLS = new Set(['Bash', 'Read', 'Edit', 'Write', 'MultiEdit', 'Glob', 'Grep', 'Agent', 'Task', 'WebFetch', 'WebSearch', 'NotebookEdit', 'TodoWrite', 'Skill', 'ToolSearch', 'TaskStop', 'TaskOutput', 'SendMessage', 'ListAgents', 'Monitor', 'Workflow']);
+const isNativeTool = (n) => NATIVE_TOOLS.has(n) || /^[A-Z][A-Za-z]*$/.test(n);
+const SERVER_WEB_TOOL = /^web_(fetch|search)$/;
+const stripMcp = (n) => String(n ?? '').replace(/^mcp__/, '');
+const advertisedNames = (advertised) => [...new Set((advertised || []).map((a) => stripMcp(typeof a === 'string' ? a : a?.name ?? a?.type)).filter(Boolean))];
+/**
+ * Everything known about one call's name. `advertised` = the tool names the model was shown (any spelling, `mcp__` allowed); `server` = the call was an
+ * Anthropic `server_tool_use`. kind: native | qualified | server_tool_use | bare_resolved (exactly one advertised `server__tool` ends in the bare name) |
+ * bare_ambiguous (several do: left bare, never guessed) | bare_unresolved (none, or nothing advertised). `bare` = the model dropped the server prefix of an
+ * advertised server tool (resolved or ambiguous); a server tool's own bare name (web_fetch) and native tools are never `bare`.
+ */
+export function toolNameFacts(name, advertised = [], { server = false } = {}) {
+  const raw = String(name ?? ''); const n = stripMcp(raw);
+  if (SERVER_WEB_TOOL.test(n) && (server || advertisedNames(advertised).includes(n))) return { raw, canonical: `web__${n}`, kind: 'server_tool_use', bare: false };
+  if (n.includes('__')) return { raw, canonical: n, kind: 'qualified', bare: false };
+  if (isNativeTool(n)) return { raw, canonical: n, kind: 'native', bare: false };
+  const hits = advertisedNames(advertised).filter((a) => { const i = a.lastIndexOf('__'); return i > 0 && a.slice(i + 2) === n; });
+  if (hits.length === 1) return { raw, canonical: hits[0], kind: 'bare_resolved', bare: true };
+  if (hits.length > 1) return { raw, canonical: n, kind: 'bare_ambiguous', bare: true };
+  return { raw, canonical: n, kind: 'bare_unresolved', bare: false };
+}
+/** The canonical tool name (see toolNameFacts). */
+export const canonicalToolName = (name, advertisedTools = [], opts = {}) => toolNameFacts(name, advertisedTools, opts).canonical;
+/** Counters over a list of toolNameFacts: byTool (canonical), rawNames (raw spelling -> count), bareNameCalls (+ per canonical tool), serverToolCalls, unresolvedBare. */
+function toolTally(facts) {
+  const byTool = {}, rawNames = {}, bareNameByTool = {}; let bareNameCalls = 0, serverToolCalls = 0, unresolvedBare = 0;
+  for (const f of facts) {
+    byTool[f.canonical] = (byTool[f.canonical] || 0) + 1; rawNames[f.raw] = (rawNames[f.raw] || 0) + 1;
+    if (f.bare) { bareNameCalls++; bareNameByTool[f.canonical] = (bareNameByTool[f.canonical] || 0) + 1; }
+    if (f.kind === 'server_tool_use') serverToolCalls++; else if (f.kind === 'bare_unresolved') unresolvedBare++;
+  }
+  return { byTool, bareNameCalls, bareNameByTool, serverToolCalls, unresolvedBare, rawNames };
+}
+
+/**
+ * One category taxonomy for the instrument's metrics.byCategory (drive.mjs). Used buckets keep their R5-R8 meaning; `collect` (agent-mcp `result`: B/C must
+ * poll a worker's result, A's Agent returns it inline) and `control` (administration, scheduling, session and harness tools nobody dispatches work through)
+ * are separate so `dispatch` stays comparable across arms. The judge's own toolCategory (judge.mjs) is a different taxonomy and is deliberately untouched.
+ */
+export const TOOL_CATEGORIES = Object.freeze([
+  ['dispatch', /(^|__)(Agent|Task|agent|task|tasks_batch)$/], ['collect', /(^|__)result$/], ['shell', /(^|__)(Bash|shell_execute|shell)$/],
+  ['edit', /(^|__)(Edit|edit_file|NotebookEdit)$/], ['write', /(^|__)(Write|write_file|create_directory|move_file)$/],
+  ['read', /(^|__)(Read|read_text_file|read_multiple_files|read_file|read_media_file)$/],
+  ['search', /(^|__)(Glob|Grep|search_files|directory_tree|list_directory|list_directory_with_sizes|list_allowed_directories|get_file_info)$/], ['mcp', /(^|__)get_ticket$/],
+  ['web', /web_(fetch|search)|WebFetch|WebSearch/],
+  ['control', /(^|__)(guide|pricing_history|pricing_refresh|usage_query|session_(clear|close|list|update)|task_(cancel|list|resume)|request_human_input|ToolSearch|Skill|TaskStop|TaskOutput|TodoWrite|AskUserQuestion|Cron(Create|Delete|List)|ScheduleWakeup|Monitor|PushNotification|RemoteTrigger|ReportFindings|SendMessage|ListAgents|EnterWorktree|ExitWorktree|DesignSync|Workflow)$/],
+]);
+/** Category of a tool name in any spelling; 'other' only for a tool the taxonomy does not know. */
+export function toolCategoryOf(name) {
+  const s = splitToolName(name); const base = s.server ? `${s.server}__${s.tool}` : s.tool;
+  for (const [c, re] of TOOL_CATEGORIES) if (re.test(base) || re.test(s.tool)) return c;
+  return 'other';
+}
+
+// ---------------------------------------------------------------------------------------------------
+// I-toolname: offline re-derivation of a saved run's tool counts at canonical level (read-only; writes nothing).
+// ---------------------------------------------------------------------------------------------------
+/**
+ * Tool-call rows of a saved run, one entry per model task (B/C) or CLI phase (A): `{ id, advertised, calls: [{ name, server, depth }] }` with `depth` 0
+ * for the root agent and 1 for a worker/subagent. Source: A `A.phase<N>.stream.jsonl`; B `spawn.stdout` streams in logs/api; C `http.*` events in logs/api.
+ * Root task ids come from record.json (metrics.phases[].taskId). Names and kinds only, no bodies.
+ */
+export function extractToolTasks(runDir, arm) {
+  const tasks = [];
+  if (arm === 'A') {
+    for (const ph of [1, 2]) {
+      const f = path.join(runDir, `A.phase${ph}.stream.jsonl`); if (!fs.existsSync(f)) continue;
+      const p = parseCliStream(parseJsonLines(fs.readFileSync(f, 'utf8')));
+      tasks.push({ id: `phase${ph}`, advertised: p.init?.tools || [], calls: [...p.toolUses.values()].map((t) => ({ name: t.name, server: false, depth: t.parent == null ? 0 : 1 })) });
+    }
+    return tasks;
+  }
+  const rec = JSON.parse(fs.readFileSync(path.join(runDir, 'record.json'), 'utf8'));
+  const roots = new Set((rec.metrics?.phases || []).map((p) => p.taskId).filter(Boolean));
+  const api = findApiLogs(path.join(runDir, 'logs'));
+  const ids = [...new Set(api.map((e) => e.task_id).filter(Boolean))].sort();
+  for (const id of ids) {
+    const depth = roots.has(id) ? 0 : 1;
+    if (arm === 'B') {
+      const p = parseCliStream(cliEventsForTask(api, id).events); if (!p.toolUses.size && !p.init) continue;
+      tasks.push({ id, advertised: p.init?.tools || [], calls: [...p.toolUses.values()].filter((t) => t.parent == null).map((t) => ({ name: t.name, server: false, depth })) });
+    } else {
+      const turns = httpTurnsForTask(api, id); if (!turns.length) continue;
+      const adv = turns.find((t) => (t.body?.tools || []).length)?.body?.tools || [];
+      tasks.push({ id, advertised: adv.map((t) => t.name || t.type), calls: callsFromHttpTurns(turns).map((c) => ({ name: c.name, server: c.server === true, depth })) });
+    }
+  }
+  return tasks;
+}
+/** Canonical-level counts over extractToolTasks rows. scope: 'all' (parent + workers) | 'parent' (depth 0 only). Also byCategory (drive's taxonomy). */
+export function toolCountsOf(tasks, { scope = 'all' } = {}) {
+  const facts = [];
+  for (const t of tasks) for (const c of t.calls) if (scope === 'all' || c.depth === 0) facts.push(toolNameFacts(c.name, t.advertised, { server: c.server === true }));
+  const byCategory = {}; for (const f of facts) { const k = toolCategoryOf(f.canonical); byCategory[k] = (byCategory[k] || 0) + 1; }
+  return { scope, total: facts.length, ...toolTally(facts), byCategory };
+}
+/** Re-derive a saved run's canonical tool counts from its own logs. Read-only. */
+export const rederiveToolCounts = (runDir, arm, opts) => toolCountsOf(extractToolTasks(runDir, arm), opts);
+
+// ---------------------------------------------------------------------------------------------------
+// Secret scan (node, not shell pipes). Never prints a match; redacts in place and counts per kind.
+// ---------------------------------------------------------------------------------------------------
+export const SECRET_PATTERNS = [
+  ['anthropic_key', /sk-ant-[A-Za-z0-9_-]{16,}/g], ['openai_style_key', /sk-[A-Za-z0-9]{32,}/g], ['github_token', /gh[pousr]_[A-Za-z0-9]{30,}/g],
+  ['aws_access_key', /AKIA[0-9A-Z]{16}/g], ['jwt', /eyJ[A-Za-z0-9_-]{15,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{5,}/g],
+  ['bearer', /Bearer\s+(?!\[?REDACTED)[A-Za-z0-9._~+/=-]{24,}/g], ['slack_token', /xox[abprs]-[A-Za-z0-9-]{10,}/g],
+];
+export function redactText(text) {
+  const hits = {}; let t = text;
+  for (const [kind, re] of SECRET_PATTERNS) t = t.replace(re, () => { hits[kind] = (hits[kind] || 0) + 1; return `[REDACTED:${kind}]`; });
+  return { text: t, hits };
+}
+/** Scan every file under `dir`; redact in place; chmod 600 files / 700 dirs. Returns {files, hits:[{file,kind,count}]}. */
+export function scanAndLock(dir) {
+  const hits = []; let files = 0;
+  const walk = (d) => {
+    for (const ent of fs.readdirSync(d, { withFileTypes: true })) {
+      const p = path.join(d, ent.name);
+      if (ent.isSymbolicLink()) continue;
+      if (ent.isDirectory()) { walk(p); try { fs.chmodSync(p, 0o700); } catch { /* ignore */ } continue; }
+      if (!ent.isFile()) continue; files++;
+      let buf; try { buf = fs.readFileSync(p); } catch { continue; }
+      if (buf.includes(0) && buf.length > 0 && !/\.(jsonl|json|txt|log|md)$/.test(p)) { try { fs.chmodSync(p, 0o600); } catch { /* ignore */ } continue; }   // binary (sqlite): lock only
+      const { text, hits: h } = redactText(buf.toString('utf8'));
+      for (const [kind, count] of Object.entries(h)) hits.push({ file: path.relative(dir, p), kind, count });
+      if (Object.keys(h).length) fs.writeFileSync(p, text);
+      try { fs.chmodSync(p, 0o600); } catch { /* ignore */ }
+    }
+  };
+  if (fs.existsSync(dir)) { walk(dir); try { fs.chmodSync(dir, 0o700); } catch { /* ignore */ } }
+  return { files, hits };
+}
+
+// ---------------------------------------------------------------------------------------------------
+// Process tracking: the driver may signal ONLY a process it spawned itself, or a descendant of one (PARITY-R10-prep AC4; README "What this harness may signal").
+//   A signal is sent iff ALL of these hold at the moment of the call (and again before a SIGKILL that follows a SIGTERM):
+//     1. the target pid is an integer > 1, is not this process, and is not an ANCESTOR of this process (the interactive claude session that launched the driver is one);
+//     2. the target is a registered ROOT (OwnedRegistry.add right after the spawn, which itself requires pid's ppid === this process) whose `ps` start time still equals the one recorded
+//        at registration (so a pid recycled by the OS to somebody else is not "ours"), or is a DESCENDANT of such a root, computed from the live process table at that moment;
+//     3. a process-group signal (kill(-pgid)) additionally needs: the group leader is a registered root that created the group (pgid === pid), the pgid is not this process's own group nor the
+//        group of any ancestor, and every member of the group is the leader or one of its descendants.
+//   There is no signal by process name or pattern anywhere; with no registry nothing is signalled (fail closed).
+// ---------------------------------------------------------------------------------------------------
+const LSTART_RE = /^\s*(\d+)\s+(\d+)\s+(\d+)\s+(\w{3}\s+\w{3}\s+\d+\s+\d\d:\d\d:\d\d\s+\d{4})\s+(.*)$/;
+export function psTable() {
+  const out = execFileSync('ps', ['-axo', 'pid=,ppid=,pgid=,lstart=,command='], { encoding: 'utf8', maxBuffer: 1 << 26 });
+  return out.split('\n').map((l) => l.match(LSTART_RE)).filter(Boolean).map((m) => ({ pid: +m[1], ppid: +m[2], pgid: +m[3], lstart: m[4].replace(/\s+/g, ' '), command: m[5] }));
+}
+export function descendantsOf(rootPids, table = psTable()) {
+  const kids = new Map(); for (const p of table) { if (!kids.has(p.ppid)) kids.set(p.ppid, []); kids.get(p.ppid).push(p); }
+  const seen = new Set(); const stack = [...rootPids]; const found = [];
+  while (stack.length) { const pid = stack.pop(); for (const k of kids.get(pid) || []) if (!seen.has(k.pid)) { seen.add(k.pid); found.push(k); stack.push(k.pid); } }
+  return found;
+}
+export const alive = (pid) => { if (!Number.isInteger(pid) || pid <= 1) return false; try { process.kill(pid, 0); return true; } catch { return false; } };   // signal 0 delivers nothing; it only probes existence
+/** pids of every ancestor of `pid` (parent, grandparent, ... up to 1), from the process table. */
+export function ancestorsOf(pid, table = psTable()) {
+  const byPid = new Map(table.map((p) => [p.pid, p])); const out = new Set(); let cur = byPid.get(pid)?.ppid; let guard = 0;
+  while (cur != null && cur > 0 && !out.has(cur) && guard++ < 1000) { out.add(cur); cur = byPid.get(cur)?.ppid; }
+  return out;
+}
+/** Registry of the processes THIS driver spawned. `add` refuses a pid that is not a direct child of this process or whose start time cannot be read (it then can never be signalled). */
+export class OwnedRegistry {
+  constructor(self = process.pid) { this.self = self; this.m = new Map(); this.rejected = []; }
+  add(pid, table = psTable()) {
+    const row = table.find((p) => p.pid === pid);
+    if (!Number.isInteger(pid) || pid <= 1 || !row || row.ppid !== this.self || !row.lstart) { this.rejected.push({ pid, reason: !row ? 'not in the process table' : row.ppid !== this.self ? `ppid ${row.ppid} is not this driver (${this.self})` : 'invalid pid or no start time' }); return false; }
+    this.m.set(pid, { pid, lstart: row.lstart, pgid: row.pgid }); return true;
+  }
+  has(pid) { return this.m.has(pid); }
+  get size() { return this.m.size; }
+  pids() { return [...this.m.keys()]; }
+  clear() { this.m.clear(); }
+  /** registered roots that are still the SAME process (alive, start time unchanged, still a child of this driver). */
+  validRoots(table = psTable()) { return [...this.m.values()].filter((e) => { const r = table.find((p) => p.pid === e.pid); return r && r.lstart === e.lstart && r.ppid === this.self; }).map((e) => e.pid); }
+}
+/** Everything that may be signalled right now (valid owned roots + their live descendants), minus the protected set. Pure over `table`. */
+export function signalAllowance(registry, table = psTable(), self = process.pid) {
+  const protectedPids = new Set([self, ...ancestorsOf(self, table)]);
+  const roots = registry.validRoots(table).filter((p) => !protectedPids.has(p)); const desc = descendantsOf(roots, table).filter((p) => !protectedPids.has(p.pid));
+  const lstart = new Map(table.map((p) => [p.pid, p.lstart])); const allowed = new Set([...roots, ...desc.map((p) => p.pid)]);
+  return { allowed, lstart, protectedPids, roots, descendants: desc.map((p) => p.pid) };
+}
+/** Refusal codes of the signal guards, in the order they are evaluated. */
+export const REFUSAL = Object.freeze({ PID_RANGE: 'pid-range', SELF: 'self', ANCESTOR: 'ancestor', NOT_OWNED: 'not-owned', RECYCLED: 'recycled', NOT_CHILD: 'not-child' });
+/**
+ * Why `pid` may NOT be signalled right now (a REFUSAL code), or null when it may. Guards, in order: pid range (integer > 1), this process, an ancestor of this process, a registered root whose start time
+ * changed (recycled pid), a registered root that is no longer a child of this driver, and anything that is neither a registered root nor a descendant of a valid one (not owned).
+ */
+export function refusalFor(pid, registry, table = psTable(), self = process.pid) {
+  if (!Number.isInteger(pid) || pid <= 1) return REFUSAL.PID_RANGE;
+  if (pid === self) return REFUSAL.SELF;
+  if (ancestorsOf(self, table).has(pid)) return REFUSAL.ANCESTOR;
+  const e = registry.m.get(pid); const row = table.find((p) => p.pid === pid);
+  if (e) { if (!row || row.lstart !== e.lstart) return REFUSAL.RECYCLED; if (row.ppid !== registry.self) return REFUSAL.NOT_CHILD; return null; }
+  if (descendantsOf(registry.validRoots(table), table).some((p) => p.pid === pid)) return null;
+  return REFUSAL.NOT_OWNED;
+}
+/** Kill (TERM, then KILL after `graceMs`) those of `pids` that are owned roots or their descendants; refuse every other pid. Re-validates identity before the KILL. Returns the swept pids; `.refused` lists `{pid, code}`. */
+export async function sweepPids(pids, graceMs = 1500, registry = null) {
+  const swept = []; swept.refused = [];
+  if (!(registry instanceof OwnedRegistry)) { for (const pid of new Set(pids)) swept.refused.push({ pid, code: 'no-registry' }); return swept; }
+  const table = psTable(); const targets = [];
+  for (const pid of new Set(pids)) { const code = refusalFor(pid, registry, table); if (code) swept.refused.push({ pid, code }); else if (alive(pid)) targets.push({ pid, lstart: table.find((p) => p.pid === pid)?.lstart }); }
+  for (const t of targets) { swept.push(t.pid); try { process.kill(t.pid, 'SIGTERM'); } catch { /* gone */ } }
+  const t0 = Date.now(); while (Date.now() - t0 < graceMs && targets.some((t) => alive(t.pid))) await new Promise((r) => setTimeout(r, 100));
+  const table2 = psTable();
+  for (const t of targets) if (alive(t.pid)) {
+    // identity re-check before the KILL: same start time, and every guard still passes
+    const code = refusalFor(t.pid, registry, table2); const same = table2.find((p) => p.pid === t.pid)?.lstart === t.lstart;
+    if (!code && same) { try { process.kill(t.pid, 'SIGKILL'); } catch { /* gone */ } } else swept.refused.push({ pid: t.pid, code: code ?? 'recycled-before-kill' });
+  }
+  return swept;
+}
+/** SIGTERM the process GROUP of an owned, detached child (the `claude -p` turn). Refuses unless every rule in the header holds. @returns {{ok:boolean, code?:string}} */
+export function killOwnedGroup(pid, signal, registry, { table = psTable(), self = process.pid } = {}) {
+  const refuse = (code) => ({ ok: false, code });
+  if (!(registry instanceof OwnedRegistry)) return refuse('no-registry');
+  const base = refusalFor(pid, registry, table, self); if (base) return refuse(base);   // pid range, self, ancestor, recycled, not a child, not owned
+  if (!registry.m.has(pid)) return refuse(REFUSAL.NOT_OWNED);   // a group is signalled only through a registered ROOT, never through a descendant pid
+  const me = table.find((p) => p.pid === self); const row = table.find((p) => p.pid === pid);
+  if (!row || row.pgid !== pid) return refuse('not-group-leader');
+  const protPgids = new Set([me?.pgid, ...[...ancestorsOf(self, table)].map((a) => table.find((p) => p.pid === a)?.pgid)].filter((x) => x != null));
+  if (protPgids.has(pid)) return refuse('protected-group');
+  const desc = new Set(descendantsOf([pid], table).map((p) => p.pid));
+  if (table.some((p) => p.pgid === pid && p.pid !== pid && !desc.has(p.pid))) return refuse('foreign-group-member');
+  try { process.kill(-pid, signal); return { ok: true }; } catch (e) { return { ok: false, code: `kill-failed:${e?.code ?? e}` }; }
+}
+
+// ---------------------------------------------------------------------------------------------------
+// Environment allowlist (LEARNINGS 7.5; advisor 3). Session-identity vars are stripped for EVERY arm.
+// ---------------------------------------------------------------------------------------------------
+export const ENV_ALLOW = ['PATH', 'HOME', 'USER', 'LOGNAME', 'SHELL', 'TMPDIR', 'LANG', 'LC_ALL', 'LC_CTYPE', 'TERM', 'TZ', 'CLAUDE_CONFIG_DIR', 'XDG_CONFIG_HOME', 'XDG_CACHE_HOME', 'XDG_DATA_HOME', 'SSL_CERT_FILE', 'NODE_EXTRA_CA_CERTS', 'HTTPS_PROXY', 'HTTP_PROXY', 'NO_PROXY', 'https_proxy', 'http_proxy', 'no_proxy'];
+/** Verbatim copy of claudecli.ts CLAUDE_SESSION_ENV_DENYLIST (the enclosing Claude Code session's identity). */
+export const CLAUDE_SESSION_ENV_DENYLIST = ['CLAUDECODE', 'CLAUDE_CODE_ENTRYPOINT', 'CLAUDE_CODE_SSE_PORT', 'CLAUDE_CODE_SESSION_ID', 'CLAUDE_SESSION_ID'];
+export function cleanEnv(extra = {}, base = process.env) {
+  const env = {};
+  for (const k of ENV_ALLOW) if (base[k] !== undefined) env[k] = base[k];
+  Object.assign(env, extra);
+  for (const k of CLAUDE_SESSION_ENV_DENYLIST) delete env[k];
+  return env;
+}
+/** The two envs the claudecli provider sets for every worker (claudecli.ts buildSubprocessEnv). */
+export const CLAUDECLI_PROVIDER_ENVS = { CLAUDE_CODE_DISABLE_CLAUDE_MDS: '1', CLAUDE_CODE_DISABLE_AUTO_MEMORY: '1' };
+
+// ---------------------------------------------------------------------------------------------------
+// Dispatch evidence (added for the realistic-workflow task)
+// ---------------------------------------------------------------------------------------------------
+/** A tool call that RUNS a subagent: native Agent/Task, or agent-mcp `task` / `tasks_batch` (the `agent` call only opens a session). */
+export const isRunName = (name) => { const s = splitToolName(name); return (s.server == null && /^(Agent|Task)$/.test(s.tool)) || (s.server != null && /^agent[-_]mcp$/.test(s.server) && /^(task|tasks_batch)$/.test(s.tool)); };
+export const isBatchName = (name) => { const s = splitToolName(name); return s.server != null && /^agent[-_]mcp$/.test(s.server) && s.tool === 'tasks_batch'; };
+/** How many subagent runs one run tool_use launches: a tasks_batch fans out (its array length, at least 2), anything else is 1. */
+export function runCount(name, input) {
+  if (!isBatchName(name)) return 1;
+  const lens = Object.values(input || {}).filter(Array.isArray).map((a) => a.length);
+  return Math.max(2, ...lens);
+}
+/**
+ * Were >= 2 subagent runs outstanding at the same moment in a stream (parent level only)? Counts two run tool_use
+ * blocks of one assistant message id, a second run tool_use before the first run's tool_result, or one tasks_batch of >= 2.
+ */
+export function parallelFromCliEvents(events) {
+  const out = new Set(); const msgOf = new Map(); let maxOutstanding = 0, sameMsg = false, runs = 0;
+  for (const e of events) {
+    if (e.type === 'assistant' && e.message && (e.parent_tool_use_id ?? null) === null) {
+      for (const b of e.message.content || []) if (b.type === 'tool_use' && isRunName(b.name) && !out.has(b.id)) {
+        const n = runCount(b.name, b.input); runs += n; out.add(b.id); const k = e.message.id || ''; msgOf.set(k, (msgOf.get(k) || 0) + n); if (msgOf.get(k) >= 2) sameMsg = true; maxOutstanding = Math.max(maxOutstanding, out.size, n);
+      }
+    } else if (e.type === 'user' && Array.isArray(e.message?.content) && (e.parent_tool_use_id ?? null) === null) {
+      for (const b of e.message.content) if (b.type === 'tool_result') out.delete(b.tool_use_id);
+    }
+  }
+  return { runs, sameTurn: sameMsg || maxOutstanding >= 2, maxOutstanding };
+}
+/** Same question for arm C: two run tool_use blocks inside one SSE response. */
+export function parallelFromHttpTurns(turns) {
+  let runs = 0, same = false;
+  for (const t of turns) { const n = (t.sse?.toolUses || []).filter((u) => isRunName(u.name)).reduce((a, u) => a + runCount(u.name, u.input), 0); runs += n; if (n >= 2) same = true; }
+  return { runs, sameTurn: same };
+}
+/**
+ * R1.AC6 (90758419 AC3): did >= 2 CHILD runs overlap, judged by outcome? `items` is the stream in order: `{ parent: <parent_tool_use_id|null>, ts?: <ms> }`.
+ * Native `Agent` returns "Async agent launched" instantly, so outstanding-counting cannot see parallelism; instead two children overlap when
+ * their event index ranges interleave (child 2 starts before child 1's last event and vice versa) or, when every event of both has a timestamp, when
+ * their time intervals intersect. Pure.
+ * @returns {{children:number, interleaved:boolean, basis:'timestamps'|'stream-order'}}
+ */
+export function childrenInterleaved(items) {
+  const r = new Map();
+  items.forEach((it, i) => { if (it.parent == null) return; const x = r.get(it.parent) ?? { first: i, last: i, t0: null, t1: null, ts: true }; x.last = i; if (Number.isFinite(it.ts)) { x.t0 = x.t0 == null ? it.ts : Math.min(x.t0, it.ts); x.t1 = x.t1 == null ? it.ts : Math.max(x.t1, it.ts); } else x.ts = false; r.set(it.parent, x); });
+  const ids = [...r.keys()]; let order = false, time = false, allTs = ids.length > 0;
+  for (const x of r.values()) if (!x.ts || x.t0 == null) allTs = false;
+  for (let i = 0; i < ids.length; i++) for (let j = i + 1; j < ids.length; j++) {
+    const a = r.get(ids[i]), b = r.get(ids[j]);
+    if (a.first < b.last && b.first < a.last) order = true;
+    if (allTs && a.t0 < b.t1 && b.t0 < a.t1) time = true;
+  }
+  return { children: ids.length, interleaved: allTs ? time : order, basis: allTs ? 'timestamps' : 'stream-order' };
+}
+/** `childrenInterleaved` over raw claude stream-json events (a child event carries `parent_tool_use_id`; `timestamp`/`ts` is used when present). */
+export function childrenInterleavedFromEvents(events) {
+  return childrenInterleaved(events.filter((e) => e && (e.type === 'assistant' || e.type === 'user')).map((e) => ({ parent: e.parent_tool_use_id ?? null, ts: Date.parse(e.timestamp ?? e.ts ?? '') })));
+}
+/**
+ * R1.AC2 (90758419 AC1) cache-carry inputs for arms A and B: the phase-1 LAST parent turn's cache_read + cache_create (NOT `ctx`, which also counts fresh input)
+ * and the phase-2 FIRST parent turn's cache_read. Turns are the normalised rows of `turnsFromCliStream` (`parent` null = main agent). Nulls when a phase has no parent turn.
+ */
+export function cacheCarryFromTurns(p1Turns, p2Turns) {
+  const par = (ts) => (ts || []).filter((t) => t.parent == null);
+  const last = par(p1Turns).slice(-1)[0], first = par(p2Turns)[0];
+  return { p1LastTurnCtx: last ? (last.cr || 0) + (last.w5m || 0) + (last.w1h || 0) + (last.wUntiered || 0) : null, p2FirstTurnCacheRead: first ? (first.cr || 0) : null };
+}
+/**
+ * R1.AC2 arm C: does the FIRST phase-2 request contain the phase-1 `get_ticket` result? `p1Http` / `p2Http` are the per-request records of
+ * `httpTurnsForTask` (`sse.toolUses[]` out, `body.messages[]` in). null when phase 1 made no get_ticket call or phase 2 has no request (no data, not a failure).
+ */
+export function ticketCarriedToPhase2(p1Http, p2Http) {
+  const ids = new Set((p1Http || []).flatMap((t) => t.sse?.toolUses || []).filter((u) => /(^|__)get_ticket$/.test(String(u.name))).map((u) => u.id));
+  const first = (p2Http || [])[0]; if (!ids.size || !first) return null;
+  for (const m of first.body?.messages || []) if (Array.isArray(m.content)) for (const b of m.content) if (b.type === 'tool_result' && ids.has(b.tool_use_id)) return true;
+  return false;
+}
+/** Time overlap of the given task rows (createdAt..completedAt ISO strings): min(completed) - max(created), ms. */
+export function overlapMs(rows) {
+  const s = rows.map((r) => Date.parse(r.createdAt)), e = rows.map((r) => Date.parse(r.completedAt));
+  if (rows.length < 2 || s.concat(e).some(Number.isNaN)) return null;
+  return Math.min(...e) - Math.max(...s);
+}
+/** Task rows created within this many ms of each other belong to ONE dispatch group (a single tasks_batch call creates its rows within a few ms). */
+export const DISPATCH_GROUP_WINDOW_MS = 2000;
+/**
+ * R5-scorefix AC1: the overlap of the INTENDED parallel pair. Depth-1 rows are clustered into dispatch groups (single-link on createdAt, gap <= windowMs: one
+ * `tasks_batch` call creates its rows ~1 ms apart, a lone `task` call is a group of one). The intended pair is the FIRST group of two or more rows, and the
+ * overlap is the N-way min(completed) - max(created) of THAT group only, so extra model-chosen workers dispatched before or after it cannot turn a real
+ * overlap into a fail. When no group has two or more rows (every worker was dispatched on its own) the answer is the overlap of all rows, which is what a
+ * background-task run (separate turns, overlapping rows) needs and is negative for a truly sequential run.
+ * Returns { overlapMs: n|null, group: string[] (row ids of the scored rows), basis: 'first-batch-group' | 'all-rows' }.
+ */
+export function intendedPairOverlap(rows, windowMs = DISPATCH_GROUP_WINDOW_MS) {
+  const withT = rows.map((r, i) => ({ r, i, t: Date.parse(r.createdAt) })).filter((x) => !Number.isNaN(x.t)).sort((a, b) => a.t - b.t || a.i - b.i);
+  const groups = []; let prev = null;
+  for (const x of withT) { if (prev != null && x.t - prev <= windowMs) groups[groups.length - 1].push(x.r); else groups.push([x.r]); prev = x.t; }
+  const g = groups.find((x) => x.length >= 2);
+  const use = g ?? rows;
+  return { overlapMs: overlapMs(use.map((r) => ({ createdAt: r.createdAt, completedAt: r.completedAt }))), group: use.map((r) => r.id ?? null), basis: g ? 'first-batch-group' : 'all-rows' };
+}

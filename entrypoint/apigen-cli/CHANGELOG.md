@@ -1,3 +1,30 @@
+## Unreleased
+
+### 🚀 Features
+
+- `run` and `run-registry` materialise each `--use` plugin's `layer.createLayer` once per invocation from the flat `--opt` bag, so every target receives configured layers; `generate` and `generate-registry` do not run request-layer factories and compose each `extractLayer.createLayer` once per invocation across all sources
+- `generate`, `run` and `serve` extract TypeScript through the apigen-core-client IR-generation entry
+- `--opt http.verb.<id>=GET` overrides reach the projection on `generate` and `run`
+- `--opt extract.subprocess=true` runs TypeScript extraction in a worker process; the process-lifetime ts-morph tier is released before `run` starts serving
+
+## 0.2.14 (2026-10-21)
+
+This was a version bump only for apigen-cli to align it with other projects, there were no code changes.
+
+## 0.2.13 (2026-10-19)
+
+### 🩹 Fixes
+
+- **apigen-cli:** report the real package version ([28fc6f07](https://github.com/PseudoSky/adhd/commit/28fc6f07))
+
+### ❤️ Thank You
+
+- pseudosky
+
+## 0.2.12 (2026-10-15)
+
+This was a version bump only for apigen-cli to align it with other projects, there were no code changes.
+
 ## 0.2.11 (2026-10-09)
 
 This was a version bump only for apigen-cli to align it with other projects, there were no code changes.

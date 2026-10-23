@@ -3,7 +3,7 @@
   "version": "0.1.8",
   "dependencies": {
     "@adhd/environment-base-spec": "^0.1.4",
-    "@adhd/environment-builder": "^0.1.7"
+    "@adhd/environment-builder": "^0.1.8"
   },
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",

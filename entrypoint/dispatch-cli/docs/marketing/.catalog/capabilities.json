@@ -10,7 +10,7 @@
       "entrypoint/dispatch-cli/bin/cli.ts:60-70 (Commander command registration)",
       "entrypoint/dispatch-cli/src/test/core.spec.ts:71-91 (3 tests: valid, invalid, missing)",
       "entrypoint/dispatch-cli/src/test/cli-smoke.spec.ts:189-193 (CLI smoke test via bin/cli.ts)",
-      "entrypoint/dispatch-cli/src/test/integration/real-e2e.ts:615-619 (e2e scenario 2 validation)"
+      "entrypoint/dispatch-cli/test/helpers/integration/real-e2e.ts:615-619 (e2e scenario 2 validation)"
     ],
     "verify": "npx tsx --tsconfig tsconfig.base.json entrypoint/dispatch-cli/bin/cli.ts validate --dag-path /dev/null",
     "verified_output": "{\"valid\":false,\"errors\":[{\"path\":\"\",\"message\":\"dag file not found: /dev/null\"}]}\n",
@@ -32,7 +32,7 @@
       "entrypoint/dispatch-cli/src/test/core.spec.ts:97-116 (2 tests: fresh dag, partial completion)",
       "entrypoint/dispatch-cli/src/test/cli-smoke.spec.ts:195-204 (CLI smoke test via bin/cli.ts)"
     ],
-    "verify": "npx tsx --tsconfig tsconfig.base.json entrypoint/dispatch-cli/bin/cli.ts snapshot --dag-path entrypoint/dispatch-cli/src/test/helpers/fixtures.ts 2>&1 || echo \"FILE_NOT_FOUND — but command exits 0 with structured error\"",
+    "verify": "npx tsx --tsconfig tsconfig.base.json entrypoint/dispatch-cli/bin/cli.ts snapshot --dag-path entrypoint/dispatch-cli/test/helpers/fixtures.ts 2>&1 || echo \"FILE_NOT_FOUND — but command exits 0 with structured error\"",
     "verified_output": "",
     "last_verified_sha": "936d50dc3a4c827b29a00dcd8686ba968775cd06",
     "last_verified_at": "2026-07-24T22:01:35-05:00",
@@ -51,7 +51,7 @@
       "entrypoint/dispatch-cli/bin/cli.ts:84-94 (Commander command registration)",
       "entrypoint/dispatch-cli/src/test/core.spec.ts:118-137 (2 tests: packs milestone a, empty when complete)",
       "entrypoint/dispatch-cli/src/test/cli-smoke.spec.ts:206-211 (CLI smoke test via bin/cli.ts)",
-      "entrypoint/dispatch-cli/src/test/integration/real-e2e.ts:649-683 (e2e scenario 3)"
+      "entrypoint/dispatch-cli/test/helpers/integration/real-e2e.ts:649-683 (e2e scenario 3)"
     ],
     "verify": null,
     "verified_output": "",
@@ -72,7 +72,7 @@
       "entrypoint/dispatch-cli/bin/cli.ts:96-106 (Commander command registration)",
       "entrypoint/dispatch-cli/src/test/core.spec.ts:143-155 (2 tests: fresh dag root, after completion)",
       "entrypoint/dispatch-cli/src/test/cli-smoke.spec.ts:162-166 and 213-217 (CLI smoke tests via BOTH generated and fallback CLI)",
-      "entrypoint/dispatch-cli/src/test/integration/real-e2e.ts:558-564 (e2e scenario 1)"
+      "entrypoint/dispatch-cli/test/helpers/integration/real-e2e.ts:558-564 (e2e scenario 1)"
     ],
     "verify": "npx tsx --tsconfig tsconfig.base.json entrypoint/dispatch-cli/bin/cli.ts eligible --dag-path /dev/null 2>&1",
     "verified_output": "",
@@ -93,7 +93,7 @@
       "entrypoint/dispatch-cli/bin/cli.ts:108-118 (Commander command registration)",
       "entrypoint/dispatch-cli/src/test/core.spec.ts:161-185 (2 tests: fresh dag, logged ops)",
       "entrypoint/dispatch-cli/src/test/cli-smoke.spec.ts:168-173 and 219-224 (CLI smoke tests via BOTH generated and fallback CLI)",
-      "entrypoint/dispatch-cli/src/test/integration/real-e2e.ts:550-556 (e2e scenario 1 cold start)"
+      "entrypoint/dispatch-cli/test/helpers/integration/real-e2e.ts:550-556 (e2e scenario 1 cold start)"
     ],
     "verify": null,
     "verified_output": "",
@@ -114,7 +114,7 @@
       "entrypoint/dispatch-cli/bin/cli.ts:120-131 (Commander command registration with --no-dry-run)",
       "entrypoint/dispatch-cli/src/test/core.spec.ts:191-229 (2 tests: injected runner, default runner wiring)",
       "entrypoint/dispatch-cli/src/test/cli-smoke.spec.ts:226-253 (2 tests: run --dry-run, run --no-dry-run on all-complete dag)",
-      "entrypoint/dispatch-cli/src/test/integration/real-e2e.ts:696-743 (e2e scenario 4 full dispatch cycle)"
+      "entrypoint/dispatch-cli/test/helpers/integration/real-e2e.ts:696-743 (e2e scenario 4 full dispatch cycle)"
     ],
     "verify": null,
     "verified_output": "",
@@ -203,9 +203,9 @@
     "description": "A self-executing tsx script (not a Vitest spec) that drives the FULL dispatch-production product lifecycle end-to-end through real components: real DagClient with JSON-file serialization, real @adhd/dispatch-core-optimizer snapshot()/optimize(), real @adhd/dispatch-orchestrator orchestrateCycle(), and the real bin/cli.ts spawned as a child process. 8 required scenarios run by default (deterministic, free, using MockAgentRunner). 1 optional live scenario gated behind DISPATCH_E2E_LIVE=1 (fires one real paid agent-mcp dispatch). Exits 0 iff all required scenarios pass. Prints a per-scenario result table.",
     "status": "shipped",
     "receipts": [
-      "entrypoint/dispatch-cli/src/test/integration/real-e2e.ts (1121 lines, 8 scenarios + 1 optional live)"
+      "entrypoint/dispatch-cli/test/helpers/integration/real-e2e.ts (1121 lines, 8 scenarios + 1 optional live)"
     ],
-    "verify": "npx nx build dispatch-cli 2>&1 | tail -3 && npx tsx --tsconfig tsconfig.base.json entrypoint/dispatch-cli/src/test/integration/real-e2e.ts 2>&1 | tail -10",
+    "verify": "npx nx build dispatch-cli 2>&1 | tail -3 && npx tsx --tsconfig tsconfig.base.json entrypoint/dispatch-cli/test/helpers/integration/real-e2e.ts 2>&1 | tail -10",
     "verified_output": "",
     "last_verified_sha": "936d50dc3a4c827b29a00dcd8686ba968775cd06",
     "last_verified_at": "2026-07-24T22:01:35-05:00",

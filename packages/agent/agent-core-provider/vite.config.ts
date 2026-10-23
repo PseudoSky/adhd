@@ -1,4 +1,5 @@
 /// <reference types='vitest' />
+import { UNIT_FILE_INCLUDES } from '../../../tools/vite-plugins/e2e-globs.mjs';
 import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin';
 import { importMetaUrlCjs } from '../../../tools/vite-plugins/import-meta-url-cjs.mjs';
 import { nxViteTsPathsPre } from '../../../tools/vite-plugins/source-resolution.mjs';
@@ -54,7 +55,7 @@ export default defineConfig({
     //      tasks can't race another file's DB finalization.
     pool: 'forks',
     fileParallelism: false,
-    include: ['src/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
+    include: UNIT_FILE_INCLUDES,
 
     reporters: ['default'],
     coverage: {

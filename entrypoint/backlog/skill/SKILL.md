@@ -31,24 +31,56 @@ Rules that bite:
   role word like `"agent"` is refused.
 - File with the right `project` (and `component`); search before filing so you
   update an existing item instead of duplicating it.
-- `update` with a `body` mints a successor uid (the old one reports a
-  `conflict` naming the live one); re-read the uid from the result.
+- `update` with a `body` mints a successor uid (old one: `conflict` naming the
+  live one); `lookup` on a stale uid returns the live head + `forwardedFrom`.
 - Never edit `BACKLOG.md`; the graph is the source of truth.
 - A wrong `--input` shape fails with `invalid_argument` and prints the exact
   working invocation; `adhd-backlog --help` lists every verb's live schema.
 
 Other verbs: `add-citation attest delete embedding-status lookup merge-project
 move obligate open-curve part-of-rollup priority-matrix recheck remove
-remove-citation report restore rm-location rm-project spec-append spec-check
-timeline unobligate upsert-component upsert-location upsert-project` and
-`batch action`.
+remove-citation remove-note report restore rm-location rm-project spec-append
+spec-check timeline unobligate upsert-component upsert-location
+upsert-project` and `batch action`.
 
 ## Long reference (read only when the above is not enough)
 
-`REFERENCE.md`, in this directory next to this file, holds the complete 32-verb
-reference: outcome envelopes and MCP tool names (§2), worked examples for every
+`REFERENCE.md`, in this directory next to this file, holds the complete
+reference for the 33 verbs (plus `batch`): outcome envelopes and MCP tool names
+(§2), worked examples for every
 issue verb (§3), obligations and the actionability verdict (§4), spec revisions
 (§5), read views and catalogs (§6), the project/component/location registry and
 filing rules (§7), batch (§8), citations (§9), verifying writes (§10), stats
 (§11), and sessions and reservations (§13). Read only the section you need
 (`rg -n '^## ' REFERENCE.md` lists them), never the whole file.
+
+## Testing record (a body convention; the backlog schema is unchanged)
+
+An item that changes behavior carries this section in its `body`. Read it back
+with `get` (`fields:["body"]`) or `query`; nothing validates it at the store.
+
+```text
+## Testing record
+change-class: new-behavior | defect-fix | refactor | configuration | dependency | boundary-contract | no-code | test-maintenance
+rigor: none | light | standard | deep
+triggers: <the triggers hit> | none
+ac: AC1 <criterion> ; AC2 <criterion> ; …
+not-testing: <failure modes left untested, and why> | none
+plan: <failure mode → tier → AC>
+expires: <date>
+```
+
+- `change-class` is one of the eight values. `rigor` is derived by the
+  repository's routing command and recorded, never chosen. `ac:` ids are stable
+  and are what tests cite. `expires:` appears only on exception items.
+- **Regression-test evidence (presence only).** Declare an evidence obligation
+  of the existing kind: `obligate` with `applies_to:{"to":"done"}`,
+  `requirement:{"op":"evidence","kind":"regression-test"}`, `on_fail:"warn"`
+  (`"block"` once the repository enforces it), then `attest` with
+  `claim:{"kind":"regression-test"}` and `anchor:{"locator":"path:<test file>",…}`
+  (the project path must be a git work tree to verify). The store checks that
+  evidence exists, not that it passes.
+- **Exceptions and retention work are ordinary items.** An exception carries an
+  `expires:` line in its Testing record and a `relates_to` relation to the item
+  it excuses. A retention ticket is an ordinary item citing its group's standing
+  review item.

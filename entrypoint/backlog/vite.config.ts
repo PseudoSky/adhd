@@ -1,4 +1,5 @@
 /// <reference types='vitest' />
+import { UNIT_FILE_INCLUDES } from '../../tools/vite-plugins/e2e-globs.mjs';
 import { defineConfig, type Plugin } from 'vite';
 import dts from 'vite-plugin-dts';
 import * as fs from 'fs';
@@ -70,13 +71,13 @@ export default defineConfig({
     dts({
       entryRoot: 'src',
       tsconfigPath: path.join(__dirname, 'tsconfig.lib.json'),
-      // src/test/** holds test-support (fixtures + the real-server-spawn
+      // test/** holds test-support (fixtures + the real-server-spawn
       // harness) that lacks a .spec/.test suffix, so tsconfig.lib.json's
       // *.spec/*.test excludes miss them — never ship test .d.ts.
       // `*.e2e.ts` is excluded too: those are the resource-consuming specs
       // extracted out of the default `test` target (see the sibling `*.spec.ts`
       // stubs) and must never reach dist/ or its declarations.
-      exclude: ['src/test/**', 'src/**/*.e2e.ts'],
+      exclude: ['test/**', 'test/e2e/**/*.e2e.ts'],
     }),
     copySkillDirPlugin(),
   ],
@@ -158,7 +159,7 @@ export default defineConfig({
     // default lane spec-only preserves the fast inner loop; the `.e2e.ts`
     // exclusion is structural (the glob), not an emergent property of glob
     // semantics.
-    include: ['src/**/*.spec.ts'],
+    include: UNIT_FILE_INCLUDES,
     testTimeout: 30000,
     hookTimeout: 30000,
 

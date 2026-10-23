@@ -7,7 +7,7 @@ An MCP (Model Context Protocol) server exposing a bounded, supervised agent runt
 `@adhd/agent-mcp` is an MCP server that:
 
 - **Runs agents as stateful processes** — each agent maintains conversation history, executes tools, and interacts with model providers (Anthropic, OpenAI, and OpenAI-compatible endpoints such as DeepSeek via an explicit `baseURL` override — see [Providers and credentials](#providers-and-credentials) below)
-- **Enforces runtime policies** — maximum delegation depth, token/cost budgets, filesystem scope, network allowlist, tool deny/allow filters
+- **Enforces runtime policies** — maximum delegation depth, token/cost budgets, filesystem scope, optional shell network allowlist (`agent.shell.sandbox.allowedDomains`; egress is open by default), tool deny/allow filters
 - **Persists state locally** — SQLite-backed storage for agents, sessions, messages, and execution traces
 - **Exposes a tool-call interface** — MCP clients call tools like `agent_create`, `task`, `result`, `task_cancel` to interact with the runtime
 - **Supports multi-turn delegation** — parent agents can spawn child agents with subset-of-parent permissions
@@ -67,6 +67,9 @@ The database (SQLite, agents/sessions/messages/usage) is the **production store*
 | `ADHD_AGENT_TOOL_CALL_CONCURRENCY` | `8` | Max tool calls of one assistant turn run concurrently (config key `agent.toolCallConcurrency`); calls beyond the limit wait and results keep call order; must be a positive integer, invalid values fail at startup with a `RangeError` |
 | `ADHD_AGENT_TOOL_RESULT_MAX_CHARS` | `6000` | Max chars of one tool result the model sees (first 75% + marker + last 25%); `0` disables; invalid values fail at startup. See [logging.md](docs/logging.md#tool-result-size-cap-what-the-model-sees-vs-what-telemetry-measures) |
 | `ADHD_AGENT_TOOL_RESULT_SPILL_ENABLED` | `false` | Opt in to spilling an over-cap tool result to a file (the model sees a stub with the path and a 2000-char preview) instead of dropping its middle. Sibling keys: `ADHD_AGENT_TOOL_RESULT_SPILL_DIR` (absolute; default `<temp>/tool-results`), `ADHD_AGENT_TOOL_RESULT_SPILL_TTL_HOURS` (`24`). See [logging.md](docs/logging.md#optional-spill-to-file-for-over-cap-tool-results) |
+| `ADHD_AGENT_ECHO_MAX_MESSAGE_BYTES` | `131072` | Config key `echo.maxMessageBytes`. Largest provider echo (thinking and server-tool blocks of one assistant message) stored for replay on later tasks; non-negative integer, malformed values fail at startup. See [Provider echo](../../packages/agent/agent-engine-orchestrator/README.md#provider-echo-anthropic) |
+| `ADHD_AGENT_ECHO_MAX_SESSION_BYTES` | `4194304` | Config key `echo.maxSessionBytes`. Cap on server-tool result bytes (fetched pages, search results) stored per session; once a message would exceed it, its server results are not stored (thinking still is) |
+| `ADHD_AGENT_ECHO_SERVER_RESULT_TTL_MINUTES` | `10` | Config key `echo.serverResultTtlMinutes`. Minutes of session idleness after which stored server results stop being replayed and are swept; `0` never stores them |
 | `ADHD_AGENT_MAX_DEPTH` | `3` | Max delegation depth (agent → child → grandchild) |
 | `ADHD_AGENT_DATABASE_PATH` | (auto-resolved) | Absolute path of a custom SQLite DB (a relative value is rejected at startup); unset = the production store `~/.adhd/agent-mcp/production/data/agents.db` |
 | `ADHD_AGENT_TRANSPORT` | `stdio` | `stdio` or `http` (streamable HTTP). The `http` transport serves **many concurrent MCP sessions** from one process: each `initialize` opens its own session (routed by the `mcp-session-id` header); an unknown/expired session id gets HTTP 404 so the client re-initializes |
@@ -123,7 +126,7 @@ How to read, tail, query and cost-audit these logs (record shapes, correlation i
 | `openai` | Yes — `ADHD_AGENT_OPENAI_SECRET` | Also the type to use for any OpenAI-*compatible* endpoint (e.g. DeepSeek): set `env.base_url` / `ADHD_AGENT_OPENAI_BASE_URL` to the provider's URL. DeepSeek additionally has its own default names, `ADHD_AGENT_DEEPSEEK_SECRET` / `ADHD_AGENT_DEEPSEEK_BASE_URL` / `ADHD_AGENT_DEEPSEEK_MODEL`, but they must be passed explicitly as an agent's `env.secret`/`env.base_url` override — there is no separate `"deepseek"` provider `type`. |
 | `claudecli` | No | Shells out to the already-authenticated `claude` CLI on the host instead of calling an API directly — nothing to configure here. Use this to avoid provider-credential wiring entirely. |
 
-Which engine behaviors (tool-call concurrency and its per-task limiter, token estimator, tool-result caps, EOL hook, session resume, budget pricing, `reasoningTokens`) apply to each provider, with code evidence: [docs/agent/provider-parity.md](../../docs/agent/provider-parity.md). Cost caps (`ADHD_AGENT_BUDGET_COST_USD`) price every provider from the shared model rate card; a model with no price emits a `budget:unpriced_model` task event, and a `claudecli` agent that enables CLI built-ins emits `provider:builtin_bypass` (both visible in `task_events`).
+Which engine behaviors (tool-call concurrency and its per-task limiter, token estimator, tool-result caps, EOL hook, session resume, budget pricing, `reasoningTokens`) apply to each provider, with code evidence: [docs/agent/provider-parity.md](../../docs/agent/provider-parity.md). Cost caps (`ADHD_AGENT_BUDGET_COST_USD`) price every provider from the shared model rate card; a model with no price emits a `budget:unpriced_model` task event, and a `claudecli` agent that enables CLI built-ins emits `provider:builtin_bypass` (both visible in `task_events`, as are `provider:history_degraded`, emitted when the Anthropic API rejects the replayed provider echo and the provider retries without it, and `provider:pause_continued`, emitted for each `pause_turn` continuation).
 
 **The bare SDK-style names `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` are never read anywhere in this codebase.** Only the `ADHD_AGENT_<PROVIDER>_SECRET` names above are honored.
 
@@ -131,7 +134,7 @@ Which engine behaviors (tool-call concurrency and its per-task limiter, token es
 
 ### Provider fields accepted by `agent_create` / `agent_update`
 
-`provider` is a discriminated union on `type` (`anthropic` | `openai` | `claudecli`). Besides `model`, `env`, `temperature`, `maxTokens`, `timeoutMs` (and `baseURL` for `openai`, `claudePath`/`allowedBuiltinTools`/`systemPromptIsAgentSpec` for `claudecli`), every variant accepts the provider-failure fields:
+`provider` is a discriminated union on `type` (`anthropic` | `openai` | `claudecli`). Besides `model`, `env`, `temperature`, `maxTokens`, `timeoutMs` (`effort` for `anthropic`: `low|medium|high|xhigh|max`, sent as the Messages API `output_config.effort`, absent = the API default for the model; `thinking` for `anthropic`: `{ type: adaptive|disabled, display?: summarized|omitted }` (`display` only with `adaptive`), sent as the Messages API `thinking` field, absent = the API default, strict like the other provider keys; and `baseURL` for `openai`, `claudePath`/`allowedBuiltinTools`/`systemPromptIsAgentSpec` for `claudecli`), every variant accepts the provider-failure fields:
 
 | Field | Type | Meaning |
 |---|---|---|
@@ -308,6 +311,32 @@ commit (a competing write is never overwritten). Files over 8 MiB are never read
 rewritten, and in-flight bookkeeping is bounded (1024 calls, 10 minute TTL) so a call
 that never completes cannot leak (19354419).
 
+#### Model-visible tool-result notes (fs write/edit, shell policy rejection)
+
+Two short, factual notes are added to what the **model** sees of a tool result, never to anything
+stored or observed:
+
+- after a successful `fs__write_file` / non-dry-run `fs__edit_file` by the adopted (catalog) `fs` server:
+  "the file was written; there is no need to read it back to verify". No note on an error, on `dryRun`
+  (nothing is applied), or when `fs` is a custom server that replaced the builtin.
+- after the adopted shell server rejects a command by its default security policy (`node`, `python3`,
+  `sed`, `sh`, `bash`, `env` are always rejected, even if allowlisted): a recovery line that names the
+  policy and says to use the fs tools for file edits and reads, or the project's own scripts through an
+  allowed runner. The shell allowlist itself is unchanged.
+
+The note is applied to the outgoing model request only (`tool-result-notes.ts`): the session history,
+the `post:tool_call` / `TOOL_RESULT` payloads and `message:appended` keep the server's exact text, and a
+post-call payload carries `noteAppended: true`. Because the note is not stored, a session resumed in another
+process sends the result without it (safe; one prompt-cache miss). The notes ride the engine's own provider loop (`anthropic`, `openai`); a `claudecli` agent runs its tools inside the CLI's loop, which does not pass through `pre:model_request`, so it gets no note.
+
+#### Delegation: synchronous by default, background results must be collected
+
+The `task`, `tasks_batch` and `result` descriptions (and the usage guide) lead with one shared rule
+(`delegation-text.ts`): `task` / `tasks_batch` are synchronous by default and return the finished result;
+use `background: true` only when you have independent work to do meanwhile, and then you **must** call
+`result` (with `wait_ms`) to collect it before your answer depends on it, because background results are
+not delivered automatically.
+
 #### Native tooling environment variables
 
 Every `nativeTooling` leaf is a typed config field with an `ADHD_AGENT_*` env
@@ -330,6 +359,7 @@ with `false` on the agent definition, not with an env toggle:
 | `ADHD_AGENT_NATIVE_TOOLING_HITL` | bool | HITL enablement; default `true` |
 | `ADHD_AGENT_SHELL_SANDBOX_EXTRA_ALLOW_WRITE` | string[] | extra WRITABLE roots for the srt-sandboxed shell (config key `agent.shell.sandbox.extraAllowWrite`; `~/` expanded; default `~/.adhd/backlog/production/data` so `adhd-backlog` can take its store lease; the backlog `config.yaml` and `backups/` are always denied). Allowlist-validated, read from the global scope only; an invalid value aborts startup |
 | `ADHD_AGENT_SHELL_SANDBOX_EXTRA_ALLOW_WRITE_ROOTS` | string[] | operator-declared trust roots (config key `agent.shell.sandbox.extraAllowWriteRoots`, default none) under which `extraAllowWrite` entries may live, e.g. a relocated backlog store; never `~/.adhd` or a protected path |
+| `ADHD_AGENT_SHELL_SANDBOX_ALLOWED_DOMAINS` | string[] | restrict the srt-sandboxed shell's outbound network to these domains (config key `agent.shell.sandbox.allowedDomains`; `example.com`, `*.example.com`, optional `:port`). Default empty = OPEN egress: the default shell can `curl` any public site. Non-empty = ONLY these domains plus PyPI (the pinned shell server's own cold start). Read from the global scope only |
 
 The retired authored-shell-server path override (the `server.mjs` fallback removed
 by NAT-TOOL-4) no longer resolves; shell configuration is `nativeTooling.shell.*`.
@@ -396,6 +426,14 @@ This release fixes six critical regressions from 2.0.0/2.0.1 related to context 
 
 **Impact:** Existing configs at the legacy path will load again. No action required.
 
+## Task event log (`task_events`)
+
+`task_events` reads the event log of one task by `task_id`, oldest first. Pass `limit` (1–500, default 50) and `offset` to page; the response carries `total` and `has_more`. A page is also capped at 256 KiB of serialized JSON: when trailing events are dropped to fit, the response sets `truncated_by_bytes: true` and `has_more: true`, and the next page starts at `offset + events.length`. A top-level string field over 16,000 chars is returned as its head+tail clip and listed in `payload_clipped` (`{ field, original_chars }`); an event whose stored payload is over 1 MiB comes back as `payload: null` with `payload_error: "too_large"` and `payload_bytes`, and its payload is never read. An unknown `task_id` is an error.
+
+`TOOL_RESULT` events carry the model-visible result text (capped by `ADHD_AGENT_TOOL_RESULT_MAX_CHARS`) clipped to at most 16,000 chars, and `result_sha256`, the hash of the full model-visible text. A clipped result also carries `result_stored_clipped: true` and `result_model_visible_chars`. With the cap set to `0` the model reads the whole output and the event keeps the 16,000-char head+tail of it, not all of it. `MODEL_REQUEST` events carry `advertisedToolNames` and `systemPromptSha256`. `CONTEXT_COMPACTED` records a history compaction.
+
+**Access:** `task_events` is not scoped or redacted. Any MCP client that knows a task UUID can read that task's tool output and event history. `task_events` shares one trust domain with the `result` tool, `agent-mcp-tail` and the local store, and performs no redaction. Run the server only where every connected client may read every task on it. Multi-tenant exposure requires a caller-identity decision first (a trust-boundary ADR is proposed, not yet written).
+
 ## Local dev server (`serve`, live reload)
 
 A long-running local server over the streamable-HTTP transport that restarts itself whenever the
@@ -434,17 +472,48 @@ service, which CI cannot provide):
 
 | Test file | Gate | Real dependency |
 |---|---|---|
-| `src/__tests__/integration/live-budget.e2e.test.ts` | `AGENT_MCP_BUDGET_LIVE=1` | real provider (LM Studio / Anthropic) |
-| `src/__tests__/integration/live-dag.e2e.test.ts` | `AGENT_MCP_LIVE=1` | real provider (LM Studio / Anthropic) |
-| `src/__tests__/integration/live-oauth.e2e.test.ts` | `AGENT_MCP_LIVE=1` | real Anthropic OAuth |
-| `src/__tests__/live/tracing-live.e2e.test.ts` | `AGENT_MCP_LIVE=1` | real `claude` CLI + real Anthropic OAuth, real dev server, **production store** (c536ce29 LIVE-AC1..AC5) |
-| `src/__tests__/integration/live-cache-smoke.e2e.test.ts` | `ADHD_AGENT_LIVE_CACHE=1` | paid Anthropic `claude-haiku-4-5` via the product's own credential path (`ADHD_AGENT_ANTHROPIC_SECRET`); one task, ~3 model calls, isolated store under `tmp/agent-mcp/`; **owner pseudosky**, approved 2026-10-10 ("i don't care about the budget but do not burn the 5h window"); fail-closed 5h-window guard (refuses at utilization >= 0.60, status not `allowed`, or unreadable). Proves 8ecaa160 AC1 / ebfe7421 AC1 (closes ee3381d8). Its offline controls (negative control + guard teeth) run ungated. |
+| `test/e2e/integration/live-budget.e2e.ts` | `AGENT_MCP_BUDGET_LIVE=1` | real provider (LM Studio / Anthropic) |
+| `test/e2e/integration/live-dag.e2e.ts` | `AGENT_MCP_LIVE=1` | real provider (LM Studio / Anthropic) |
+| `test/e2e/integration/live-oauth.e2e.ts` | `AGENT_MCP_LIVE=1` | real Anthropic OAuth |
+| `test/e2e/live/tracing-live.e2e.ts` | `AGENT_MCP_LIVE=1` | real `claude` CLI + real Anthropic OAuth, real dev server, **production store** (c536ce29 LIVE-AC1..AC5) |
+| `test/e2e/integration/live-cache-smoke.e2e.ts` | `ADHD_AGENT_LIVE_CACHE=1` | paid Anthropic `claude-haiku-4-5` via the product's own credential path (`ADHD_AGENT_ANTHROPIC_SECRET`); one task, ~3 model calls, isolated store under `tmp/agent-mcp/`; **owner pseudosky**, approved 2026-10-10 ("i don't care about the budget but do not burn the 5h window"); fail-closed 5h-window guard (refuses at utilization >= 0.60, status not `allowed`, or unreadable). Proves 8ecaa160 AC1 / ebfe7421 AC1 (closes ee3381d8). Its offline controls (negative control + guard teeth) run ungated. |
 
 **Approved by:** pseudosky (repo owner); `live-cache-smoke.e2e.test.ts` (`ADHD_AGENT_LIVE_CACHE=1`) by direct owner instruction on 2026-10-10 under a hard rule never to burn the Anthropic 5-hour window (run from the repo root: `ADHD_AGENT_LIVE_CACHE=1 npx vitest run --config entrypoint/agent-mcp/vitest.e2e.config.ts live-cache-smoke` (not via `nx run`, whose cache is blind to the env var); unset it reports SKIPPED naming the gate and owner); `tracing-live.e2e.test.ts` additionally by direct owner instruction on 2026-10-09 (run guide: [docs/logging.md](./docs/logging.md#proving-it-live-the-env-gated-test)). Rationale: each calls a real, paid model the CI
 cannot provide, so the gate saves money and avoids an outside system — the one qualifying
 reason. The default (unflagged) suite still exercises the orchestrator/tool paths with
 scripted providers; these live tests add real-model confirmation of model-independent
 invariants. The same record appears in this package's `AGENTS.md` and in each test's header.
+
+## R10 end-to-end consumer proof (default-running, no gate)
+
+`test/e2e/r10-s8-consumer-proof.e2e.ts` (scaffold: `test/helpers/r10-s8-scaffold.ts`) proves the R10
+product changes the way a host consumes them, for **both** the Anthropic and the OpenAI-compatible adapter, in one
+run of about four seconds. It drives the real `createServer` through a real MCP `Client` (in-memory transport), over
+the real stores, queue, orchestrator, host hooks and default tracing plugin, with the real `AnthropicProvider` /
+`OpenAIProvider` (and their SDKs) talking HTTP to a scripted loopback model, and the real adopted `fs` and `shell`
+MCP children. Only the model is scripted; nothing leaves 127.0.0.1 (a guard `fetch` fails the run on any other
+host, and `uv` runs offline). `HOME` is a scratch directory, so no host state is touched. No env gate: there is no
+paid service involved. Run it with:
+
+```bash
+npx nx run agent-mcp:e2e            # whole e2e lane
+# or just this proof, from entrypoint/agent-mcp:
+CI=true npx vitest run -c vitest.e2e.config.ts src/__tests__/r10-s8 --no-file-parallelism
+```
+
+| AC | What is observed (per adapter) |
+|---|---|
+| AC1 | a CRLF file read back through the fs tool is on the model request as raw, once-encoded text (no JSON-of-the-MCP-array string, no doubly escaped `\r\n`) |
+| AC2 | `write_file` then `read_text_file` of one path in ONE turn: the read sees the new content; results are paired by id in call order |
+| AC3 | the fs write/edit "no read-back needed" note is on the request exactly once (never accumulating), absent from stored session history and from a `dryRun` edit |
+| AC4 | a rejected `node -e` carries the actionable recovery line on the wire; the stored allowlist is unchanged |
+| AC5 | the model-visible `task` / `tasks_batch` descriptions lead with the shared decision rule, identical across adapters; the host tool list leads `task` / `tasks_batch` / `result` with it; a synchronous task and a background task collected with `result` both complete |
+| AC6 | an Anthropic `agent_create` with `thinking: {type: 'adaptive'}` puts that field in every request body; an OpenAI one is rejected naming `thinking` |
+| AC7 | the tracing sink holds `agent.tool_call` records with `concurrency_class` / `turn_index` / `group_index` (and `error_class`, `note_appended`), an `agent.task.startup` record with `mcp_connect_ms.<server>` and `tools_ready_ms`, and `agent.dispatch` records with `mode` and `parent_blocked_ms`; a scan of the whole sink finds none of the prompt, reply or tool-argument sentinels |
+
+Negative controls (each applied to the production file and reverted): re-introducing the JSON double encode in the
+OpenAI adapter reddens only the OpenAI rows; removing the ordering barrier reddens AC2 on both adapters; putting the
+write note into stored history reddens AC3 on both; dropping the Anthropic `thinking` spread reddens AC6.
 
 ## Native-tooling adoption gate (env-gated — external third-party server)
 
@@ -454,9 +523,9 @@ The live tests that prove the adopted servers start and execute through the real
 
 | Test file | Gate | Real dependency |
 |---|---|---|
-| `src/__tests__/integration/native-tooling-adoption.e2e.test.ts` | `NAT_TOOL_LIVE=1` | `uvx mcp-shell-server` (external PyPI package) + `srt` |
-| `src/__tests__/integration/native-tooling-real-ops.e2e.test.ts` | `NAT_TOOL_LIVE=1` | `uvx mcp-shell-server` (external PyPI package) + `srt` |
-| `src/__tests__/integration/agent-portability-live.e2e.test.ts` | `NAT_TOOL_LIVE=1` | paid DeepSeek model (`ADHD_AGENT_DEEPSEEK_SECRET`); owner pseudosky, $0.05 cap (dispatch-2026-10-06-48dc). The non-model portability matrix (`agent-portability.e2e.test.ts`) is NOT gated. |
+| `test/e2e/integration/native-tooling-adoption.e2e.ts` | `NAT_TOOL_LIVE=1` | `uvx mcp-shell-server` (external PyPI package) + `srt` |
+| `test/e2e/integration/native-tooling-real-ops.e2e.ts` | `NAT_TOOL_LIVE=1` | `uvx mcp-shell-server` (external PyPI package) + `srt` |
+| `test/e2e/integration/agent-portability-live.e2e.ts` | `NAT_TOOL_LIVE=1` | paid DeepSeek model (`ADHD_AGENT_DEEPSEEK_SECRET`); owner pseudosky, $0.05 cap (dispatch-2026-10-06-48dc). The non-model portability matrix (`agent-portability.e2e.test.ts`) is NOT gated. |
 
 These live tests are **off by default** (they skip unless `NAT_TOOL_LIVE=1`) and are not
 run by the pre-push hook; CI's `e2e` lane runs them skipped. The table above is

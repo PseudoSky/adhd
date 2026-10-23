@@ -19,7 +19,7 @@ export default [
     rules: {},
   },
   {
-    files: ['**/src/test/fixtures/**'],
+    files: ['**/test/fixtures/**'],
     rules: {
       '@typescript-eslint/no-empty-function': 'off',
       '@typescript-eslint/no-unused-vars': 'off',
@@ -34,7 +34,7 @@ export default [
         {
           ignoredFiles: [
             '{projectRoot}/vite.config.{js,ts,mjs,mts}',
-            '{projectRoot}/src/test/fixtures/**',
+            '{projectRoot}/test/fixtures/**',
             '{projectRoot}/vitest.e2e.config.{js,ts,mjs,mts}',
             '{projectRoot}/**/*.e2e.{ts,tsx,mts,cts}',
           ],
@@ -69,7 +69,7 @@ export default [
       '**/vite.config.ts',
       '**/vite.config.mjs',
       '**/vite.config.mts',
-      '**/src/test/fixtures/**/**',
+      '**/test/fixtures/**/**',
     ],
   },
 ];

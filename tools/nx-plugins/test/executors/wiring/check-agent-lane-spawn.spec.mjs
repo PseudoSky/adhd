@@ -27,7 +27,7 @@ function fixture(files) {
   const root = mkdtempSync(join(tmpdir(), 'agent-lane-'));
   for (const [rel, content] of Object.entries({
     'packages/agent/agent-foo/project.json': '{"name":"agent-foo"}',
-    'packages/agent/agent-foo/src/ok.spec.ts': 'export {};\n',
+    'packages/agent/agent-foo/test/unit/ok.spec.ts': 'export {};\n',
     'packages/agent/agent-foo/vite.config.ts': 'export default { test: { exclude: [...E2E_FILE_EXCLUDES] } };\n',
     ...files,
   })) {
@@ -47,16 +47,16 @@ test('clean workspace is silent [5b839b90 AC2]', () => {
 });
 
 test('A fires: unit-lane spec importing child_process (5b839b90 AC2)', () => {
-  const root = fixture({ 'packages/agent/agent-foo/src/bad.test.ts': SPAWNING });
+  const root = fixture({ 'packages/agent/agent-foo/test/unit/bad.spec.ts': SPAWNING });
   try {
     const r = collectAgentLaneSpawnViolations(root, EMPTY_BASELINE);
     assert.deepEqual(rules(r), ['A-spawn-in-unit-lane']);
-    assert.match(r.violations[0].detail, /bad\.test\.ts/);
+    assert.match(r.violations[0].detail, /bad\.spec\.ts/);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
 test('A is silent once the same file is in the e2e lane [5b839b90 AC2]', () => {
-  const root = fixture({ 'packages/agent/agent-foo/src/bad.e2e.test.ts': SPAWNING });
+  const root = fixture({ 'packages/agent/agent-foo/test/e2e/bad.e2e.ts': SPAWNING });
   try {
     assert.deepEqual(rules(collectAgentLaneSpawnViolations(root, EMPTY_BASELINE)), []);
   } finally { rmSync(root, { recursive: true, force: true }); }
@@ -77,7 +77,7 @@ test('A is silent for mocked child_process, comment mentions, and inert config d
 test('A is silent for a spy-only StdioMcpClient reference [5b839b90 AC2]', () => {
   const spyOnly = `import { StdioMcpClient } from '../clients/stdio-client.js';\nconst connectSpy = vi.spyOn(StdioMcpClient.prototype, 'connect').mockResolvedValue(undefined);\n`;
   assert.equal(spawnReason(spyOnly), undefined);
-  const root = fixture({ 'packages/agent/agent-foo/src/spy.test.ts': spyOnly });
+  const root = fixture({ 'packages/agent/agent-foo/test/unit/spy.spec.ts': spyOnly });
   try {
     assert.deepEqual(rules(collectAgentLaneSpawnViolations(root, EMPTY_BASELINE)), []);
   } finally { rmSync(root, { recursive: true, force: true }); }
@@ -87,15 +87,15 @@ test('A still fires on `new StdioMcpClient(` even alongside a spy (negative cont
   const real = `import { StdioMcpClient } from '../clients/stdio-client.js';\nconst c = new StdioMcpClient({ command: 'x' });\n`;
   assert.match(spawnReason(real) ?? '', /StdioMcpClient/);
   assert.match(spawnReason(real + `vi.spyOn(StdioMcpClient.prototype, 'connect');\n`) ?? '', /StdioMcpClient/);
-  const root = fixture({ 'packages/agent/agent-foo/src/real.test.ts': real });
+  const root = fixture({ 'packages/agent/agent-foo/test/unit/real.spec.ts': real });
   try {
     assert.deepEqual(rules(collectAgentLaneSpawnViolations(root, EMPTY_BASELINE)), ['A-spawn-in-unit-lane']);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
-test('C fires: *.e2e.test.ts present but unit lane does not exclude them [5b839b90 AC2]', () => {
+test('C fires: *.e2e.ts present but unit lane does not exclude them [5b839b90 AC2]', () => {
   const root = fixture({
-    'packages/agent/agent-foo/src/x.e2e.test.ts': SPAWNING,
+    'packages/agent/agent-foo/test/e2e/x.e2e.ts': SPAWNING,
     'packages/agent/agent-foo/vite.config.ts': 'export default { test: {} };\n',
   });
   try {
@@ -105,7 +105,7 @@ test('C fires: *.e2e.test.ts present but unit lane does not exclude them [5b839b
 
 test('C accepts a project whose only vite config is vite.config.mts that excludes E2E_FILE_EXCLUDES [0ba70e47 AC3b]', () => {
   const root = fixture({
-    'packages/agent/agent-foo/src/x.e2e.test.ts': SPAWNING,
+    'packages/agent/agent-foo/test/e2e/x.e2e.ts': SPAWNING,
     'packages/agent/agent-foo/vite.config.mts': 'export default { test: { exclude: [...E2E_FILE_EXCLUDES] } };\n',
   });
   rmSync(join(root, 'packages/agent/agent-foo/vite.config.ts'));
@@ -116,7 +116,7 @@ test('C accepts a project whose only vite config is vite.config.mts that exclude
 
 test('C still fires for a vite.config.mts-only project that lacks E2E_FILE_EXCLUDES (negative control) [0ba70e47 AC3b]', () => {
   const root = fixture({
-    'packages/agent/agent-foo/src/x.e2e.test.ts': SPAWNING,
+    'packages/agent/agent-foo/test/e2e/x.e2e.ts': SPAWNING,
     'packages/agent/agent-foo/vite.config.mts': 'export default { test: {} };\n',
   });
   rmSync(join(root, 'packages/agent/agent-foo/vite.config.ts'));
@@ -127,7 +127,7 @@ test('C still fires for a vite.config.mts-only project that lacks E2E_FILE_EXCLU
 
 test('C considers BOTH vite.config.ts and vite.config.mts: the exclude in the .mts is honored when a bare .ts also exists [0ba70e47 AC3b]', () => {
   const root = fixture({
-    'packages/agent/agent-foo/src/x.e2e.test.ts': SPAWNING,
+    'packages/agent/agent-foo/test/e2e/x.e2e.ts': SPAWNING,
     'packages/agent/agent-foo/vite.config.ts': 'export default { test: {} };\n',
     'packages/agent/agent-foo/vite.config.mts': 'export default { test: { exclude: [...E2E_FILE_EXCLUDES] } };\n',
   });
@@ -138,7 +138,7 @@ test('C considers BOTH vite.config.ts and vite.config.mts: the exclude in the .m
 
 test('C considers BOTH configs: the exclude in the .ts is honored when a bare .mts also exists [0ba70e47 AC3b]', () => {
   const root = fixture({
-    'packages/agent/agent-foo/src/x.e2e.test.ts': SPAWNING,
+    'packages/agent/agent-foo/test/e2e/x.e2e.ts': SPAWNING,
     'packages/agent/agent-foo/vite.config.ts': 'export default { test: { exclude: [...E2E_FILE_EXCLUDES] } };\n',
     'packages/agent/agent-foo/vite.config.mts': 'export default { test: {} };\n',
   });
@@ -149,7 +149,7 @@ test('C considers BOTH configs: the exclude in the .ts is honored when a bare .m
 
 test('C still fires when BOTH configs exist and neither excludes E2E_FILE_EXCLUDES (negative control) [0ba70e47 AC3b]', () => {
   const root = fixture({
-    'packages/agent/agent-foo/src/x.e2e.test.ts': SPAWNING,
+    'packages/agent/agent-foo/test/e2e/x.e2e.ts': SPAWNING,
     'packages/agent/agent-foo/vite.config.ts': 'export default { test: {} };\n',
     'packages/agent/agent-foo/vite.config.mts': 'export default { test: {} };\n',
   });
@@ -160,7 +160,7 @@ test('C still fires when BOTH configs exist and neither excludes E2E_FILE_EXCLUD
 
 const cViolation = (cfg) => {
   const root = fixture({
-    'packages/agent/agent-foo/src/x.e2e.test.ts': SPAWNING,
+    'packages/agent/agent-foo/test/e2e/x.e2e.ts': SPAWNING,
     'packages/agent/agent-foo/vite.config.mts': cfg,
   });
   rmSync(join(root, 'packages/agent/agent-foo/vite.config.ts'));
@@ -205,22 +205,22 @@ test('C accepts a bare `exclude: E2E_FILE_EXCLUDES` [0ba70e47 AC3b]', () => {
 });
 
 test('B fires on a stale pendingMove entry and is silent while the file is still unit-lane [5b839b90 AC2]', () => {
-  const root = fixture({ 'packages/agent/agent-foo/src/pending.test.ts': 'export {};\n' });
+  const root = fixture({ 'packages/agent/agent-foo/test/unit/pending.spec.ts': 'export {};\n' });
   try {
-    const live = { pendingMove: ['packages/agent/agent-foo/src/pending.test.ts'] };
+    const live = { pendingMove: ['packages/agent/agent-foo/test/unit/pending.spec.ts'] };
     assert.deepEqual(rules(collectAgentLaneSpawnViolations(root, live)), []);
-    const stale = { pendingMove: ['packages/agent/agent-foo/src/gone.test.ts'] };
+    const stale = { pendingMove: ['packages/agent/agent-foo/test/unit/gone.spec.ts'] };
     assert.deepEqual(rules(collectAgentLaneSpawnViolations(root, stale)), ['B-pending-move-stale']);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
 test('CLI exits 1 on a planted violation and 0 once removed [5b839b90 AC2]', () => {
-  const root = fixture({ 'packages/agent/agent-foo/src/bad.test.ts': SPAWNING, 'baseline.json': '{"pendingMove":[]}' });
+  const root = fixture({ 'packages/agent/agent-foo/test/unit/bad.spec.ts': SPAWNING, 'baseline.json': '{"pendingMove":[]}' });
   const args = [CLI, '--workspace-root', root, '--baseline', join(root, 'baseline.json')];
   try {
     const red = spawnSync(process.execPath, args, { encoding: 'utf8' });
     assert.equal(red.status, 1);
-    rmSync(join(root, 'packages/agent/agent-foo/src/bad.test.ts'));
+    rmSync(join(root, 'packages/agent/agent-foo/test/unit/bad.spec.ts'));
     const green = spawnSync(process.execPath, args, { encoding: 'utf8' });
     assert.equal(green.status, 0, green.stderr);
   } finally { rmSync(root, { recursive: true, force: true }); }

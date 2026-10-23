@@ -6,7 +6,7 @@ import { projectCacheDir, projectCoverage } from '../../workspace/workspace-base
 import * as path from 'path';
 import { defineConfig } from 'vite';
 import { configDefaults } from 'vitest/config';
-import { E2E_FILE_EXCLUDES } from '../../../tools/vite-plugins/e2e-globs.mjs';
+import { E2E_FILE_EXCLUDES, UNIT_FILE_INCLUDES } from '../../../tools/vite-plugins/e2e-globs.mjs';
 
 const repoRoot = path.resolve(__dirname, '../../..');
 
@@ -46,8 +46,8 @@ export default defineConfig({
     environment: 'node',
     pool: 'forks',
     fileParallelism: false,
-    include: ['src/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
-    // Subprocess / real-server suites (`*.e2e.ts`, `*.e2e.test.ts`) run in the separate
+    include: UNIT_FILE_INCLUDES,
+    // Subprocess / real-server suites (`*.e2e.ts`, `*.e2e.ts`) run in the separate
     // `e2e` lane (vitest.e2e.config.ts), never here (backlog 5b839b90 AC1;
     // docs/decisions/0009-test-lanes-unit-vs-e2e.md). Gated by check-agent-lane-spawn.mjs.
     exclude: [...configDefaults.exclude, ...E2E_FILE_EXCLUDES],

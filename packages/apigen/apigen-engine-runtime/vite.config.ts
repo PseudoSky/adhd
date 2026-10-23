@@ -1,4 +1,5 @@
 /// <reference types='vitest' />
+import { UNIT_FILE_INCLUDES } from '../../../tools/vite-plugins/e2e-globs.mjs';
 import { defineConfig } from 'vite';
 import dts from 'vite-plugin-dts';
 import * as path from 'path';
@@ -71,7 +72,7 @@ export default defineConfig({
     // `nx affected -t test` or the pre-commit / pre-push hooks; the resource
     // lane runs only via `nx run apigen-engine-runtime:e2e` (see the sibling
     // `vitest.e2e.config.ts`, the only place that includes `.e2e.ts`).
-    include: ['src/**/*.spec.ts'],
+    include: UNIT_FILE_INCLUDES,
 
     reporters: ['default'],
     coverage: {

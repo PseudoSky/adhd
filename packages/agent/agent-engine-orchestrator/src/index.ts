@@ -10,16 +10,25 @@ export type {
   WireSeams,
 } from './interfaces.js';
 
+export type { EchoCaps } from './providers/anthropic-echo.js';
+
 // ── Engine ────────────────────────────────────────────────────────────────────
 export { Orchestrator } from './engine/orchestrator.js';
 export {
   capToolResult,
+  clipForStorage,
+  TOOL_RESULT_EVENT_MAX_CHARS,
   validateToolResultMaxChars,
   parseToolResultMaxChars,
   DEFAULT_TOOL_RESULT_MAX_CHARS,
   ERROR_RESULT_FLOOR_CHARS,
 } from './engine/tool-result-cap.js';
-export type { ToolResultCapOutcome } from './engine/tool-result-cap.js';
+export type { ToolResultCapOutcome, StoredTextClip } from './engine/tool-result-cap.js';
+export {
+  SHELL_EXECUTE_TOOL,
+  SHELL_EXIT_SENTINEL_RE,
+  parseShellExitStatus,
+} from './engine/shell-exit-status.js';
 export {
   capOrSpillToolResult,
   resolveToolResultSpill,
@@ -48,7 +57,7 @@ export type {
   ToolArgCoercionOutcome,
   ToolArgMismatch,
 } from './engine/tool-arg-coercion.js';
-export type { OrchestratorRunInput, OrchestratorRunResult, OrchestratorTaskStore, OrchestratorSessionStore } from './engine/orchestrator.js';
+export type { OrchestratorRunInput, OrchestratorStartupStamps, OrchestratorRunResult, OrchestratorTaskStore, OrchestratorSessionStore } from './engine/orchestrator.js';
 export { resolveHitl } from './engine/orchestrator.js';
 export { PolicyEngine } from './engine/policy.js';
 export type { PolicyConfig, PolicyCheckInput, AgentPolicyTemplateRule } from './engine/policy.js';
@@ -116,7 +125,7 @@ export type {
   AgentVerifyMcpDeps,
   McpServerVerification,
 } from './tools/mcp-verify.js';
-export { taskTool, taskList, taskCancel, taskResume, resultTool, enqueueExistingTask, tasksBatch, DEFAULT_BATCH_CONCURRENCY } from './tools/task.js';
+export { taskTool, taskList, taskCancel, taskResume, resultTool, resultToolWait, enqueueExistingTask, tasksBatch, DEFAULT_BATCH_CONCURRENCY } from './tools/task.js';
 export type { TaskDeps } from './tools/task.js';
 export { usageQuery, usageQueryByGrain, buildTaskUsageReport } from './tools/usage.js';
 export type { Database, UsageQueryResult, TaskUsageRow } from './tools/usage.js';
@@ -124,7 +133,9 @@ export type { Database, UsageQueryResult, TaskUsageRow } from './tools/usage.js'
 // ── Plugins ───────────────────────────────────────────────────────────────────
 export { UsagePlugin } from './plugins/usage-plugin.js';
 export { registerTaskEventHooks, type ITaskEventSink } from './engine/task-event-hooks.js';
+export { shellRejectionNote, SHELL_UNAVAILABLE_COMMANDS } from './engine/native-tool-guidance.js';
 export { loadExternalPlugins, resolveSpecifier, findConfigFile, loadConfigFile, agentMcpConfigFileSchema } from './plugins/loader.js';
+export type { PreloadedPluginModules } from './plugins/loader.js';
 export type { AgentMcpConfigFile, PluginEntry, PluginLoadFailure, PluginLoadFailureHandler, PluginLoadFailureStage } from './plugins/loader.js';
 
 // ── Validation ────────────────────────────────────────────────────────────────
@@ -136,3 +147,16 @@ export * from './validation/task.js';
 export * from './validation/usage.js';
 export * from './validation/execution.js';
 export * from './validation/errors.js';
+export {
+  WEB_FETCH_TOOL,
+  WEB_FETCH_SERVER,
+  WEB_FETCH_MAX_BYTES,
+  WEB_FETCH_MAX_TEXT_CHARS,
+  WEB_FETCH_TRUNCATION_MARKER,
+  WebFetchClient,
+  executeWebFetch,
+  extractHtml,
+  hostAllowed,
+  webFetchAdvertised,
+} from './tools/web-fetch.js';
+export type { WebFetchOptions } from './tools/web-fetch.js';

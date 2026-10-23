@@ -392,35 +392,42 @@ importers:
 
   entrypoint/agent-mcp:
     dependencies:
+      '@modelcontextprotocol/server-filesystem':
+        specifier: 2026.7.10
+        version: 2026.7.10(zod@4.4.3)
+      better-sqlite3:
+        specifier: ^12.10.0
+        version: 12.10.0
+    devDependencies:
       '@adhd/agent-base-types':
-        specifier: ^2.3.11
+        specifier: ^2.3.12
         version: link:../../packages/agent/agent-base-types
       '@adhd/agent-core-env':
         specifier: ^0.1.5
         version: link:../../packages/agent/agent-core-env
       '@adhd/agent-core-native-tooling':
-        specifier: ^0.0.4
+        specifier: ^0.0.5
         version: link:../../packages/agent/agent-core-native-tooling
       '@adhd/agent-core-provider':
-        specifier: ^2.2.9
+        specifier: ^2.2.10
         version: link:../../packages/agent/agent-core-provider
       '@adhd/agent-engine-compiler':
         specifier: ^2.2.8
         version: link:../../packages/agent/agent-engine-compiler
       '@adhd/agent-engine-orchestrator':
-        specifier: ^2.3.13
+        specifier: ^2.3.15
         version: link:../../packages/agent/agent-engine-orchestrator
       '@adhd/agent-plugin-budget':
-        specifier: ^0.2.9
+        specifier: ^0.2.10
         version: link:../../packages/agent/agent-plugin-budget
       '@adhd/agent-plugin-tracing':
-        specifier: ^0.0.3
-        version: link:../../packages/agent/agent-plugin-tracing
+        specifier: ^0.0.4
+        version: 0.0.4(@adhd/agent-base-types@packages+agent+agent-base-types)
       '@adhd/agent-store-prompts':
         specifier: ^2.2.3
         version: link:../../packages/agent/agent-store-prompts
       '@adhd/agent-store-runtime':
-        specifier: ^2.2.10
+        specifier: ^2.2.11
         version: link:../../packages/agent/agent-store-runtime
       '@adhd/environment':
         specifier: ^0.1.8
@@ -431,15 +438,15 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: ^1.29.0
         version: 1.29.0(zod@4.4.3)
-      better-sqlite3:
-        specifier: ^12.10.0
-        version: 12.10.0
       dotenv:
         specifier: 17.4.2
         version: 17.4.2
       drizzle-orm:
         specifier: ^0.45.2
         version: 0.45.2(@opentelemetry/api@1.9.1)(@types/better-sqlite3@7.6.13)(better-sqlite3@12.10.0)
+      esbuild:
+        specifier: 0.18.20
+        version: 0.18.20
       pino:
         specifier: ^10.3.1
         version: 10.3.1
@@ -453,37 +460,37 @@ importers:
   entrypoint/apigen-cli:
     dependencies:
       '@adhd/apigen-base-logical':
-        specifier: ^0.1.4
+        specifier: ^0.1.5
         version: link:../../packages/apigen/apigen-base-logical
       '@adhd/apigen-core-client':
-        specifier: ^0.3.4
+        specifier: ^0.3.6
         version: link:../../packages/apigen/apigen-core-client
       '@adhd/apigen-engine-naming':
-        specifier: ^0.2.5
+        specifier: ^0.2.7
         version: link:../../packages/apigen/apigen-engine-naming
       '@adhd/apigen-engine-runtime':
-        specifier: ^0.3.3
+        specifier: ^0.3.5
         version: link:../../packages/apigen/apigen-engine-runtime
       '@adhd/apigen-plugin-api-express':
-        specifier: ^0.2.8
+        specifier: ^0.2.10
         version: link:../../packages/apigen/apigen-plugin-api-express
       '@adhd/apigen-plugin-api-fastify':
-        specifier: ^0.2.8
+        specifier: ^0.2.10
         version: link:../../packages/apigen/apigen-plugin-api-fastify
       '@adhd/apigen-plugin-batch':
-        specifier: ^0.2.6
+        specifier: ^0.2.7
         version: link:../../packages/apigen/apigen-plugin-batch
       '@adhd/apigen-plugin-cli-output':
-        specifier: ^0.2.8
+        specifier: ^0.2.10
         version: link:../../packages/apigen/apigen-plugin-cli-output
       '@adhd/apigen-plugin-health':
-        specifier: ^0.2.6
+        specifier: ^0.2.7
         version: link:../../packages/apigen/apigen-plugin-health
       '@adhd/apigen-plugin-ir-cache':
-        specifier: ^0.1.4
+        specifier: ^0.1.6
         version: link:../../packages/apigen/apigen-plugin-ir-cache
       '@adhd/apigen-plugin-java-javalin':
-        specifier: ^0.0.4
+        specifier: ^0.0.6
         version: link:../../packages/apigen/apigen-plugin-java-javalin
       '@adhd/apigen-plugin-jsonschema':
         specifier: ^0.2.3
@@ -492,25 +499,25 @@ importers:
         specifier: ^0.2.3
         version: link:../../packages/apigen/apigen-plugin-logger
       '@adhd/apigen-plugin-mcp':
-        specifier: ^0.3.3
+        specifier: ^0.3.5
         version: link:../../packages/apigen/apigen-plugin-mcp
       '@adhd/apigen-plugin-openapi':
-        specifier: ^0.2.5
+        specifier: ^0.2.7
         version: link:../../packages/apigen/apigen-plugin-openapi
       '@adhd/apigen-plugin-py-flask':
-        specifier: ^0.2.8
+        specifier: ^0.2.10
         version: link:../../packages/apigen/apigen-plugin-py-flask
       '@adhd/apigen-plugin-py-grpc':
-        specifier: ^0.2.7
+        specifier: ^0.2.9
         version: link:../../packages/apigen/apigen-plugin-py-grpc
       '@adhd/apigen-plugin-tracing':
         specifier: ^0.2.0
         version: link:../../packages/apigen/apigen-plugin-tracing
       '@adhd/apigen-plugin-ts-types':
-        specifier: ^0.0.3
+        specifier: ^0.0.4
         version: link:../../packages/apigen/apigen-plugin-ts-types
       '@adhd/apigen-python-env':
-        specifier: ^0.2.7
+        specifier: ^0.2.8
         version: link:../../packages/apigen/python-env
       '@adhd/sox-telemetry':
         specifier: ^0.4.3
@@ -556,31 +563,31 @@ importers:
   entrypoint/backlog:
     dependencies:
       '@adhd/apigen-base-logical':
-        specifier: ^0.1.4
+        specifier: ^0.1.5
         version: link:../../packages/apigen/apigen-base-logical
       '@adhd/apigen-core-client':
-        specifier: ^0.3.4
+        specifier: ^0.3.6
         version: link:../../packages/apigen/apigen-core-client
       '@adhd/apigen-engine-naming':
-        specifier: ^0.2.5
+        specifier: ^0.2.7
         version: link:../../packages/apigen/apigen-engine-naming
       '@adhd/apigen-plugin-api-fastify':
-        specifier: ^0.2.8
+        specifier: ^0.2.10
         version: link:../../packages/apigen/apigen-plugin-api-fastify
       '@adhd/apigen-plugin-batch':
-        specifier: ^0.2.6
+        specifier: ^0.2.7
         version: link:../../packages/apigen/apigen-plugin-batch
       '@adhd/apigen-plugin-cli-output':
-        specifier: ^0.2.8
+        specifier: ^0.2.10
         version: link:../../packages/apigen/apigen-plugin-cli-output
       '@adhd/apigen-plugin-ir-cache':
-        specifier: ^0.1.4
+        specifier: ^0.1.6
         version: link:../../packages/apigen/apigen-plugin-ir-cache
       '@adhd/apigen-plugin-mcp':
-        specifier: ^0.3.3
+        specifier: ^0.3.5
         version: link:../../packages/apigen/apigen-plugin-mcp
       '@adhd/apigen-plugin-openapi':
-        specifier: ^0.2.5
+        specifier: ^0.2.7
         version: link:../../packages/apigen/apigen-plugin-openapi
       '@adhd/apigen-plugin-tracing':
         specifier: ^0.2.0
@@ -592,7 +599,7 @@ importers:
         specifier: ^0.1.4
         version: link:../../packages/environment/environment-base-spec
       '@adhd/environment-builder':
-        specifier: ^0.1.7
+        specifier: ^0.1.8
         version: link:../../packages/environment/environment-builder
       '@adhd/sox-graph-store':
         specifier: ^0.12.4
@@ -658,9 +665,6 @@ importers:
       '@adhd/data-base-transforms':
         specifier: ^2.3.4
         version: link:../../packages/data/data-base-transforms
-      '@babel/register':
-        specifier: 7.29.7
-        version: 7.29.7(@babel/core@7.29.7)
       acorn:
         specifier: ^8.14.1
         version: 8.18.0
@@ -703,9 +707,6 @@ importers:
       posthtml-parser:
         specifier: ^0.12.1
         version: 0.12.1
-      react:
-        specifier: 19.3.0
-        version: 19.3.0
       source-map:
         specifier: 0.6.1
         version: 0.6.1
@@ -715,17 +716,24 @@ importers:
       tslib:
         specifier: ^2.3.0
         version: 2.8.1
+    devDependencies:
+      '@babel/register':
+        specifier: 7.29.7
+        version: 7.29.7(@babel/core@7.29.7)
+      react:
+        specifier: 19.3.0
+        version: 19.3.0
 
   entrypoint/dispatch-cli:
     dependencies:
       '@adhd/agent-base-types':
-        specifier: ^2.3.11
+        specifier: ^2.3.13
         version: link:../../packages/agent/agent-base-types
       '@adhd/agent-core-native-tooling':
-        specifier: ^0.0.4
+        specifier: ^0.0.5
         version: link:../../packages/agent/agent-core-native-tooling
       '@adhd/backlog':
-        specifier: ^1.0.16
+        specifier: ^1.0.20
         version: link:../backlog
       '@adhd/dispatch-base-spec':
         specifier: ^0.1.7
@@ -737,10 +745,10 @@ importers:
         specifier: ^0.1.7
         version: link:../../packages/dispatch/dispatch-core-optimizer
       '@adhd/dispatch-orchestrator':
-        specifier: ^0.1.7
+        specifier: ^0.1.8
         version: link:../../packages/dispatch/dispatch-orchestrator
       '@adhd/dispatch-serializer-json':
-        specifier: ^0.1.4
+        specifier: ^0.1.5
         version: link:../../packages/dispatch/dispatch-serializer-json
       '@modelcontextprotocol/sdk':
         specifier: 1.29.0
@@ -760,6 +768,81 @@ importers:
       tslib:
         specifier: ^2.3.0
         version: 2.8.1
+      yaml:
+        specifier: ^1.10.2
+        version: 1.10.3
+
+  entrypoint/policy:
+    dependencies:
+      '@adhd/apigen-base-errors':
+        specifier: ^0.2.3
+        version: link:../../packages/apigen/apigen-base-errors
+      '@adhd/apigen-core-client':
+        specifier: ^0.3.6
+        version: link:../../packages/apigen/apigen-core-client
+      '@adhd/apigen-engine-gateway':
+        specifier: ^0.2.5
+        version: link:../../packages/apigen/apigen-engine-gateway
+      '@adhd/apigen-engine-naming':
+        specifier: ^0.2.7
+        version: link:../../packages/apigen/apigen-engine-naming
+      '@adhd/apigen-engine-runtime':
+        specifier: ^0.3.5
+        version: link:../../packages/apigen/apigen-engine-runtime
+      '@adhd/apigen-plugin-api-fastify':
+        specifier: ^0.2.10
+        version: link:../../packages/apigen/apigen-plugin-api-fastify
+      '@adhd/apigen-plugin-cli-output':
+        specifier: ^0.2.10
+        version: link:../../packages/apigen/apigen-plugin-cli-output
+      '@adhd/apigen-plugin-ir-cache':
+        specifier: ^0.1.6
+        version: link:../../packages/apigen/apigen-plugin-ir-cache
+      '@adhd/apigen-plugin-mcp':
+        specifier: ^0.3.5
+        version: link:../../packages/apigen/apigen-plugin-mcp
+      '@adhd/apigen-plugin-policy':
+        specifier: ^0.0.1
+        version: link:../../packages/apigen/apigen-plugin-policy
+      '@adhd/apigen-plugin-tracing':
+        specifier: ^0.2.0
+        version: link:../../packages/apigen/apigen-plugin-tracing
+      '@adhd/policy-core-client':
+        specifier: ^0.0.1
+        version: link:../../packages/policy/policy-core-client
+      '@adhd/sox-telemetry':
+        specifier: ^0.4.3
+        version: 0.4.3
+      '@modelcontextprotocol/sdk':
+        specifier: 1.29.0
+        version: 1.29.0(zod@4.4.3)
+      ajv:
+        specifier: ^8.20.0
+        version: 8.20.0
+      ajv-formats:
+        specifier: 2.1.1
+        version: 2.1.1(ajv@8.20.0)
+      commander:
+        specifier: ^14.0.3
+        version: 14.0.3
+      fastify:
+        specifier: ^4.0.0
+        version: 4.29.1
+      pino:
+        specifier: 10.3.1
+        version: 10.3.1
+      pino-pretty:
+        specifier: 13.1.3
+        version: 13.1.3
+      ts-json-schema-generator:
+        specifier: ^2.3.0
+        version: 2.9.0
+      ts-morph:
+        specifier: ^23.0.0
+        version: 23.0.0
+      typescript:
+        specifier: ^5.5.0
+        version: 5.9.3
       yaml:
         specifier: ^1.10.2
         version: 1.10.3
@@ -852,7 +935,7 @@ importers:
   packages/agent/agent-core-native-tooling:
     dependencies:
       '@adhd/agent-base-types':
-        specifier: ^2.3.11
+        specifier: ^2.3.13
         version: link:../agent-base-types
       '@anthropic-ai/sandbox-runtime':
         specifier: ^0.0.78
@@ -883,7 +966,7 @@ importers:
   packages/agent/agent-core-policy:
     dependencies:
       '@adhd/agent-base-types':
-        specifier: ^2.3.11
+        specifier: ^2.3.13
         version: link:../agent-base-types
       drizzle-orm:
         specifier: 0.45.2
@@ -920,7 +1003,7 @@ importers:
   packages/agent/agent-core-provider:
     dependencies:
       '@adhd/agent-base-types':
-        specifier: ^2.3.11
+        specifier: ^2.3.13
         version: link:../agent-base-types
       drizzle-orm:
         specifier: 0.45.2
@@ -960,7 +1043,7 @@ importers:
         specifier: ^2.2.3
         version: link:../agent-core-policy
       '@adhd/agent-core-provider':
-        specifier: ^2.2.9
+        specifier: ^2.2.10
         version: link:../agent-core-provider
       '@adhd/agent-store-prompts':
         specifier: ^2.2.3
@@ -1003,22 +1086,25 @@ importers:
   packages/agent/agent-engine-orchestrator:
     dependencies:
       '@adhd/agent-base-types':
-        specifier: ^2.3.11
+        specifier: ^2.3.13
         version: link:../agent-base-types
+      '@adhd/agent-core-native-tooling':
+        specifier: ^0.0.5
+        version: link:../agent-core-native-tooling
       '@adhd/agent-core-provider':
-        specifier: ^2.2.9
+        specifier: ^2.2.10
         version: link:../agent-core-provider
       '@adhd/agent-engine-compiler':
         specifier: ^2.2.8
         version: link:../agent-engine-compiler
       '@adhd/agent-plugin-budget':
-        specifier: ^0.2.9
+        specifier: ^0.2.11
         version: link:../agent-plugin-budget
       '@adhd/agent-store-prompts':
         specifier: ^2.2.3
         version: link:../agent-store-prompts
       '@adhd/agent-store-runtime':
-        specifier: ^2.2.10
+        specifier: ^2.2.12
         version: link:../agent-store-runtime
       '@anthropic-ai/sdk':
         specifier: ^0.96.0
@@ -1089,13 +1175,13 @@ importers:
   packages/agent/agent-plugin-budget:
     dependencies:
       '@adhd/agent-base-types':
-        specifier: ^2.3.11
+        specifier: ^2.3.13
         version: link:../agent-base-types
       '@adhd/agent-core-provider':
-        specifier: ^2.2.9
+        specifier: ^2.2.10
         version: link:../agent-core-provider
       '@adhd/agent-store-runtime':
-        specifier: ^2.2.10
+        specifier: ^2.2.12
         version: link:../agent-store-runtime
       drizzle-orm:
         specifier: 0.45.2
@@ -1114,7 +1200,7 @@ importers:
   packages/agent/agent-plugin-sanitize:
     dependencies:
       '@adhd/agent-base-types':
-        specifier: ^2.3.11
+        specifier: ^2.3.13
         version: link:../agent-base-types
       zod:
         specifier: ^4.4.3
@@ -1123,7 +1209,7 @@ importers:
   packages/agent/agent-plugin-tracing:
     dependencies:
       '@adhd/agent-base-types':
-        specifier: ^2.3.11
+        specifier: ^2.3.13
         version: link:../agent-base-types
       '@adhd/sox-telemetry':
         specifier: ^0.4.3
@@ -1188,7 +1274,7 @@ importers:
   packages/agent/agent-store-runtime:
     dependencies:
       '@adhd/agent-base-types':
-        specifier: ^2.3.11
+        specifier: ^2.3.13
         version: link:../agent-base-types
       better-sqlite3:
         specifier: 12.10.0
@@ -1268,7 +1354,7 @@ importers:
   packages/apigen/apigen-core-client:
     dependencies:
       '@adhd/apigen-base-logical':
-        specifier: ^0.1.4
+        specifier: ^0.1.5
         version: link:../apigen-base-logical
       pino:
         specifier: 10.3.1
@@ -1302,16 +1388,16 @@ importers:
         specifier: ^0.2.3
         version: link:../apigen-base-errors
       '@adhd/apigen-base-logical':
-        specifier: ^0.1.4
+        specifier: ^0.1.5
         version: link:../apigen-base-logical
       '@adhd/apigen-core-client':
-        specifier: ^0.3.4
+        specifier: ^0.3.6
         version: link:../apigen-core-client
       '@adhd/apigen-engine-naming':
-        specifier: ^0.2.5
+        specifier: ^0.2.7
         version: link:../apigen-engine-naming
       '@adhd/apigen-python-env':
-        specifier: ^0.2.7
+        specifier: ^0.2.8
         version: link:../python-env
 
   packages/apigen/apigen-engine-gateway:
@@ -1320,13 +1406,19 @@ importers:
         specifier: ^0.2.3
         version: link:../apigen-base-errors
       '@adhd/apigen-core-client':
-        specifier: ^0.3.4
+        specifier: ^0.3.6
         version: link:../apigen-core-client
+      '@adhd/apigen-engine-runtime':
+        specifier: ^0.3.5
+        version: link:../apigen-engine-runtime
+      '@modelcontextprotocol/sdk':
+        specifier: 1.29.0
+        version: 1.29.0(zod@4.4.3)
 
   packages/apigen/apigen-engine-naming:
     dependencies:
       '@adhd/apigen-core-client':
-        specifier: ^0.3.4
+        specifier: ^0.3.6
         version: link:../apigen-core-client
 
   packages/apigen/apigen-engine-runtime:
@@ -1335,13 +1427,13 @@ importers:
         specifier: ^0.2.3
         version: link:../apigen-base-errors
       '@adhd/apigen-base-logical':
-        specifier: ^0.1.4
+        specifier: ^0.1.5
         version: link:../apigen-base-logical
       '@adhd/apigen-core-client':
-        specifier: ^0.3.4
+        specifier: ^0.3.6
         version: link:../apigen-core-client
       '@adhd/apigen-engine-naming':
-        specifier: ^0.2.5
+        specifier: ^0.2.7
         version: link:../apigen-engine-naming
       ajv:
         specifier: ^8.20.0
@@ -1349,12 +1441,13 @@ importers:
       ajv-formats:
         specifier: 2.1.1
         version: 2.1.1(ajv@8.20.0)
-      better-sqlite3:
-        specifier: 12.10.0
-        version: 12.10.0
       pino:
         specifier: 10.3.1
         version: 10.3.1
+    devDependencies:
+      better-sqlite3:
+        specifier: 12.10.0
+        version: 12.10.0
 
   packages/apigen/apigen-generator-nx:
     dependencies:
@@ -1371,13 +1464,13 @@ importers:
         specifier: ^0.2.3
         version: link:../apigen-base-errors
       '@adhd/apigen-core-client':
-        specifier: ^0.3.4
+        specifier: ^0.3.6
         version: link:../apigen-core-client
       '@adhd/apigen-engine-naming':
-        specifier: ^0.2.5
+        specifier: ^0.2.7
         version: link:../apigen-engine-naming
       '@adhd/apigen-engine-runtime':
-        specifier: ^0.3.3
+        specifier: ^0.3.5
         version: link:../apigen-engine-runtime
       express:
         specifier: ^5.2.1
@@ -1399,13 +1492,13 @@ importers:
         specifier: ^0.2.3
         version: link:../apigen-base-errors
       '@adhd/apigen-core-client':
-        specifier: ^0.3.4
+        specifier: ^0.3.6
         version: link:../apigen-core-client
       '@adhd/apigen-engine-naming':
-        specifier: ^0.2.5
+        specifier: ^0.2.7
         version: link:../apigen-engine-naming
       '@adhd/apigen-engine-runtime':
-        specifier: ^0.3.3
+        specifier: ^0.3.5
         version: link:../apigen-engine-runtime
       fastify:
         specifier: ^4.0.0
@@ -1424,10 +1517,10 @@ importers:
         specifier: ^0.2.3
         version: link:../apigen-base-errors
       '@adhd/apigen-core-client':
-        specifier: ^0.3.4
+        specifier: ^0.3.6
         version: link:../apigen-core-client
       '@adhd/apigen-engine-runtime':
-        specifier: ^0.3.3
+        specifier: ^0.3.5
         version: link:../apigen-engine-runtime
 
   packages/apigen/apigen-plugin-cli-output:
@@ -1436,13 +1529,13 @@ importers:
         specifier: ^0.2.3
         version: link:../apigen-base-errors
       '@adhd/apigen-core-client':
-        specifier: ^0.3.4
+        specifier: ^0.3.6
         version: link:../apigen-core-client
       '@adhd/apigen-engine-naming':
-        specifier: ^0.2.5
+        specifier: ^0.2.7
         version: link:../apigen-engine-naming
       '@adhd/apigen-engine-runtime':
-        specifier: ^0.3.3
+        specifier: ^0.3.5
         version: link:../apigen-engine-runtime
     devDependencies:
       '@adhd/apigen-plugin-tracing':
@@ -1455,13 +1548,13 @@ importers:
   packages/apigen/apigen-plugin-health:
     dependencies:
       '@adhd/apigen-core-client':
-        specifier: ^0.3.4
+        specifier: ^0.3.6
         version: link:../apigen-core-client
 
   packages/apigen/apigen-plugin-ir-cache:
     dependencies:
       '@adhd/apigen-core-client':
-        specifier: ^0.3.4
+        specifier: ^0.3.6
         version: link:../apigen-core-client
       '@adhd/environment':
         specifier: ^0.1.8
@@ -1470,19 +1563,19 @@ importers:
   packages/apigen/apigen-plugin-java-javalin:
     dependencies:
       '@adhd/apigen-base-logical':
-        specifier: ^0.1.4
+        specifier: ^0.1.5
         version: link:../apigen-base-logical
       '@adhd/apigen-core-client':
-        specifier: ^0.3.4
+        specifier: ^0.3.6
         version: link:../apigen-core-client
       '@adhd/apigen-engine-naming':
-        specifier: ^0.2.5
+        specifier: ^0.2.7
         version: link:../apigen-engine-naming
 
   packages/apigen/apigen-plugin-jsonschema:
     dependencies:
       '@adhd/apigen-core-client':
-        specifier: ^0.3.4
+        specifier: ^0.3.6
         version: link:../apigen-core-client
 
   packages/apigen/apigen-plugin-logger:
@@ -1491,7 +1584,7 @@ importers:
         specifier: ^0.2.3
         version: link:../apigen-base-errors
       '@adhd/apigen-core-client':
-        specifier: ^0.3.4
+        specifier: ^0.3.6
         version: link:../apigen-core-client
       pino:
         specifier: 10.3.1
@@ -1503,13 +1596,13 @@ importers:
         specifier: ^0.2.3
         version: link:../apigen-base-errors
       '@adhd/apigen-core-client':
-        specifier: ^0.3.4
+        specifier: ^0.3.6
         version: link:../apigen-core-client
       '@adhd/apigen-engine-naming':
-        specifier: ^0.2.5
+        specifier: ^0.2.7
         version: link:../apigen-engine-naming
       '@adhd/apigen-engine-runtime':
-        specifier: ^0.3.3
+        specifier: ^0.3.5
         version: link:../apigen-engine-runtime
       '@modelcontextprotocol/sdk':
         specifier: 1.29.0
@@ -1525,43 +1618,52 @@ importers:
   packages/apigen/apigen-plugin-openapi:
     dependencies:
       '@adhd/apigen-codegen-openapi':
-        specifier: ^0.2.5
+        specifier: ^0.2.7
         version: link:../codegen/openapi
       '@adhd/apigen-core-client':
-        specifier: ^0.3.4
+        specifier: ^0.3.6
+        version: link:../apigen-core-client
+
+  packages/apigen/apigen-plugin-policy:
+    dependencies:
+      '@adhd/apigen-base-errors':
+        specifier: ^0.2.3
+        version: link:../apigen-base-errors
+      '@adhd/apigen-core-client':
+        specifier: ^0.3.6
         version: link:../apigen-core-client
 
   packages/apigen/apigen-plugin-py-flask:
     dependencies:
       '@adhd/apigen-core-client':
-        specifier: ^0.3.4
+        specifier: ^0.3.6
         version: link:../apigen-core-client
       '@adhd/apigen-engine-naming':
-        specifier: ^0.2.5
+        specifier: ^0.2.7
         version: link:../apigen-engine-naming
       '@adhd/apigen-engine-runtime':
-        specifier: ^0.3.3
+        specifier: ^0.3.5
         version: link:../apigen-engine-runtime
       '@adhd/apigen-python-env':
-        specifier: ^0.2.7
+        specifier: ^0.2.8
         version: link:../python-env
 
   packages/apigen/apigen-plugin-py-grpc:
     dependencies:
       '@adhd/apigen-core-client':
-        specifier: ^0.3.4
+        specifier: ^0.3.6
         version: link:../apigen-core-client
       '@adhd/apigen-engine-naming':
-        specifier: ^0.2.5
+        specifier: ^0.2.7
         version: link:../apigen-engine-naming
       '@adhd/apigen-python-env':
-        specifier: ^0.2.7
+        specifier: ^0.2.8
         version: link:../python-env
 
   packages/apigen/apigen-plugin-tracing:
     dependencies:
       '@adhd/apigen-core-client':
-        specifier: ^0.3.4
+        specifier: ^0.3.6
         version: link:../apigen-core-client
       '@adhd/sox-telemetry':
         specifier: ^0.4.3
@@ -1570,10 +1672,10 @@ importers:
   packages/apigen/apigen-plugin-ts-types:
     dependencies:
       '@adhd/apigen-core-client':
-        specifier: ^0.3.4
+        specifier: ^0.3.6
         version: link:../apigen-core-client
       '@adhd/apigen-engine-naming':
-        specifier: ^0.2.5
+        specifier: ^0.2.7
         version: link:../apigen-engine-naming
     devDependencies:
       esbuild:
@@ -1583,16 +1685,16 @@ importers:
   packages/apigen/codegen/openapi:
     dependencies:
       '@adhd/apigen-core-client':
-        specifier: ^0.3.4
+        specifier: ^0.3.6
         version: link:../../apigen-core-client
       '@adhd/apigen-engine-naming':
-        specifier: ^0.2.5
+        specifier: ^0.2.7
         version: link:../../apigen-engine-naming
 
   packages/apigen/python-env:
     dependencies:
       '@adhd/apigen-core-client':
-        specifier: ^0.3.4
+        specifier: ^0.3.6
         version: link:../apigen-core-client
 
   packages/data/data-base-transforms: {}
@@ -1615,7 +1717,7 @@ importers:
   packages/dispatch/dispatch-base-spec:
     dependencies:
       '@adhd/agent-base-types':
-        specifier: ^2.3.11
+        specifier: ^2.3.13
         version: link:../../agent/agent-base-types
 
   packages/dispatch/dispatch-base-types: {}
@@ -1695,8 +1797,26 @@ importers:
         specifier: ^0.1.4
         version: link:../environment-base-spec
       '@adhd/environment-builder':
-        specifier: ^0.1.7
+        specifier: ^0.1.8
         version: link:../environment-builder
+
+  packages/policy/policy-core-client:
+    dependencies:
+      '@adhd/apigen-base-errors':
+        specifier: ^0.2.3
+        version: link:../../apigen/apigen-base-errors
+      '@adhd/data-query-engine':
+        specifier: ^2.3.10
+        version: link:../../data/data-query-engine
+      '@adhd/environment':
+        specifier: ^0.1.8
+        version: link:../../environment/environment-core-node
+      '@adhd/environment-base-spec':
+        specifier: ^0.1.4
+        version: link:../../environment/environment-base-spec
+      yaml:
+        specifier: ^1.10.2
+        version: 1.10.3
 
   packages/resilience/resilience-core-tripwire: {}
 
@@ -1767,6 +1887,17 @@ importers:
   tools/nx-plugins/test: {}
 
 packages:
+
+  /@adhd/agent-plugin-tracing@0.0.4(@adhd/agent-base-types@packages+agent+agent-base-types):
+    resolution: {integrity: sha512-q1GWqkAOIv0VV0BpVeNcadYMT04QLwqQTmGueRYwGq1MDJiyplUq68+ipUR8F5+8QqpAWFkfuEPH67l6ZWdJKw==}
+    peerDependencies:
+      '@adhd/agent-base-types': ^2.3.12
+    dependencies:
+      '@adhd/agent-base-types': link:packages/agent/agent-base-types
+      '@adhd/sox-telemetry': 0.4.3
+      tslib: 2.8.1
+      zod: 4.4.3
+    dev: true
 
   /@adhd/sox-embedding-provider@0.6.3:
     resolution: {integrity: sha512-LVYsA4R6vwiDJANU/2zDFxfTc00TJHEj4DjYcU2XaAvKqc5ogCftEumNm4qEUUFnZ0VfDjaj+MyObAUeV4i3Tg==}
@@ -3252,6 +3383,7 @@ packages:
       make-dir: 2.1.0
       pirates: 4.0.7
       source-map-support: 0.5.21
+    dev: true
 
   /@babel/runtime@7.29.7:
     resolution: {integrity: sha512-Nq8OhGWiZIZGV6hLHoyAKLLcJihP/xFeBMGJoUrxTX2psI8dCifzLhZISFb+VWS3wFMRDmCGw5R+dOySCqPLhw==}
@@ -14207,7 +14339,6 @@ packages:
     resolution: {integrity: sha512-uZbew1NqdmPDTMJ8ah1y+b+9QEJrfkXFk3RcTQw3X0jW/xRUvFKsg1CfQdSYGdTbXZWExtU3J3ccxtnfw1Fi0g==}
     dependencies:
       balanced-match: 1.0.2
-    dev: false
 
   /brace-expansion@5.0.9:
     resolution: {integrity: sha512-ScQ4IuvIEF1TMlP7Zt+vjJ//9zlPb2SDcxWxM3bk8s6t6GGdJ7KO1dCcTidOPJKePW30LE/2cT7wCyPho9/Wxg==}
@@ -14660,6 +14791,7 @@ packages:
       is-plain-object: 2.0.4
       kind-of: 6.0.3
       shallow-clone: 3.0.1
+    dev: true
 
   /clone-response@1.0.3:
     resolution: {integrity: sha512-ROoL94jJH2dUVML2Y/5PEDNaSHgeOdSDicUyS7izcF63G6sTc/FTjLub4b8Il9S8S0beOfYt0TaA5qvFK+w0wA==}
@@ -14822,6 +14954,7 @@ packages:
 
   /commondir@1.0.1:
     resolution: {integrity: sha512-W9pAhw0ja1Edb5GVdIF1mjZw/ASI0AlShXM83UUGe2DVr5TdAPEA1OA8m/g8zWp9x6On7gqufY+FatDbC3MDQg==}
+    dev: true
 
   /component-emitter@1.3.1:
     resolution: {integrity: sha512-T0+barUSQRTUQASh8bx02dl+DhF54GtIDY13Y3m9oWTklKbb3Wv974meRpeZ3lp1JpLVECWWNHC4vaG2XHXouQ==}
@@ -15702,7 +15835,6 @@ packages:
   /dotenv@17.4.2:
     resolution: {integrity: sha512-nI4U3TottKAcAD9LLud4Cb7b2QztQMUEfHbvhTH09bqXTxnSie8WnjPALV/WMCrJZ6UV/qHJ6L03OqO3LcdYZw==}
     engines: {node: '>=12'}
-    dev: false
 
   /drizzle-kit@0.31.10:
     resolution: {integrity: sha512-7OZcmQUrdGI+DUNNsKBn1aW8qSoKuTH7d0mYgSP8bAzdFzKoovxEFnoGQp2dVs82EOJeYycqRtciopszwUf8bw==}
@@ -17210,6 +17342,7 @@ packages:
       commondir: 1.0.1
       make-dir: 2.1.0
       pkg-dir: 3.0.0
+    dev: true
 
   /find-cache-dir@3.3.2:
     resolution: {integrity: sha512-wXZV5emFEjrridIgED11OoUKLxiYjAcqot/NJdAkOhlJ+vGzwhOAfcG5OX1jP+S0PcjEn8bdMJv+g2jwQ3Onig==}
@@ -17266,6 +17399,7 @@ packages:
     engines: {node: '>=6'}
     dependencies:
       locate-path: 3.0.0
+    dev: true
 
   /find-up@4.1.0:
     resolution: {integrity: sha512-PpOwAdQ/YlXQ2vj8a3h8IipDuYRi3wceVQQGYWxNINccq40Anw7BlsEXCMbt1Zt+OLA6Fq9suIpIWD0OsnISlw==}
@@ -18674,6 +18808,7 @@ packages:
     engines: {node: '>=0.10.0'}
     dependencies:
       isobject: 3.0.1
+    dev: true
 
   /is-plain-object@3.0.1:
     resolution: {integrity: sha512-Xnpx182SBMrr/aBik8y+GuR4U1L9FqMSojwDQwPMmxyC6bvEqly9UBCxhauBF5vNh2gwWJNX6oDV7O+OM4z34g==}
@@ -18833,6 +18968,7 @@ packages:
   /isobject@3.0.1:
     resolution: {integrity: sha512-WhB9zCku7EGTj/HQQRz5aUQEUeoQZH2bWcltRErOpymJ4boYE6wL9Tbr23krRPSZ+C5zqNSrSw+Cc7sZZ4b7vg==}
     engines: {node: '>=0.10.0'}
+    dev: true
 
   /isstream@0.1.2:
     resolution: {integrity: sha512-Yljz7ffyPbrLpLngrMtZ7NduUgVvi6wG9RJ9IUcyCd59YQ911PBJphODUcbOVbqYfxe1wuYf/LJ8PauMRwsM/g==}
@@ -20756,6 +20892,7 @@ packages:
   /kind-of@6.0.3:
     resolution: {integrity: sha512-dcS1ul+9tmeD95T+x28/ehLgd9mENa3LsvDTtzm3vyBEO7RPptvAD+t44WVXaUjTBRcrpFeFlC8WCruUR456hw==}
     engines: {node: '>=0.10.0'}
+    dev: true
 
   /kleur@3.0.3:
     resolution: {integrity: sha512-eTIzlVOSUR+JxdDFepEYcBMtZ9Qqdef+rnzWdRZuMbOywu5tO2w2N7rqjoANZ5k9vywhL6Br1VRjUIgTQx4E8w==}
@@ -20996,6 +21133,7 @@ packages:
     dependencies:
       p-locate: 3.0.0
       path-exists: 3.0.0
+    dev: true
 
   /locate-path@5.0.0:
     resolution: {integrity: sha512-t7hw9pI+WvuwNJXwk5zVHpyhIqzg2qTlklJOf0mVxGSbe3Fp2VieZcduNYjaLDoy6p9uGpQEGWG87WpMKlNq8g==}
@@ -21191,6 +21329,7 @@ packages:
     dependencies:
       pify: 4.0.1
       semver: 5.7.2
+    dev: true
 
   /make-dir@3.1.0:
     resolution: {integrity: sha512-g3FeP20LNwhALb/6Cz6Dd4F2ngze0jz7tbzrD2wAV+o9FeNHe4rL+yK2md0J/fiSf1sa1ADhXqi5+oVwOM/eGw==}
@@ -21397,7 +21536,7 @@ packages:
     resolution: {integrity: sha512-7o1wEA2RyMP7Iu7GNba9vc0RWWGACJOCZBJX2GJWip0ikV+wcOsgVuY9uE8CPiyQhkGFSlhuSkZPavN7u1c2Fw==}
     engines: {node: '>=10'}
     dependencies:
-      brace-expansion: 2.1.3
+      brace-expansion: 2.1.7
 
   /minimatch@7.4.9:
     resolution: {integrity: sha512-Brg/fp/iAVDOQoHxkuN5bEYhyQlZhxddI78yWsCbeEwTHXQjlNLtiJDUsp1GIptVqMI7/gkJMz4vVAc01mpoBw==}
@@ -22454,6 +22593,7 @@ packages:
     engines: {node: '>=6'}
     dependencies:
       p-try: 2.2.0
+    dev: true
 
   /p-limit@3.1.0:
     resolution: {integrity: sha512-TYOanM3wGwNGsZN2cVTYPArw454xnXj5qmWF1bEoAc4+cU/ol7GVh7odevjp1FNHduHc3KZMcFduxU5Xc6uJRQ==}
@@ -22467,6 +22607,7 @@ packages:
     engines: {node: '>=6'}
     dependencies:
       p-limit: 2.3.0
+    dev: true
 
   /p-locate@4.1.0:
     resolution: {integrity: sha512-R79ZZ/0wAxKGu3oYMlz8jy/kbhsNrS7SKZ7PxEHBgJ5+F2mtFW2fK2cOtBh1cHYkQsbzFV7I+EoRKe6Yt0oK7A==}
@@ -22534,6 +22675,7 @@ packages:
   /p-try@2.2.0:
     resolution: {integrity: sha512-R4nPAVTAU0B9D35/Gk3uJf/7XYbQcyohSKdvAxIRSNghFl4e71hVoGnBNQz9cWaXxO2I10KTC+3jMdvvoKw6dQ==}
     engines: {node: '>=6'}
+    dev: true
 
   /package-hash@4.0.0:
     resolution: {integrity: sha512-whdkPIooSu/bASggZ96BWVvZTRMOFxnyUG5PnTSGKoJE2gd5mbVNmR2Nj20QFzxYYgAXpoqC+AiXzl+UMRh7zQ==}
@@ -22598,6 +22740,7 @@ packages:
   /path-exists@3.0.0:
     resolution: {integrity: sha512-bpC7GYwiDYQ4wYLe+FA8lhRjhQCMcQGuSgGGqDkg/QerRWw9CmGRT0iSOVRSZJ29NMLZgIzqaljJ63oaL4NIJQ==}
     engines: {node: '>=4'}
+    dev: true
 
   /path-exists@4.0.0:
     resolution: {integrity: sha512-ak9Qy5Q7jYb2Wwcey5Fpvg2KoAc/ZIhLSLOSBmRmygPsGwkVVt0fZa0qrtMz+m6tJTAHfZQ8FnmB4MG4LWy7/w==}
@@ -22704,6 +22847,7 @@ packages:
   /pify@4.0.1:
     resolution: {integrity: sha512-uB80kBFb/tfd68bVleG9T5GGsGPjJrLAUpR5PZIrhBnIaRTQRjqdJSsIKkOP6OAIFbj7GOrcudc5pNjZ+geV2g==}
     engines: {node: '>=6'}
+    dev: true
 
   /pino-abstract-transport@1.2.0:
     resolution: {integrity: sha512-Guhh8EZfPCfH+PMXAb6rKOjGQEoy0xlAIn+irODG5kgfYV+BQ0rGYYWTIel3P5mmyXqkYkPmdIkywsn6QKUR1Q==}
@@ -22720,7 +22864,6 @@ packages:
     resolution: {integrity: sha512-wlfUczU+n7Hy/Ha5j9a/gZNy7We5+cXp8YL+X+PG8S0KXxw7n/JXA3c46Y0zQznIJ83URJiwy7Lh56WLokNuxg==}
     dependencies:
       split2: 4.2.0
-    dev: false
 
   /pino-http@11.0.0:
     resolution: {integrity: sha512-wqg5XIAGRRIWtTk8qPGxkbrfiwEWz1lgedVLvhLALudKXvg1/L2lTFgTGPJ4Z2e3qcRmxoFxDuSdMdMGNM6I1g==}
@@ -22768,7 +22911,6 @@ packages:
       safe-stable-stringify: 2.5.0
       sonic-boom: 4.2.1
       thread-stream: 4.2.0
-    dev: false
 
   /pino@9.14.0:
     resolution: {integrity: sha512-8OEwKp5juEvb/MjpIc4hjqfgCNysrS94RIOMXYvpYCdm/jglrKEiAYmiumbmGhCvs+IcInsphYDFwqrjr7398w==}
@@ -22799,6 +22941,7 @@ packages:
     engines: {node: '>=6'}
     dependencies:
       find-up: 3.0.0
+    dev: true
 
   /pkg-dir@4.2.0:
     resolution: {integrity: sha512-HRDzbaKjC+AOWVXxAU/x54COGeIv9eb+6CkDSQoNTt4XyWoIJvuPsXizxu/Fr23EiekbtZwmh1IcIG/l/a10GQ==}
@@ -23501,7 +23644,6 @@ packages:
 
   /real-require@1.0.0:
     resolution: {integrity: sha512-P4nbQYQfePJxRSmY+v/KINxVucm4NF3p3s7pJveMTtom52FR4YGltUQLB8idDXwDDWW+eYrWDFbuzUnjoWHF7g==}
-    dev: false
 
   /recast@0.23.12:
     resolution: {integrity: sha512-dEWRjcINDu/F4l2dYx57ugBtD7HV9KXESyxhzw/MqWLeglJrsjJKqACPyUPg+6AF8mIgm+Zi0dZ3ACoIg+QtpA==}
@@ -24112,6 +24254,7 @@ packages:
   /semver@5.7.2:
     resolution: {integrity: sha512-cBznnQ9KjJqU67B52RMC65CMarK2600WFnbkcaiwWq3xy/5haFJlshgnpjovMVJ+Hff49d8GEn0b87C5pDQ10g==}
     hasBin: true
+    dev: true
 
   /semver@6.3.1:
     resolution: {integrity: sha512-BR7VvDCVHO+q2xBEWskxS6DJE1qRnb7DxzUrogb71CWoSficBxYsiAGd+Kl0mmq/MprG9yArRkyrQxTO6XjMzA==}
@@ -24261,6 +24404,7 @@ packages:
     engines: {node: '>=8'}
     dependencies:
       kind-of: 6.0.3
+    dev: true
 
   /sharp@0.33.5:
     resolution: {integrity: sha512-haPVm1EkS9pgvHrQ/F3Xy+hgcuMV0Wm9vfIBSiwZ05k+xgb0PkBQpGsAA/oWdDobNaZTH5ppvHtzCFbnSEwHVw==}
@@ -25205,7 +25349,6 @@ packages:
     engines: {node: '>=20'}
     dependencies:
       real-require: 1.0.0
-    dev: false
 
   /throttleit@1.0.1:
     resolution: {integrity: sha512-vDZpf9Chs9mAdfY046mcPt8fg5QSZr37hEH4TXYBnDF+izxgrbRGUAAaBvIk/fJm9aOFCGFd1EsNg5AZCbnQCQ==}

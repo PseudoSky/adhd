@@ -72,7 +72,7 @@ The generator applies eight patching functions to scaffold packages correctly:
 3. **patchReleasePublish** — Sets `nx-release-publish` target's `dependsOn:["build","test","verify-dist-load","dist-manifest","publish-hygiene"]`
 4. **ensureReadme** — Creates a starter `README.md` scaffold if missing
 5. **patchEslintrc** — Adds `vite.config.*` patterns to `.eslintrc.json` `ignorePatterns`
-6. **patchTsconfigLib** — Adds `src/test/**` to `tsconfig.lib.json` `exclude`
+6. **patchTsconfigLib** — Adds `test/**` to `tsconfig.lib.json` `exclude`; the test layout is `test/unit/**/*.spec.ts` + `test/e2e/**/*.e2e.ts`, with the starter spec relocated to `test/unit/lib/` and the vite `include` set to `UNIT_FILE_INCLUDES`
 7. **patchTsconfigSpec** — Sets `module: esnext`, `moduleResolution: bundler`, `allowJs: true` in `tsconfig.spec.json` so the spec corpus (which includes `vite.config.mts`) compiles with zero errors (a4c837a2)
 8. **patchTypecheckSpec** — Emits the spec-corpus compile gate required by release GATE 0 / lane-reachability rule 6 (a4c837a2): a cached `typecheck-spec` target (`tools/nx-plugins/build/executors/typecheck-spec/ratchet.mjs`), `typecheck-spec` appended to `test.dependsOn` (`["lint","^build","typecheck-spec"]`), and an empty ratchet baseline at `tools/nx-plugins/build/executors/typecheck-spec/<project>.baseline.json` written into the Tree. Applies to every tier that scaffolds a `tsconfig.spec.json`; `entrypoint` scaffolds none, so it is exempt from rule 6 and gets no target.
 

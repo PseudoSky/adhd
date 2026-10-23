@@ -12,8 +12,13 @@
  * re-implementation).
  *
  * Run: node --test tools/nx-plugins/test/executors/wiring/check-lane-reachability.spec.mjs
+ *
+ * guards: a lane-reachability rule stays silent on a workspace that violates it, fires on a correctly wired one, or a test leaves fixture workspaces behind in the OS temp dir
+ * tier: S (fixture workspaces on disk driven through the in-process `runChecks`; the one subprocess case lives in check-agent-lane-spawn.spec.mjs)
+ * cites: AGENTS.md section 7 negative controls; qa-variance (docs/discovery/qa-test-variance-tail-policy-backlog-nx.md)
+ * teeth: red: pending (verification pending, tests not run per user; assertions unchanged)
  */
-import { test } from 'node:test';
+import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -23,6 +28,8 @@ import { dirname, join } from 'node:path';
 import { runChecks } from './check-lane-reachability.mjs';
 // Rule 8's own negative controls ride this (already `test:build-tools`-wired) spec file.
 import './check-agent-lane-spawn.spec.mjs';
+// Rule 9's own negative controls (0945d1b9 AC1/AC2) ride this same wired spec file.
+import './check-spawn-isolation.spec.mjs';
 // 90d07610 AC4: the NAT_TOOL_LIVE gate-table docs contract rides this same wired spec file.
 import './nat-tool-live-docs.spec.mjs';
 
@@ -31,8 +38,15 @@ const GATE_TARGETS = ['test', 'e2e'];
 // unless a test deliberately injects a broken one).
 const NO_PUBLISH = () => [];
 
+// qa-variance: every fixture workspace is removed when the file finishes (they used to accumulate in the OS temp dir).
+const fixtureRoots = [];
+after(() => {
+  for (const root of fixtureRoots) rmSync(root, { recursive: true, force: true });
+});
+
 function fixture(files) {
   const root = mkdtempSync(join(tmpdir(), 'lane-reach-'));
+  fixtureRoots.push(root);
   for (const [rel, content] of Object.entries(files)) {
     const p = join(root, rel);
     mkdirSync(dirname(p), { recursive: true });
@@ -53,7 +67,7 @@ function baseFiles(overrides = {}) {
   const files = {
     'packages/foo/project.json': JSON.stringify(fooProject, null, 2),
     'packages/foo/package.json': JSON.stringify({ name: '@adhd/foo', version: '0.0.0' }),
-    'packages/foo/src/a.e2e.ts': '',
+    'packages/foo/test/e2e/a.e2e.ts': '',
     // A valid single-array config so rule 7 (the repo-wide sweep) is silent on the base fixture.
     'packages/foo/vite.config.ts': 'export default {\n  plugins: [nxViteTsPaths()],\n};\n',
     '.githooks/pre-push': 'flags=$(node "$repo_root/.githooks/lib/pre-push-flags.mjs")\n',
@@ -86,7 +100,7 @@ test('rule 1 RED: e2e files with no e2e target', async () => {
   const { files } = baseFiles();
   files['packages/baz/project.json'] = JSON.stringify({ name: 'baz', targets: {} });
   files['packages/baz/package.json'] = JSON.stringify({ name: '@adhd/baz' });
-  files['packages/baz/src/b.e2e.ts'] = '';
+  files['packages/baz/test/e2e/b.e2e.ts'] = '';
   const root = fixture(files);
   try {
     const res = await check(root);
@@ -163,6 +177,20 @@ test('rule 5 RED: pre-push runs e2e (reads lane-gate.mjs directly, or names --ta
     } finally {
       close(root);
     }
+  }
+});
+
+test('rule 5: a missing pre-push hook is flagged unless .githooks/disabled-pre-push stands in for it (backlog 8963c3cb)', async () => {
+  const { files } = baseFiles();
+  delete files['.githooks/pre-push'];
+  const missing = fixture({ ...files });
+  const disabled = fixture({ ...files, '.githooks/disabled-pre-push': '#!/bin/sh\n' });
+  try {
+    assert.ok(hasRule(await check(missing), '5-gate-file-missing'), 'a missing hook with no stand-in must fail');
+    assert.ok(!hasRule(await check(disabled), '5-gate-file-missing'), 'a deliberately disabled hook must not fail');
+  } finally {
+    close(missing);
+    close(disabled);
   }
 });
 
@@ -271,7 +299,7 @@ test('rule 8 fires: an agent-family unit test spawning a subprocess [5b839b90 AC
     'packages/agent/agent-foo/project.json': JSON.stringify({ name: 'agent-foo', targets: {} }),
     'packages/agent/agent-foo/package.json': JSON.stringify({ name: '@adhd/agent-foo', version: '0.0.0' }),
     'packages/agent/agent-foo/vite.config.ts': 'export default { plugins: [] };\n',
-    'packages/agent/agent-foo/src/spawn.test.ts': "import { spawnSync } from 'node:child_process';\nspawnSync('npx', []);\n",
+    'packages/agent/agent-foo/test/unit/spawn.spec.ts': "import { spawnSync } from 'node:child_process';\nspawnSync('npx', []);\n",
   });
   try {
     const res = await check(root);

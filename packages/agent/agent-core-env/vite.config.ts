@@ -1,7 +1,7 @@
 /// <reference types='vitest' />
 import { defineConfig } from 'vite';
 import { configDefaults } from 'vitest/config';
-import { E2E_FILE_EXCLUDES } from '../../../tools/vite-plugins/e2e-globs.mjs';
+import { E2E_FILE_EXCLUDES, UNIT_FILE_INCLUDES } from '../../../tools/vite-plugins/e2e-globs.mjs';
 import dts from 'vite-plugin-dts';
 import * as path from 'path';
 import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin';
@@ -81,8 +81,8 @@ export default defineConfig({
     //      tasks can't race another file's DB finalization.
     pool: 'forks',
     fileParallelism: false,
-    include: ['src/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
-    // Subprocess / real-server suites (`*.e2e.ts`, `*.e2e.test.ts`) run in the separate
+    include: UNIT_FILE_INCLUDES,
+    // Subprocess / real-server suites (`*.e2e.ts`, `*.e2e.ts`) run in the separate
     // `e2e` lane (vitest.e2e.config.ts), never here (backlog 5b839b90 AC1;
     // docs/decisions/0009-test-lanes-unit-vs-e2e.md). Gated by check-agent-lane-spawn.mjs.
     exclude: [...configDefaults.exclude, ...E2E_FILE_EXCLUDES],

@@ -1,0 +1,81 @@
+{
+  "description": "Ratchet baseline for check-spawn-isolation.mjs. Per file: the number of unrouted node-bin spawn sites tolerated today (count) and why (reason). A file whose unrouted count exceeds its count fails; a count above the true number fails as stale. Review convention, not enforced by the check: counts and files should only go down, and a reviewer should reject an added file or a raised count. The check compares each file's unrouted count to its entry as written, so an edit that raises a count or adds a file passes the check. To retire a site, fix the spawn (route it through spawn-isolated-bin / spawn-backlog-bin or set HOME in the child env), then lower or remove the entry.",
+  "unrouted": {
+    "entrypoint/agent-mcp/test/e2e/agent-mcp-follow-bin.e2e.ts": {
+      "count": 1,
+      "reason": "spawns the built agent-mcp bin with no HOME override; the child inherits the real HOME"
+    },
+    "entrypoint/agent-mcp/test/e2e/migrate-runner-concurrency.e2e.ts": {
+      "count": 3,
+      "reason": "spawns migrate-runner child scripts with no env override; the children inherit the real HOME"
+    },
+    "entrypoint/agent-mcp/test/e2e/parity-instrument/capture-proxy.e2e.ts": {
+      "count": 5,
+      "reason": "spawns the parity driver (drive.mjs) with inherited process.env; no HOME override at the call (2 driver sites + 3 wire-diff sites)"
+    },
+    "entrypoint/agent-mcp/test/e2e/parity-instrument/r10-killsafety.e2e.ts": {
+      "count": 2,
+      "reason": "spawns sleeper/ancestor node processes with no env override; the children inherit the real HOME (the spawns inside the embedded PROBE/ANCESTOR template scripts are string literals, not sites)"
+    },
+    "entrypoint/agent-mcp/test/e2e/parity-instrument/r10-launch.e2e.ts": {
+      "count": 1,
+      "reason": "spawns the parity driver (drive.mjs) with inherited process.env; no HOME override at the call"
+    },
+    "entrypoint/agent-mcp/test/e2e/parity-instrument/r10-m1-wall.e2e.ts": {
+      "count": 1,
+      "reason": "spawns the parity driver (drive.mjs) with inherited process.env; no HOME override at the call (env defaults to process.env)"
+    },
+    "entrypoint/agent-mcp/test/e2e/parity-instrument/r10-trace.e2e.ts": {
+      "count": 2,
+      "reason": "spawns the parity driver (drive.mjs) with inherited process.env; no HOME override at the call"
+    },
+    "entrypoint/agent-mcp/test/e2e/parity-instrument/r11-design.e2e.ts": {
+      "count": 7,
+      "reason": "spawns the parity driver (drive.mjs) with inherited process.env; no HOME override at the call (env() strips PARITY_* keys only)"
+    },
+    "entrypoint/agent-mcp/test/e2e/parity-instrument/r12-design.e2e.ts": {
+      "count": 1,
+      "reason": "spawns the parity driver (drive.mjs) with inherited process.env; no HOME override at the call"
+    },
+    "entrypoint/agent-mcp/test/e2e/parity-instrument/r5-harness.e2e.ts": {
+      "count": 2,
+      "reason": "spawns the parity driver (drive.mjs) with inherited process.env; no HOME override at the call"
+    },
+    "entrypoint/agent-mcp/test/e2e/parity-instrument/r8-round.e2e.ts": {
+      "count": 3,
+      "reason": "spawns the parity driver (drive.mjs) with inherited process.env; no HOME override at the call"
+    },
+    "entrypoint/agent-mcp/test/e2e/parity-instrument/r9-cfg.e2e.ts": {
+      "count": 1,
+      "reason": "spawns the parity driver (drive.mjs) with inherited process.env; no HOME override at the call (env prepends a spy dir to PATH only)"
+    },
+    "entrypoint/agent-mcp/test/e2e/live/tracing-live.e2e.ts": {
+      "count": 1,
+      "reason": "spawns the serve.mjs supervisor with no HOME override; the child inherits the real HOME (env-gated live suite)"
+    },
+    "entrypoint/agent-mcp/test/e2e/srt-policy.e2e.ts": {
+      "count": 1,
+      "reason": "spawns the lock-holder child with no env override; the HOME assignments earlier in the file are scoped to other tests, so this child inherits the restored real HOME"
+    },
+    "entrypoint/backlog/test/e2e/store/embed-funnel-watchdog.e2e.ts": {
+      "count": 2,
+      "reason": "isolated by SOX_ECOSYSTEM_HOME (a per-test socket/run dir), which is NOT an accepted isolation mechanism under 0945d1b9 (HOME redirect only); the children still inherit the real HOME"
+    },
+    "entrypoint/backlog/test/e2e/store/embed-funnel.e2e.ts": {
+      "count": 1,
+      "reason": "isolated by SOX_ECOSYSTEM_HOME (a per-test socket/run dir), which is NOT an accepted isolation mechanism under 0945d1b9 (HOME redirect only); the child still inherits the real HOME"
+    },
+    "entrypoint/backlog/test/e2e/vocabulary-gate.e2e.ts": {
+      "count": 1,
+      "reason": "spawns the package-local gate script with no env override; the script is a static scan that does not resolve the environment cascade, but no HOME redirect is set at the call (not SOX_ECOSYSTEM_HOME-isolated: the file sets no env)"
+    },
+    "entrypoint/backlog/test/e2e/web-ui.e2e.ts": {
+      "count": 1,
+      "reason": "spawns run-web-ui.mjs with an explicit --sandbox passthrough (the backlog --namespace sandbox mechanism) and ADHD_BACKLOG_DATABASE_PATH, but no HOME is set at the call and run-web-ui is not a recognized isolation helper; the child inherits the real HOME"
+    },
+    "packages/agent/agent-core-env/test/e2e/registry-adapter-concurrency.e2e.ts": {
+      "count": 1,
+      "reason": "fork(fixture) with no env option; the forked node child inherits the real HOME (first surfaced when fork() detection was added)"
+    }
+  }
+}

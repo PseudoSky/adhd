@@ -5,8 +5,9 @@ import {
   projectCacheDir,
   projectCoverage,
 } from '../../packages/workspace/workspace-base-vite-paths/src/index';
+import { E2E_FILE_INCLUDES } from '../../tools/vite-plugins/e2e-globs.mjs';
 import baseConfig from './vite.config';
-import { e2eTestTimeoutMs } from './src/test/helpers/spawn-timeout';
+import { e2eTestTimeoutMs } from './test/helpers/spawn-timeout';
 
 const repoRoot = path.resolve(__dirname, '../..');
 
@@ -81,7 +82,7 @@ const e2eConfig = mergeConfig(
     // Distinct from the default lane's `…/node_modules/.vite/entrypoint/backlog`.
     cacheDir: `${projectCacheDir(__dirname)}-e2e`,
     test: {
-      include: ['src/**/*.e2e.ts'],
+      include: E2E_FILE_INCLUDES,
       // SERIAL, and only this lane: the base config's `fileParallelism: false`
       // is not honoured across Vitest 4's fork pool, so these suites were
       // running CONCURRENTLY and racing on shared on-disk state (dist/api.ir.json,
@@ -112,9 +113,9 @@ const e2eConfig = mergeConfig(
 
 // Vite's `mergeConfig` CONCATENATES arrays
 // (`mergeConfigRecursively`: `[...existing, ...value]` — verified against
-// node_modules/vite), so the base config's `include: ['src/**/*.spec.ts']`
+// node_modules/vite), so the base config's `include: UNIT_FILE_INCLUDES`
 // would survive the merge and this lane would ALSO collect every default-lane
 // spec. Force a REPLACE of the single array we override.
-(e2eConfig.test as { include: string[] }).include = ['src/**/*.e2e.ts'];
+(e2eConfig.test as { include: string[] }).include = E2E_FILE_INCLUDES;
 
 export default e2eConfig;

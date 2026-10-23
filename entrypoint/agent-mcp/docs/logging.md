@@ -71,6 +71,7 @@ queue. Bodies are captured up to `logging.apiBodyMaxBytes` (4 MiB) with the sha2
 | `event` | Meaning | Notable fields |
 |---|---|---|
 | `http.request` / `http.response` | Outbound call to an HTTP provider (Anthropic API, OpenAI-compatible, the pricing feed) | `call_id`, `task_id`, `session_id`, `agent`, `method`, `url`, `headers` (secrets redacted), `body`; response: `status`, `ttfb_ms`, `latency_ms`, `chunk_count`, streamed `body` (a response past 64 MiB is cut off from logging with `drain_cancelled: true`; the caller still receives every byte) |
+| `http.request` / `http.response` / `http.error` (`web_fetch`) | The engine-native `web_fetch` (claudecli and OpenAI-compatible agents; Anthropic's server-side `web_fetch` runs on Anthropic's side and writes none). One record set per request, redirect hop and failover attempt | `call_id`, the ambient ids, `method`, `scheme`, `host` (the name), `port`, `ip` (the validated address the socket went to); response: `status`, `wire_bytes` (bytes received before `Content-Encoding` is undone), `complete`; error: `error_class`, `error_message`, `error_code`. NEVER the path or query, a header, the body or a credential. Told apart from the LLM-API records by `ip` and the absence of `url` |
 | `spawn.start` / `spawn.stdin` / `spawn.stdout` / `spawn.exit` / `spawn.close` | A subprocess provider (the `claude` CLI) | `command`, `args`, per-line `body`, `code`, `duration_ms`, `stdout_bytes`, `stdout_sha256` |
 | `mcp.request` / `mcp.response` / `mcp.error` | Inbound MCP `tools/call` handled by the server | `tool`, `mcp_session_id`, `request_id`, `is_error`, `duration_ms`, `body` |
 | `http.inbound.request` / `http.inbound.response` | The streamable-HTTP and SSE routes | `route`, `method`, `url`, `status`, `body_bytes` |
@@ -106,7 +107,7 @@ spans). Fields use dotted names: `agent.task_id`, `agent.session_id`, `agent.roo
 | Table | Holds |
 |---|---|
 | `tasks` | status, prompt, result, error, timestamps, `session_id` |
-| `task_events` | `MODEL_REQUEST`, `MODEL_RESPONSE` (with `rawUsage` verbatim from the provider), `TOOL_CALL`, `TOOL_ARG_COERCED`, `TOOL_RESULT`, `TASK_COMPLETED`, `budget:unpriced_model` (a cost-capped model had no rate-card price), `provider:builtin_bypass` (a claudecli agent enabled CLI built-ins that skip engine hooks), ... |
+| `task_events` | `MODEL_REQUEST`, `MODEL_RESPONSE` (with `rawUsage` verbatim from the provider), `TOOL_CALL`, `TOOL_ARG_COERCED`, `TOOL_RESULT`, `TASK_COMPLETED`, `budget:unpriced_model` (a cost-capped model had no rate-card price), `provider:builtin_bypass` (a claudecli agent enabled CLI built-ins that skip engine hooks), `provider:history_degraded` (the API rejected the replayed provider echo; payload `reason`, `echoedMessages`, `healed`), `provider:pause_continued` (a `pause_turn` was continued; payload `n`), ... |
 | `task_usage` | one row per task: tokens (total, uncached, cache read, cache write), latency, `est_cost_usd`, `priced_cost_usd`, `cost_status`, `cost_basis`, `pricing_ref`, `requested_model`, `cli_reported_cost_usd`, `cache_creation_1h_tokens` (the 1-hour-TTL subset of the cache writes; NULL on rows written before migration 0015), `model_breakdown_json` |
 | `model_price_history` | append-only price snapshots (`input_per_m`, `cache_read_per_m`, `cache_write_per_m`, `output_per_m`, `raw_json`) |
 | `price_pull_ledger` | one row per live price pull |
@@ -250,6 +251,22 @@ $ node call.mjs 47852 usage_query '{"agent_name":"live-trace-oauth","group_by":"
 
 Field semantics (`inputTokens` is cache-inclusive; `total_ms` is wall clock, `compute_ms` is model
 time) are in [dev-server-local-testing.md, "Reading usage correctly"](./dev-server-local-testing.md#reading-usage-correctly).
+
+#### Paused turns and provider echo in usage
+
+When the Anthropic API pauses a long server-tool turn (`pause_turn`), the provider continues it inside
+one response and reports the number of requests it made. At task grain every continuation counts in
+`model_calls` (a paused turn that took 3 requests adds 3). The turn grain reports `1` per
+`MODEL_RESPONSE`, so a paused turn is one row there; the turn's request count (the original request plus its continuations) is the `modelCalls` field of
+that event's payload (present only when the turn took more than one request). Each continuation also
+appends a `provider:pause_continued` event (`{ n }`) to `task_events`.
+
+`MODEL_RESPONSE` payloads gain four optional counts for the provider echo (see the
+[orchestrator README](../../../packages/agent/agent-engine-orchestrator/README.md#provider-echo-anthropic)):
+`echoBlocks` and `echoBytes` (content blocks and JSON bytes this response captured) and
+`echoReplayedMessages` and `echoReplayedBytes` (assistant messages and JSON bytes the request replayed
+from earlier turns). They are absent when nothing was captured or replayed, hold counts only (never
+block content), and `usage_query` renders payloads with and without them identically.
 
 #### Cumulative vs per-turn: `inputTokens` and `peakContextTokens`
 
@@ -414,13 +431,13 @@ Above the cap the model sees the first `floor(cap * 0.75)` chars, a marker, and 
 
 - The cap counts UTF-16 code units of the serialized result (`JSON.stringify` for object results); the marker is added outside the cap. Cuts never split a surrogate pair.
 - A result at or under the cap is delivered unchanged. An error result is never truncated while it is 4000 chars or fewer; above that it follows the cap, floored at 4000.
-- **Telemetry measures the full result.** `tool_call_est_result_tokens` on the `TOOL_RESULT` event, the `post:tool_call` hook payload (`result`, `estResultTokens`) and the SSE `tool_result` event carry the untruncated result. A truncated result adds `truncated: true` and `original_chars` to the `TOOL_RESULT` payload; the 500-char `result` summary is unchanged.
+- **Telemetry measures the full result.** `tool_call_est_result_tokens` on the `TOOL_RESULT` event, the `post:tool_call` hook payload (`result`, `estResultTokens`) and the SSE `tool_result` event carry the untruncated result. A truncated result adds `truncated: true` and `original_chars` to the `TOOL_RESULT` payload. The stored `result` is the model-visible text clipped to 16,000 chars (head 75% + tail 25% around a marker), and `result_sha256` hashes the full model-visible text; a clipped result adds `result_stored_clipped: true` and `result_model_visible_chars`, and with the cap at `0` the event keeps that head+tail of the full text, not all of it.
 - **Token estimation is bounded (d89e20f4).** Results of at most 20,000 chars (`TOOL_RESULT_EXACT_ENCODE_MAX_CHARS`) are tokenized exactly. Longer results are estimated from a 4,000-char head sample and a 4,000-char tail sample (`TOOL_RESULT_SAMPLE_CHARS`), scaled to the full length, and the `TOOL_RESULT` payload then carries `tool_call_est_result_tokens_estimated: true` (the key is absent when the figure is exact). The tokenizer is synchronous and super-linear on long single-character runs, so encoding a pathological result in full stalls the event loop; the estimate never hands it more than 8,000 chars.
 - **Persisted history stores what the model saw.** The session message holds the truncated form, so a resumed or replayed session matches the model's view. The full text is not persisted.
 - `transform:tool_result` hooks run on the capped result.
 - Spill-to-file (the `claude` CLI saves an oversize result to a file and returns a stub) is available as an opt-in mode, off by default; see [Optional spill-to-file](#optional-spill-to-file-for-over-cap-tool-results). The cap is its fallback.
 
-Example: `ADHD_AGENT_TOOL_RESULT_MAX_CHARS=8000 agent-mcp` bounds each tool result to 8000 chars plus the marker. The proof is `src/__tests__/integration/tool-result-cap.e2e.test.ts` (real orchestrator, real stdio MCP server returning 100,000 chars, with a cap-disabled negative control).
+Example: `ADHD_AGENT_TOOL_RESULT_MAX_CHARS=8000 agent-mcp` bounds each tool result to 8000 chars plus the marker. The proof is `test/e2e/integration/tool-result-cap.e2e.ts` (real orchestrator, real stdio MCP server returning 100,000 chars, with a cap-disabled negative control).
 
 ### Optional spill-to-file for over-cap tool results
 
@@ -510,7 +527,7 @@ the production store, by design. Setting any of the four relocating variables (`
 
 ## Proving it live: the env-gated test
 
-`src/__tests__/live/tracing-live.e2e.test.ts` (backlog `c536ce29` LIVE-AC1..AC5) starts the real
+`test/e2e/live/tracing-live.e2e.ts` (backlog `c536ce29` LIVE-AC1..AC5) starts the real
 dev server on a free port with the production store, drives it as an MCP client, runs one
 `Reply with exactly: ok` task on a `claudecli` agent and one on an Anthropic-OAuth agent
 (`ADHD_AGENT_ANTHROPIC_SECRET`), then checks the DB and the three logs: both tasks completed, one
@@ -535,9 +552,9 @@ Run:
 
 ```console
 $ cd entrypoint/agent-mcp
-$ AGENT_MCP_LIVE=1 npx vitest run --config vitest.e2e.config.ts src/__tests__/live/tracing-live.e2e.test.ts
+$ AGENT_MCP_LIVE=1 npx vitest run --config vitest.e2e.config.ts test/e2e/live/tracing-live.e2e.ts
  RUN  v4.1.9 .../entrypoint/agent-mcp
- ✓ src/__tests__/live/tracing-live.e2e.test.ts (8 tests) 32331ms
+ ✓ test/e2e/live/tracing-live.e2e.ts (8 tests) 32331ms
  Test Files  1 passed (1)
       Tests  8 passed (8)
 ```
@@ -659,4 +676,4 @@ Models occasionally send a structured argument as a JSON-encoded string, for exa
 - Each coercion writes a `TOOL_ARG_COERCED` row to `task_events` with payload `{taskId, tool, property, from: "string", to: "array" | "object"}` and a `WARN` log line `TOOL_ARG_COERCED`. The `TOOL_CALL` event keeps the arguments exactly as the model sent them.
 - A string that does not coerce (`cat /etc/hosts` for an array property, an array containing a non-string element, JSON of the wrong type) is not sent to the tool. The model gets an error result naming the property, the declared type and a worked example, e.g. `Example: {"command": ["first", "second"]}`.
 
-`EngineConfig.toolArgCoercion.enabled` (default on) exists as a test switch for negative controls. The proof is `src/__tests__/integration/tool-arg-coercion.e2e.test.ts` (real orchestrator, real stdio MCP server declaring `command` as an array of strings, the captured failing payload, with a coercion-off negative control).
+`EngineConfig.toolArgCoercion.enabled` (default on) exists as a test switch for negative controls. The proof is `test/e2e/integration/tool-arg-coercion.e2e.ts` (real orchestrator, real stdio MCP server declaring `command` as an array of strings, the captured failing payload, with a coercion-off negative control).

@@ -21,8 +21,12 @@
 #      Ref scope: refs/remotes/* and branches checked out in OTHER worktrees are
 #      ignored (concurrent agents legitimately move those during a long test
 #      run); refs named via `guard_exclude_ref` (the ref being pushed) are
-#      ignored. A worktree added/removed by a concurrent process during the run
-#      is reported too - the message names the path so the cause is obvious.
+#      ignored. Worktree scope: paths under the main checkout's `.worktrees/`
+#      directory (the managed root `scripts/worktree-setup.sh` creates into) are
+#      ignored, because concurrent agents add and remove them legitimately; a
+#      worktree added/removed ANYWHERE ELSE (a temp dir - exactly where a leaked
+#      `git worktree add` from a spec lands) is reported, and the message names
+#      the path so the cause is obvious.
 #
 # Contract: `guard_verify` returns non-zero (and prints a message containing
 # "GIT-ENV-LEAK") on a detected leak, 0 otherwise. Callers must exit non-zero.
@@ -73,9 +77,16 @@ _guard_apply_excludes() {
   done
 }
 
-# Worktree paths only (HEAD shas change on every legitimate commit).
+# Worktree paths only (HEAD shas change on every legitimate commit), minus the
+# managed root <main checkout>/.worktrees/ (see header). The main checkout is the
+# parent of the common dir; a bare/odd layout (common dir not named .git) has no
+# managed root, so nothing is filtered there.
 _guard_worktrees() {
-  git worktree list --porcelain 2>/dev/null | sed -n 's/^worktree //p'
+  _gwcd=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)
+  _gwroot=""
+  case "$_gwcd" in */.git) _gwroot="${_gwcd%/.git}/.worktrees/" ;; esac
+  git worktree list --porcelain 2>/dev/null | sed -n 's/^worktree //p' |
+    awk -v root="$_gwroot" 'root == "" || index($0, root) != 1'
 }
 
 guard_snapshot() {
@@ -124,8 +135,9 @@ guard_verify() {
   if [ -n "$_leak" ]; then
     echo "" >&2
     echo "✖ GIT-ENV-LEAK (50e8c966): a test run by this hook modified the REAL repo: $_leak." >&2
-    echo "  (A ref/worktree change can also come from a concurrent process in this shared repo; the" >&2
-    echo "  names above say which. If it is not a fixture, re-run the hook.)" >&2
+    echo "  (A ref change can also come from a concurrent process in this shared repo; a worktree" >&2
+    echo "  outside <repo>/.worktrees/ is never a managed worktree. The names above say which." >&2
+    echo "  If it is not a fixture, re-run the hook.)" >&2
     echo "  Cause: a spec spawned git without scrubbing GIT_* (hook-exported GIT_DIR outranks cwd)." >&2
     echo "  Repair: git config --file '$GUARD_CONFIG_FILE' --bool core.bare false; remove the stray [user] section;" >&2
     echo "  inspect 'git log --all' and 'git worktree list' for fixture commits/worktrees." >&2

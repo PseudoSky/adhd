@@ -8,7 +8,7 @@
  * Design (a small distributed system, SPEC §13 / §13.1):
  *
  *   1. **Partition by language → plugin.** Each `--source` is routed by its
- *      extension via {@link languageOfSource}: `.ts → api-fastify`, `.py →
+ *      extension via {@link resolveSourceReference}: `.ts → api-fastify`, `.py →
  *      py-flask`.  A `--mount <ns>=<plugin>` override pins a namespace to an
  *      explicit plugin.  Each source's namespace defaults to its filename stem.
  *      When `--mount <ns>=py-grpc` is used, the host's `transport` is `'grpc'`.
@@ -71,7 +71,7 @@ import * as path from 'node:path';
 import * as readline from 'node:readline';
 import { spawn, type ChildProcess } from 'node:child_process';
 import {
-  languageOfSource,
+  resolveSourceReference,
   tokenize,
   type PluginLanguage,
 } from '@adhd/apigen-core-client';
@@ -191,7 +191,8 @@ export function httpNamespaceSegment(raw: string): string {
  * `--source` list, applying any `--mount` overrides.
  *
  * Resolution per source:
- *   1. `language = languageOfSource(file)` — unknown extension → error.
+ *   1. `resolveSourceReference(source)` — unknown extension, executable or
+ *      remote reference → error; `language` is the resolved translator.
  *   2. `namespace = stem(file)`.
  *   3. `plugin = mounts[namespace] ?? DEFAULT_PLUGIN_FOR_LANGUAGE[language]`.
  *   4. `transport = GRPC_PLUGINS.has(plugin) ? 'grpc' : 'http'`.
@@ -212,13 +213,22 @@ export function resolveHosts(
   const seen = new Map<string, string>(); // canonical http segment -> raw namespace
   for (const src of sources) {
     const source = path.resolve(src);
-    const language = languageOfSource(source);
-    if (language === undefined) {
+    const resolved = resolveSourceReference(src);
+    if (!resolved.ok) {
       throw new Error(
-        `--source ${src}: unrecognised extension; expected one of ` +
-          `.ts/.tsx/.mts/.cts (TypeScript) or .py (Python)`
+        resolved.error.code === 'invalid-reference' && !src.startsWith('bin:')
+          ? `--source ${src}: unrecognised extension; expected one of ` +
+              `.ts/.tsx/.mts/.cts (TypeScript), .py (Python), .rs, .go or .java. ` +
+              resolved.error.message
+          : `--source ${src}: ${resolved.error.message}`
       );
     }
+    if (resolved.value.asset === 'executable') {
+      throw new Error(
+        `--source ${src}: executable sources are served by adhd-policy run/serve`
+      );
+    }
+    const language = resolved.value.translator as PluginLanguage;
     const namespace = namespaceOfSource(source);
     const canonical = httpNamespaceSegment(namespace);
     const priorRaw = seen.get(canonical);

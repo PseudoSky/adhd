@@ -9,8 +9,10 @@ You are an expert full-stack engineer operating within a high-scale **Nx Monorep
 
 ## Rules
 
-- You must not push without human approval, **except:** if the human grants explicit blanket permission at the start of a session (e.g., "continuous publish" / "you can publish without asking"), that per-session grant is sufficient for the rest of that session without per-release re-approval. The grant is per-session only; silence or a prior session's grant does not carry over.
+- Pushing to `main`, merging to `main`, and publishing to npm are pre-authorized for every agent: do them directly, without asking, once the Gates below are green, unless otherwise explicitly directed by your prompt.
 - You always plan before acting
+- **Worktrees: create with `scripts/worktree-setup.sh --bl <backlog-id>`, work and commit only inside `.worktrees/<name>`, merge with `scripts/worktree-merge.sh <worktree|branch|id>` (tests, merges, pushes, cleans up), and follow whatever a script prints when it stops.** Never create, merge, or remove a worktree by hand and never symlink `node_modules`. Process: [`WORKTREE_POLICY.md`](WORKTREE_POLICY.md).
+- When several agents share ONE worktree, none commits: each returns its changed paths and one dispatcher-dispatched committer lands them sequentially with `git commit -m ... -- <paths>`, because the pre-commit hook holds the worktree's single index.lock for tens of seconds and lints the whole tree. Default to one worktree per parallel agent.
 - You never run destructive bash commands without evaluating failure cases
 - You always write tests for the real user use cases (the way in which a 3rd party consumes a package)
 - You do not run git stash commands ever
@@ -20,9 +22,10 @@ You are an expert full-stack engineer operating within a high-scale **Nx Monorep
 - You always reuse packages within the repository instead of rewriting code
 - You always evaluate best of class 3rd party tools before authoring
 - You always get human approval before installing external tools
+- You never create a new package (any tier, any generator, including `entrypoint/`) without explicit human approval recorded in your ticket or prompt; `--dry-run` is for inspection only. Experiment harnesses, measurement drivers, and one-off tooling nobody imports are not packages.
 - You never create folders in the repo root without human approval
 - You never chain file removals in bash commands
-- You never write fs removals within scripts relying on variables without human approval
+- You never write fs removals within scripts relying on variables without human approval, except tests may remove a variable path resolved under the repo's `tmp/<package>/` scratch root, guarded to throw if it escapes that root (approved 2026-10-15).
 - You file, claim, transition, and resolve backlog items via the `adhd-backlog` CLI (renamed from the bare `backlog` bin, which collided with the unrelated public npm package `backlog@1.4.56`) / `mcp__backlog__*` tools — never by hand-editing a `BACKLOG.md`. The graph is the source of truth and any `BACKLOG.md` still on disk is a dead artifact, not a projection: nothing regenerates it, so a hand edit is simply invisible to every reader. Identity is the `uid` each verb returns. The command surface, the `--input '<json>'` calling convention, and a worked example of every verb live in `entrypoint/backlog/skill/SKILL.md` — read it rather than guessing a flag. (For this repo, this supersedes the global "store deferrals/bugs to BACKLOG.md" disclosure rule.)
 - You never declare bugs as "pre-existing"
 - After merging branches or worktrees, you always clean up the branch and write to the apropriate changelogs
@@ -36,6 +39,8 @@ You are an expert full-stack engineer operating within a high-scale **Nx Monorep
 ---
 
 ## 📦 1. Package Scaffolding — ALWAYS use `@adhd/workspace-codegen-nx`
+
+Everything below is HOW to scaffold once a human has approved the new package; it is not permission to scaffold.
 
 **ALWAYS use `@adhd/workspace-codegen-nx` generators to scaffold new packages.** Never use `@nx/js:library`, `@nx/vite:lib`, or any other generic Nx generator — they produce incorrect `project.json`, tags, and Nx configuration for this monorepo. Never hand-create a package directory.
 
@@ -177,7 +182,7 @@ Refer to these established packages when building new features. **Verify with `C
 
 - **List Projects:** `npx nx list`
 - **Build Project:** `npx nx build <project-name>`
-- **Run e2e (subprocess / real-server suites):** `npx nx affected -t e2e --parallel=1`. Unit `test` runs no subprocess; any test that spawns one is `*.e2e.test.ts` / `*.e2e.ts` and lives in the project's `e2e` target — [`docs/decisions/0009-test-lanes-unit-vs-e2e.md`](docs/decisions/0009-test-lanes-unit-vs-e2e.md).
+- **Run e2e (subprocess / real-server suites):** `npx nx affected -t e2e --parallel=1`. Unit `test` runs no subprocess; any test that spawns one is `test/e2e/**/*.e2e.ts` and lives in the project's `e2e` target — [`docs/decisions/0009-test-lanes-unit-vs-e2e.md`](docs/decisions/0009-test-lanes-unit-vs-e2e.md).
 - **Run Tests:** `npx nx affected -t test` when the package has dependents — targeted `npx nx test <project>` exercises only that project and silently misses downstream consumers (`DEBT-PROCESS-AFFECTED-TEST-001`). `nx test <project>` is safe only for a leaf with zero dependents.
 - **Linting:** `npx nx lint <project-name>` — includes `@nx/dependency-checks` (check-only, never mutates). Repair dependency drift with `npx nx run <project>:sync-deps` (or `npx nx affected -t sync-deps`) — the explicit, standalone replacement for the removed pre-commit `--fix`/auto-restage. **Never run dependency-checks in a workspace root without an installed `node_modules`** (e.g. a fresh `git worktree`): it misreports used deps as unused and strips them (`BUG-REPO-PRECOMMIT-DEPCHECK-STRIPS-USED-DEPS-001`) — run `corepack pnpm install` there first.
 - **Verify a build actually loads:** `npx nx run <project>:verify-dist-load` (`npx nx affected -t verify-dist-load`) builds then `require()`/`import()`s the real `dist/` entry the way a consumer does. A green `nx test` resolves to source and never loads the production bundle, so it can pass while the shipped artifact throws on load.
@@ -205,7 +210,8 @@ You are responsible for the lint status of every file you touch. Run `npx nx lin
 
 - **Logic/Math:** Use `layer:test-logic` (Vitest/Node). Focus on edge cases and pure functions.
 - **UI/Hooks:** Use `layer:test-ui` (JSDOM/Storybook). Focus on component states and user interactions.
-- **Lanes:** unit `test` = no subprocess; subprocess / real-server tests are `*.e2e.test.ts` (agent family) or `*.e2e.ts` and run in the `e2e` lane (`nx affected -t e2e --parallel=1`, its own pipeline stage after `test`, not in `nx test`; isolated cwd + fake HOME; env-gated only under the paid-third-party exception above) — `docs/decisions/0009-test-lanes-unit-vs-e2e.md`; gated by lane-reachability rule 8.
+- **Layout:** tests live in `<project>/test/{unit,e2e,helpers,fixtures,golden}` mirroring `src/`; unit specs are `*.spec.ts(x)` in `test/unit`; `src/` never holds or imports tests (`docs/standards/testing.md`, enforced by `check-test-layout.mjs`).
+- **Lanes:** unit `test` = no subprocess; subprocess / real-server tests are `test/e2e/**/*.e2e.ts` and run in the `e2e` lane (`nx affected -t e2e --parallel=1`, its own pipeline stage after `test`, not in `nx test`; isolated cwd + fake HOME; env-gated only under the paid-third-party exception above) — `docs/decisions/0009-test-lanes-unit-vs-e2e.md`; gated by lane-reachability rule 8.
 - **Verification:** Before marking a task as complete, you must run the relevant test suite and ensure 0 failures.
 
 ### Proving features actually work (verification standard)
@@ -337,3 +343,116 @@ This project is indexed by GitNexus as **adhd** (41761 symbols, 62687 relationsh
 | Index, status, clean, wiki CLI commands | `.claude/skills/gitnexus/gitnexus-cli/SKILL.md` |
 
 <!-- gitnexus:end -->
+
+## Capabilities
+
+Concrete bindings for the capability names agents use; an absent row means the capability is unavailable here. The managed Routing and Gates blocks below carry the `role-routing` and `gate-runner` rows.
+
+| capability | tool | usage |
+|---|---|---|
+| backlog | adhd-backlog | `entrypoint/backlog/skill/SKILL.md` |
+| code-intel | gitnexus | the GitNexus section of this file |
+| test-gates | `tools/nx-plugins/test/gates/run-gates.mjs` | one command per lifecycle step, all reading the table `docs/standards/testing.md` (binding table) and `tools/nx-plugins/test/gates/gates.table.json`: author loop `npx nx test <project>`; QA run `node tools/nx-plugins/test/gates/run-gates.mjs --step C`; final run `node tools/nx-plugins/test/gates/run-gates.mjs --step D`; mainline `GATE_FULL=1 node tools/nx-plugins/test/gates/run-gates.mjs --step E`; release `GATE_FULL=1 node tools/nx-plugins/test/gates/run-gates.mjs --step G`. The engine runs on demand: no hook or CI job calls it yet (backlog ca23e252); CI and the pre-push hook call the underlying checks directly |
+| test-routing | `tools/nx-plugins/test/routing/test-routing.mjs` | `node tools/nx-plugins/test/routing/test-routing.mjs route --class <class> --scope <path>...` prints the derived rigor, triggers, authorship, playbook and gates (exit 0), and exits non-zero for an unknown class (65), an inconsistent class and scope (1), or a Deep change with no coordinator or test author (3); `check --range <base>..<head>` is gate G12 |
+
+The Testing block's `test-routing` row names this repository's routing and rigor command in its tool column; its usage column describes the harness playbook resolver (`/workspace-standards run testing`).
+
+<!-- workspace-standards:testing:begin -->
+## Testing
+- Every change carries a testing record: class, derived rigor, triggers, not-testing list (`docs/standards/testing.md`).
+- Default test tier is S; a higher tier needs a gap statement: "cannot be observed at tier T-1 because ...".
+- Every new test has a header: failure mode, tier, item and criterion cited, red run.
+- The author of a test never approves it; an implementer never edits a test it did not author.
+- Task routing and role holders: the routing block and `roles.md`. Gates: the gates block.
+- Obtain a change's class, rigor, and playbook: `/workspace-standards run testing`.
+
+| capability | tool | usage |
+|---|---|---|
+| test-routing | `node tools/nx-plugins/test/routing/test-routing.mjs` | `/workspace-standards run testing` returns the class, rigor, and playbook of a change |
+
+| class | default rigor | author card |
+|---|---|---|
+| new-behavior | standard | author-new-behavior |
+| defect-fix | standard | author-regression |
+| refactor | light | characterize |
+| configuration | light | select-checks |
+| dependency | light | select-checks |
+| boundary-contract | deep | author-contract |
+| no-code | none | none |
+| test-maintenance | standard | maintain |
+<!-- workspace-standards:testing:end -->
+
+<!-- workspace-standards:routing:begin -->
+## Routing
+This table wins over the dispatcher's own default rows: for every task it names, the agent in its agent column takes the work. The dispatcher's rows apply only to tasks this table does not name.
+
+### Task-to-agent routing
+| task | standard | role | agent |
+|---|---|---|---|
+| new-behavior | testing | test-author | _unbound_ |
+| defect-fix | testing | test-author | _unbound_ |
+| refactor | testing | test-author | _unbound_ |
+| configuration | testing | test-author | _unbound_ |
+| dependency | testing | test-author | _unbound_ |
+| boundary-contract | testing | test-author | _unbound_ |
+| no-code | testing | none | _no role_ |
+| test-maintenance | testing | test-author | _unbound_ |
+
+### Role holders
+| role | standard | holder | covered obligations |
+|---|---|---|---|
+| risk-owner | testing | _unbound_ | none |
+| classifier | testing | _unbound_ | none |
+| planner | testing | _unbound_ | none |
+| test-author | testing | _unbound_ | none |
+| implementer | testing | _unbound_ | none |
+| static-reviewer | testing | _unbound_ | none |
+| auditor | testing | _unbound_ | none |
+| triager | testing | _unbound_ | none |
+| verifier | testing | _unbound_ | none |
+| record-keeper | testing | _unbound_ | none |
+| strategy-owner | testing | _unbound_ | none |
+| mechanism-owner | testing | _unbound_ | none |
+| coordinator | testing | _unbound_ | none |
+
+### Capabilities
+| capability | tool | usage |
+|---|---|---|
+| role-routing | workspace-standards | `node <skill>/scripts/foundations.mjs review routing: each role resolves to the closest installed agent; drift and unbound roles are reported` |
+<!-- workspace-standards:routing:end -->
+
+<!-- workspace-standards:gates:begin -->
+## Gates
+### Gate registry
+| gate set | gate | mechanism | stage | bound | threshold |
+|---|---|---|---|---|---|
+| test-gates | G1 | mechanical | C, D, E, G | command | required tests pass; a quarantined test past its deadline fails the build |
+| test-gates | G2 | mechanical | B, C, D, E | command | every test belongs to exactly one tier and runs in at least one stage |
+| test-gates | G3 | mechanical | B, C, D, E | command | no test exceeds its tier ceiling |
+| test-gates | G4 | mechanical | C, D, E | command | every skip, todo, disabled, characterization marker and review-debt entry has a tracking item and an unexpired date |
+| test-gates | G5 | mechanical | E, F | command | at most 1% of a tier's runs flaky (starting value); no unrecorded retry |
+| test-gates | G6 | review | D | obligation | a defect fix carries a test that failed before the fix; every new behavioral test records a red run on a failed assertion |
+| test-gates | G7 | mechanical | D, E | command | per-test and per-stage budgets hold; p95 not more than 10% above the median of the previous five mainline runs (starting value) |
+| test-gates | G8 | mechanical | D | command | surviving mutants and uncovered lines in the changed code are reviewed; no repository-wide percentage target |
+| test-gates | G9 | mechanical | C, D, E | command | every tier P, H, or X test carries a valid fidelity-gap statement |
+| test-gates | G10 | mechanical | D, G | command | the built artifact loads and its primary journey runs as a consumer runs it |
+| test-gates | G11 | review | D | obligation | changes to test infrastructure and gates cite the strategy and the exception log |
+| test-gates | G12 | mechanical | C, D, E, F | command | (advisory, warns only) every change has a class and rigor record; Standard and Deep have a not-testing list; every new test has a header |
+
+### Stage bindings
+| stage | gates |
+|---|---|
+| A | _none_ |
+| B | test-gates/G2, test-gates/G3 |
+| C | test-gates/G1, test-gates/G2, test-gates/G3, test-gates/G4, test-gates/G9, test-gates/G12 |
+| D | test-gates/G1, test-gates/G2, test-gates/G3, test-gates/G4, test-gates/G6, test-gates/G7, test-gates/G8, test-gates/G9, test-gates/G10, test-gates/G11, test-gates/G12 |
+| E | test-gates/G1, test-gates/G2, test-gates/G3, test-gates/G4, test-gates/G5, test-gates/G7, test-gates/G9, test-gates/G12 |
+| F | test-gates/G5, test-gates/G12 |
+| G | test-gates/G1, test-gates/G10 |
+| H | _none_ |
+
+### Gate runner
+| capability | tool | usage |
+|---|---|---|
+| gate-runner | workspace-standards | `node <skill>/engine/cli.mjs run --step <A-H> --class <class> --rigor <rigor> --changed <path> --root <repo>: one report for every gate set bound to the step; a standard adds no runner of its own` |
+<!-- workspace-standards:gates:end -->

@@ -30,6 +30,27 @@
         "packageRoot": "packages/apigen/apigen-plugin-ir-cache/dist"
       }
     },
+    "e2e": {
+      "//": "Real-extraction lane (docs/decisions/0009-test-lanes-unit-vs-e2e.md). Runs ONLY src/**/*.e2e.ts and src/**/*.e2e.ts via vitest.e2e.config.ts: the tier P suite that drives the real ts-morph extractor over real temporary source trees (ir-cache-invalidation, 24.7 s for 9 cases). The unit `test` target excludes those files. Reached by CI (`nx affected -t e2e --parallel=1`), never by the local pre-push hook; not env-gated. Cached on content (lane-reachability rule 3); declares no outputs. dependsOn mirrors `test` (the suite imports src, so only ^build).",
+      "executor": "nx:run-commands",
+      "dependsOn": [
+        "^build"
+      ],
+      "options": {
+        "cwd": ".",
+        "command": "vitest run --config {projectRoot}/vitest.e2e.config.ts"
+      },
+      "cache": true,
+      "inputs": [
+        "default",
+        "^production",
+        {
+          "externalDependencies": [
+            "vitest"
+          ]
+        }
+      ]
+    },
     "typecheck-spec": {
       "//": "Type-checks the SPEC corpus (packages/apigen/apigen-plugin-ir-cache/tsconfig.spec.json). Closes lane-reachability rule 6 / backlog 770c0919: a tsconfig.spec.json with no compiling target lets the spec corpus carry type errors no gate can see. The ratchet baselines the pre-existing spec errors in tools/nx-plugins/build/executors/typecheck-spec/apigen-plugin-ir-cache.baseline.json (baselined, NOT excluded) and fails on any per-file increase or on include narrowing. Wired into test.dependsOn so nx affected -t test runs it.",
       "executor": "nx:run-commands",

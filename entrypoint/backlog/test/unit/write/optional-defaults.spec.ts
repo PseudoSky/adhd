@@ -1,0 +1,220 @@
+/**
+ * optional-defaults.spec.ts — the four semantically-defaultable inputs are
+ * optional, resolve to the documented default against a REAL store, and keep
+ * their validation for explicit values.
+ *
+ *   - `openCurve.at`        omitted ⇒ one sample at the current instant
+ *   - `claim.action`        omitted ⇒ `'claim'`
+ *   - `relate.action`       omitted ⇒ `'add'`
+ *   - `obligate.on_fail`    omitted ⇒ `'block'` (the strict severity)
+ *
+ * Failure mode: each key was REQUIRED in its input type, so a caller who
+ * omitted it hit a validation error (or a TypeError) even though the verb has
+ * one obvious meaning for the omitted case. RED: with the defaults removed,
+ * the "omitted" cases fail. GREEN: the omitted case resolves to the documented
+ * default and the explicit/invalid cases keep their original behaviour.
+ *
+ * guards: an optional input with a documented default (openCurve.at, claim.action, relate.action, obligate.on_fail) is required, or resolves to the wrong default, or an explicit invalid or null value is silently defaulted instead of rejected.
+ * tier: S
+ * cites: be8b3b0c-86a9-4f51-a208-683838ae70e6 (optional inputs resolve their documented defaults; explicit values keep validation).
+ */
+import { join } from 'node:path';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import {
+  openTestIssueStore,
+  removeTestIssueStoreDir,
+  seedProject,
+  type TestIssueStore,
+} from '../../helpers/open-test-issue-store.js';
+import { freshTmpDir } from '../../helpers/tmp-store.js';
+import { getIssue } from '../../../src/query/get.js';
+import { openCurve } from '../../../src/query/views/stats.js';
+import { createIssue } from '../../../src/write/create-issue.js';
+import { claim, type IClaimInput } from '../../../src/write/claim.js';
+import { relate, type IRelateInput } from '../../../src/write/relate.js';
+import { obligate, type IObligateInput } from '../../../src/write/obligation.js';
+import { InvalidArgumentError } from '../../../src/write/errors.js';
+
+describe('optional inputs resolve their documented defaults (real store)', () => {
+  let dir: string;
+  let store: TestIssueStore;
+  let projectUid: string;
+
+  beforeEach(async () => {
+    dir = freshTmpDir('optional-defaults');
+    store = await openTestIssueStore(join(dir, 'backlog.db'));
+    projectUid = (await seedProject(store, 'optional-defaults-project')).projectUid;
+  });
+
+  afterEach(async () => {
+    await store.close();
+    removeTestIssueStoreDir(dir);
+  });
+
+  async function newIssue(title: string): Promise<string> {
+    const created = await createIssue(store, {
+      project: projectUid,
+      title,
+      body: `body for ${title}`,
+      by: 'filer',
+    });
+    if (created.uid === undefined)
+      throw new Error('setup: createIssue returned no uid');
+    return created.uid;
+  }
+
+  describe('open-curve: at', () => {
+    it('omitted ⇒ a single sample at the current instant', async () => {
+      await newIssue('curve subject');
+      const before = Date.now();
+      const result = await openCurve(store, {});
+      const after = Date.now();
+
+      expect(result.points).toHaveLength(1);
+      const sampled = Date.parse(result.points[0]!.at);
+      expect(Number.isNaN(sampled)).toBe(false);
+      expect(sampled).toBeGreaterThanOrEqual(before - 1000);
+      expect(sampled).toBeLessThanOrEqual(after + 1000);
+    });
+
+    it('an explicit empty list is still rejected (only omission defaults)', async () => {
+      await expect(openCurve(store, { at: [] })).rejects.toBeInstanceOf(
+        InvalidArgumentError
+      );
+    });
+
+    it('an explicit null is rejected as InvalidArgumentError, not silently defaulted to now', async () => {
+      await expect(
+        openCurve(store, { at: null as unknown as string[] })
+      ).rejects.toBeInstanceOf(InvalidArgumentError);
+    });
+  });
+
+  describe('claim: action', () => {
+    it('omitted ⇒ claims the issue (status "claimed")', async () => {
+      const uid = await newIssue('claim target');
+      const outcome = await claim(store, { uid, by: 'agent-a' });
+
+      expect(outcome.status).toBe('claimed');
+      expect(outcome.claimedBy).toBe('agent-a');
+    });
+
+    it('an out-of-vocabulary explicit action is still rejected', async () => {
+      const uid = await newIssue('claim target bad action');
+      await expect(
+        claim(store, {
+          uid,
+          by: 'agent-a',
+          action: 'bogus' as unknown as IClaimInput['action'],
+        })
+      ).rejects.toBeInstanceOf(InvalidArgumentError);
+    });
+
+    it('an explicit null action is rejected, not silently defaulted to "claim"', async () => {
+      const uid = await newIssue('claim target null action');
+      await expect(
+        claim(store, { uid, by: 'agent-a', action: null as unknown as IClaimInput['action'] })
+      ).rejects.toBeInstanceOf(InvalidArgumentError);
+    });
+  });
+
+  describe('relate: action', () => {
+    it('omitted ⇒ adds the edge (outcome.action "add")', async () => {
+      const a = await newIssue('relate source');
+      const b = await newIssue('relate target');
+      const outcome = await relate(store, {
+        sourceUid: a,
+        targetUid: b,
+        rel: 'relates_to',
+        by: 'agent-a',
+      });
+
+      expect(outcome.action).toBe('add');
+      expect(outcome.noop).toBe(false);
+    });
+
+    it('an out-of-vocabulary explicit action is still rejected', async () => {
+      const a = await newIssue('relate source bad');
+      const b = await newIssue('relate target bad');
+      await expect(
+        relate(store, {
+          sourceUid: a,
+          targetUid: b,
+          rel: 'relates_to',
+          action: 'bogus' as unknown as IRelateInput['action'],
+          by: 'agent-a',
+        })
+      ).rejects.toBeInstanceOf(InvalidArgumentError);
+    });
+
+    it('an explicit null action is rejected, not silently defaulted to "add"', async () => {
+      const a = await newIssue('relate source null action');
+      const b = await newIssue('relate target null action');
+      await expect(
+        relate(store, {
+          sourceUid: a,
+          targetUid: b,
+          rel: 'relates_to',
+          action: null as unknown as IRelateInput['action'],
+          by: 'agent-a',
+        })
+      ).rejects.toBeInstanceOf(InvalidArgumentError);
+    });
+  });
+
+  describe('obligate: on_fail', () => {
+    it('omitted ⇒ persists the strict severity "block"', async () => {
+      const uid = await newIssue('obligation subject');
+      await obligate(store, {
+        uid,
+        applies_to: { to: 'RESOLVED' },
+        requirement: { op: 'blockers_terminal' },
+        by: 'declarer:1',
+      });
+
+      const card = await getIssue(store.graph, { uid, fields: ['obligations'] });
+      expect(card.obligations).toHaveLength(1);
+      expect(card.obligations![0]!.on_fail).toBe('block');
+    });
+
+    it('an explicit "warn" is preserved, not overridden by the default', async () => {
+      const uid = await newIssue('obligation warn subject');
+      await obligate(store, {
+        uid,
+        applies_to: { to: 'RESOLVED' },
+        requirement: { op: 'blockers_terminal' },
+        on_fail: 'warn',
+        by: 'declarer:1',
+      });
+
+      const card = await getIssue(store.graph, { uid, fields: ['obligations'] });
+      expect(card.obligations![0]!.on_fail).toBe('warn');
+    });
+
+    it('an out-of-vocabulary explicit on_fail is still rejected', async () => {
+      const uid = await newIssue('obligation bad severity');
+      await expect(
+        obligate(store, {
+          uid,
+          applies_to: { to: 'RESOLVED' },
+          requirement: { op: 'blockers_terminal' },
+          on_fail: 'bogus' as unknown as IObligateInput['on_fail'],
+          by: 'declarer:1',
+        })
+      ).rejects.toBeInstanceOf(InvalidArgumentError);
+    });
+
+    it('an explicit null on_fail is rejected, not silently defaulted to "block"', async () => {
+      const uid = await newIssue('obligation null severity');
+      await expect(
+        obligate(store, {
+          uid,
+          applies_to: { to: 'RESOLVED' },
+          requirement: { op: 'blockers_terminal' },
+          on_fail: null as unknown as IObligateInput['on_fail'],
+          by: 'declarer:1',
+        })
+      ).rejects.toBeInstanceOf(InvalidArgumentError);
+    });
+  });
+});

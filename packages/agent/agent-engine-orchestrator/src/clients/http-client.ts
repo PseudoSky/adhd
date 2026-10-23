@@ -5,7 +5,7 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import type { ToolDefinition } from "../providers/types.js";
 import type { McpHttpConfig, McpSseConfig } from "../validation/index.js";
 import { ToolError } from "../validation/errors.js";
-import type { IMcpClient } from "./types.js";
+import { annotationsOf, type IMcpClient } from "./types.js";
 import type { EngineConfig } from "../interfaces.js";
 import { sdkFetchOption, wireFetch, wrapMcpTransport } from "../providers/wire.js";
 
@@ -30,6 +30,7 @@ abstract class BaseHttpMcpClient implements IMcpClient {
                 type: "object",
                 properties: {},
             },
+            ...annotationsOf(tool),
         }));
     }
 

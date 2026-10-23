@@ -35,10 +35,10 @@ function walk(dir) {
   return out;
 }
 
-/** Files under `<PKG>/src` that gate a describe on NAT_TOOL_LIVE (repo-relative to PKG). */
+/** Files under `<PKG>/test/e2e` that gate a describe on NAT_TOOL_LIVE (repo-relative to PKG). */
 function gatedFiles(root) {
-  return walk(join(root, PKG, 'src'))
-    .filter((f) => /\.test\.ts$/.test(f))
+  return walk(join(root, PKG, 'test', 'e2e'))
+    .filter((f) => /\.e2e\.ts$/.test(f))
     .filter((f) => {
       const t = readFileSync(f, 'utf8');
       return /process\.env\[['"]NAT_TOOL_LIVE['"]\]/.test(t) && /\.skipIf\(/.test(t);
@@ -49,7 +49,7 @@ function gatedFiles(root) {
 
 /** Test-file paths listed in the `NAT_TOOL_LIVE=1` rows of a markdown gate table. */
 function tableFiles(md) {
-  return [...md.matchAll(/^\|\s*`(src\/[^`]+\.test\.ts)`\s*\|\s*`NAT_TOOL_LIVE=1`/gm)].map((m) => m[1]).sort();
+  return [...md.matchAll(/^\|\s*`(test\/e2e\/[^`]+\.e2e\.ts)`\s*\|\s*`NAT_TOOL_LIVE=1`/gm)].map((m) => m[1]).sort();
 }
 
 /** Returns { missingRows, staleRows } for gated-set vs table-set. */

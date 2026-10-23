@@ -1,0 +1,14 @@
+{
+  "name": "@adhd/apigen-plugin-policy",
+  "version": "0.0.1",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "CHANGELOG.md"
+  ],
+  "dependencies": {
+    "@adhd/apigen-base-errors": "^0.2.3",
+    "@adhd/apigen-core-client": "^0.3.6"
+  }
+}

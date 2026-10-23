@@ -1,0 +1,121 @@
+{
+  "name": "policy",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "entrypoint/policy/src",
+  "projectType": "application",
+  "tags": [
+    "domain:entrypoint",
+    "pkg-kind:entrypoint",
+    "pkg-class:entrypoint",
+    "layer:entrypoints",
+    "platform:node",
+    "access:public"
+  ],
+  "targets": {
+    "build": {
+      "//": "ONE target emits the three bin bundles AND the baked operations artifact (dist/api.ir.json). The second command runs the freshly built bin's hidden `ir-artifact` subcommand, which extracts the client's built service/api.d.ts (so ^build of policy-core-client is required) and writes the artifact beside the bundles in the SAME dist/. Mirrors entrypoint/backlog's build.",
+      "executor": "nx:run-commands",
+      "cache": true,
+      "outputs": [
+        "{projectRoot}/dist"
+      ],
+      "dependsOn": [
+        "^build",
+        "typecheck"
+      ],
+      "inputs": [
+        "production",
+        "^production"
+      ],
+      "options": {
+        "cwd": "{projectRoot}",
+        "command": "vite build && node dist/cli.js ir-artifact --out dist/api.ir.json"
+      }
+    },
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "inputs": [
+        "default",
+        "^production",
+        {
+          "externalDependencies": [
+            "typescript"
+          ]
+        }
+      ],
+      "options": {
+        "command": "tsc -p entrypoint/policy/tsconfig.lib.json --noEmit"
+      }
+    },
+    "nx-release-publish": {
+      "dependsOn": [
+        "build",
+        "test",
+        "verify-dist-load",
+        "dist-manifest",
+        "publish-hygiene"
+      ],
+      "options": {
+        "packageRoot": "{projectRoot}/dist"
+      }
+    },
+    "typecheck-spec": {
+      "//": "Type-checks the SPEC corpus (entrypoint/policy/tsconfig.spec.json). Closes lane-reachability rule 6: a tsconfig.spec.json with no compiling target lets the spec corpus carry type errors no gate can see (nx.json production namedInput excludes it). The ratchet fails on any per-file increase over tools/nx-plugins/build/executors/typecheck-spec/policy.baseline.json or on include narrowing. Wired into test.dependsOn so nx affected -t test runs it.",
+      "executor": "nx:run-commands",
+      "cache": true,
+      "inputs": [
+        "default",
+        {
+          "externalDependencies": [
+            "typescript"
+          ]
+        }
+      ],
+      "options": {
+        "cwd": ".",
+        "command": "node tools/nx-plugins/build/executors/typecheck-spec/ratchet.mjs --tsconfig entrypoint/policy/tsconfig.spec.json --baseline tools/nx-plugins/build/executors/typecheck-spec/policy.baseline.json"
+      }
+    },
+    "test": {
+      "//": "Partial override: only dependsOn is added (typecheck-spec, so the spec corpus is type-checked before it runs); the command stays the workspace default (vite.config.ts is .ts here, no .mts override needed).",
+      "dependsOn": [
+        "lint",
+        "^build",
+        "build",
+        "typecheck-spec"
+      ]
+    },
+    "e2e": {
+      "//": "Real-server lane (docs/decisions/0009-test-lanes-unit-vs-e2e.md). Runs ONLY src/**/*.e2e.ts and src/**/*.e2e.ts via vitest.e2e.config.ts: the tier P suites that bind a real loopback socket (http-entry.e2e.ts). The unit `test` target excludes those files. Reached by CI (`nx affected -t e2e --parallel=1`), never by the local pre-push hook; not env-gated. Cached on content (`cache:true` + inputs, lane-reachability rule 3); declares no outputs. dependsOn mirrors `test` (the suite loads the entry, which builds the policy package).",
+      "executor": "nx:run-commands",
+      "dependsOn": [
+        "^build",
+        "build"
+      ],
+      "options": {
+        "cwd": ".",
+        "command": "vitest run --config {projectRoot}/vitest.e2e.config.ts"
+      },
+      "cache": true,
+      "inputs": [
+        "default",
+        "^production",
+        {
+          "externalDependencies": [
+            "vitest"
+          ]
+        }
+      ]
+    }
+  },
+  "release": {
+    "version": {
+      "currentVersionResolver": "git-tag",
+      "preserveLocalDependencyProtocols": false,
+      "manifestRootsToUpdate": [
+        "{projectRoot}"
+      ]
+    }
+  }
+}

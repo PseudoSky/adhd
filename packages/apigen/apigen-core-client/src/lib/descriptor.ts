@@ -249,4 +249,23 @@ export interface Operation {
    * for `kind: 'action'`; absent (`undefined`) for `query` and other kinds.
    */
   hasCtx?: boolean;
+
+  /**
+   * Optional name of the binding this operation is attached to (ADR-0018,
+   * plan decision O-1). Opaque to extraction; resolved by the runtime.
+   */
+  binding?: string;
+
+  /**
+   * Optional tool-presentation metadata for MCP-style hosts (ADR-0018, plan
+   * decision E3): a display `title` and free-form tool `annotations`.
+   */
+  tool?: {
+    title?: string;
+    /** Upstream-authored tool description; preferred over a generated one by MCP hosts. */
+    description?: string;
+    annotations?: Record<string, unknown>;
+    /** Upstream-authored JSON Schema (object) for the tool's result. */
+    outputSchema?: Record<string, unknown>;
+  };
 }

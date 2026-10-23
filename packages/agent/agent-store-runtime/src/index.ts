@@ -1,6 +1,14 @@
 // @adhd/agent-store-runtime — public barrel
 
-export { SessionStore, estimateTokens, windowMessages } from './store/session-store.js';
+export {
+  SessionStore,
+  estimateTokens,
+  windowMessages,
+  ECHO_SCHEMA_VERSION,
+  isEchoSessionExpired,
+  stripEchoServerBlocks,
+} from './store/session-store.js';
+export type { IEchoSweepResult } from './store/session-store.js';
 export { TaskStore } from './store/task-store.js';
 export {
   PriceHistoryStore,

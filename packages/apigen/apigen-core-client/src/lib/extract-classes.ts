@@ -33,7 +33,7 @@ import type { Project, SourceFile } from 'ts-morph';
 // — a bare `require` broke the built `dist/index.mjs`).
 import type { Operation, Segment } from './descriptor';
 import { buildSchema } from './schema-builders/ts-json-schema';
-import { tokenize } from './extract';
+import { buildId, tokenize } from './extract';
 import { detectStreamElementType } from './stream-type';
 import { lazyRequire } from './esm-require';
 import {
@@ -402,15 +402,6 @@ async function buildActionOpAtPath(
       output: resolvedReturn,
     },
   };
-}
-
-// ---------------------------------------------------------------------------
-// ID derivation — pure function of namespace + path per SPEC §4
-// ---------------------------------------------------------------------------
-
-function buildId(ns: Segment, opPath: Segment[]): string {
-  const allSegs: Segment[] = ns.raw ? [ns, ...opPath] : opPath;
-  return allSegs.map((s) => s.words.join('-')).join('/');
 }
 
 // ---------------------------------------------------------------------------

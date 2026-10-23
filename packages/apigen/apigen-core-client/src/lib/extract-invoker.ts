@@ -61,6 +61,13 @@ export interface ExtractCall {
    * Free-form, extractor-specific options (e.g. a tsconfig path for TS today;
    * a venv path for Python tomorrow). Opaque to the onion — read only by the
    * terminal extractor step (and by cache layers that need identity signals).
+   *
+   * CONTRACT: every option that changes the extracted operations (e.g.
+   * `dropFileSegment`, `tsconfig`) must travel HERE (or in `namespace` /
+   * `versionHint`), because a cache layer keys on the call — an option that
+   * lives only inside the terminal step's closure is invisible to it. Values
+   * must be plain JSON-like data; the one exception is `session`, a run-scoped
+   * handle that never affects the result and is ignored for keying.
    */
   extractorOptions?: Record<string, unknown>;
   /**
@@ -75,8 +82,111 @@ export interface ExtractCall {
 /**
  * Extraction's RESULT is already the host-neutral descriptor shape SPEC §4
  * defines — reuse it verbatim, do not invent a parallel result type.
+ *
+ * It additionally MAY carry `sourceFiles`: the absolute paths (sorted, entry
+ * file included) of every local source file the extractor read to produce
+ * these operations. A cache layer consumes that list as the result's
+ * dependency set, so what is tracked for staleness is exactly what extraction
+ * read — never a second, independently-computed guess (backlog 39c4e00c). The
+ * property is non-enumerable, so a caller that reads the result as a plain
+ * `Operation[]` (iteration, `JSON.stringify`, `toEqual`, spread) sees no
+ * difference; an extractor that does not report files simply returns a bare
+ * array and `sourceFilesOf` yields `undefined`.
  */
-export type ExtractResult = Operation[];
+export type ExtractResult = Operation[] & {
+  readonly sourceFiles?: readonly string[];
+};
+
+/**
+ * Attach the files an extraction read to its `Operation[]` result (mutates and
+ * returns `operations`). The list is de-duplicated and sorted for determinism.
+ */
+export function withSourceFiles(
+  operations: Operation[],
+  files: Iterable<string>
+): ExtractResult {
+  Object.defineProperty(operations, 'sourceFiles', {
+    value: Object.freeze([...new Set(files)].sort()),
+    enumerable: false,
+    writable: false,
+    configurable: true,
+  });
+  return operations;
+}
+
+/**
+ * Enforce the {@link ExtractCall.extractorOptions} contract at the point a call
+ * is built: every key present, known or not, must hold plain JSON-like data
+ * (so a cache layer can key on it); beyond that, only the two known keys are
+ * type-checked, `tsconfig` as a string and `dropFileSegment` as a boolean.
+ * Unknown keys are accepted when JSON-like: they are carried and keyed, but
+ * nothing validates that an extractor reads them. `session` is the one
+ * run-scoped handle exempt from the check; it never affects the result and is
+ * ignored for keying.
+ *
+ * @param options - The `extractorOptions` bag about to travel in an `ExtractCall`.
+ * @throws Error naming the offending key when a value is not JSON-like or a
+ *         known key has the wrong type.
+ */
+export function assertExtractorOptions(
+  options: Record<string, unknown> | undefined
+): void {
+  if (options === undefined) return;
+  for (const [key, value] of Object.entries(options)) {
+    if (key === 'session') continue;
+    if (!isJsonLike(value)) {
+      throw new Error(
+        `ExtractCall.extractorOptions.${key} is not plain JSON data; an option ` +
+          `that cannot be keyed must not influence extraction`
+      );
+    }
+  }
+  const tsconfig = options['tsconfig'];
+  if (tsconfig !== undefined && typeof tsconfig !== 'string') {
+    throw new Error('ExtractCall.extractorOptions.tsconfig must be a string');
+  }
+  const dropFileSegment = options['dropFileSegment'];
+  if (dropFileSegment !== undefined && typeof dropFileSegment !== 'boolean') {
+    throw new Error(
+      'ExtractCall.extractorOptions.dropFileSegment must be a boolean'
+    );
+  }
+}
+
+/**
+ * Whether `value` is plain JSON-like data: null, string, boolean, finite
+ * number, or an array / plain object (null or `Object.prototype` prototype)
+ * of such. A value that contains itself (a cycle) is not JSON-like.
+ */
+function isJsonLike(value: unknown, ancestors: object[] = []): boolean {
+  if (value === null) return true;
+  switch (typeof value) {
+    case 'string':
+    case 'boolean':
+      return true;
+    case 'number':
+      return Number.isFinite(value);
+    case 'object': {
+      if (ancestors.includes(value)) return false;
+      const next = [...ancestors, value];
+      if (Array.isArray(value)) return value.every((v) => isJsonLike(v, next));
+      const proto = Object.getPrototypeOf(value) as unknown;
+      if (proto !== Object.prototype && proto !== null) return false;
+      return Object.values(value as Record<string, unknown>).every((v) =>
+        isJsonLike(v, next)
+      );
+    }
+    default:
+      return false;
+  }
+}
+
+/** The files `result`'s extractor reported reading, or `undefined` if it did not report any. */
+export function sourceFilesOf(
+  result: readonly Operation[]
+): readonly string[] | undefined {
+  return (result as ExtractResult).sourceFiles;
+}
 
 /** A stage-agnostic middleware step: receives the call, owns the continuation. */
 export type ExtractMiddleware = (

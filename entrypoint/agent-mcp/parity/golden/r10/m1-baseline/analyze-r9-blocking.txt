@@ -1,0 +1,36 @@
+== PARENT BLOCKING A1 (A) ==
+parent seq | response end s | wait for next parent request s | calls (name[delegation mode], trace span s) | same-turn calls | spans overlap
+2 | 3.04 | 1.208 | Bash, mcp__r2info__get_ticket | 2 | no/untraced
+3 | 6.45 | 0.369 | Bash | 1 | -
+4 | 15.86 | 3.540 | WebFetch | 1 | -
+6 | 31.68 | 0.064 | Agent[background], Agent[background] | 2 | no/untraced
+10 | 33.86 | 0.010 | Read | 1 | -
+12 | 36.35 | 0.010 | Edit | 1 | -
+15 | 38.05 | 0.428 | Bash | 1 | -
+17 | 40.91 | 0.014 | Bash | 1 | -
+18 | 43.12 | 0.468 | Bash | 1 | -
+21 | 58.18 | 0.012 | Read, Read | 2 | no/untraced
+22 | 61.68 | 0.009 | Edit | 1 | -
+23 | 66.96 | 0.030 | Agent[sync] | 1 | -
+25 | 71.80 | 0.298 | Bash | 1 | -
+27 | 76.51 | 0.378 | Bash | 1 | -
+delegation turns: 2 | parent blocked on SYNC delegation: 0.030 s over 1 turn(s) [0.030] | background delegation turns wait 0.064 s over 1 turn(s)
+
+== PARENT BLOCKING C1 (C) ==
+parent seq | response end s | wait for next parent request s | calls (name[delegation mode], trace span s) | same-turn calls | spans overlap
+1 | 1.19 | 0.134 | shell__shell_execute 0.122, r2info__get_ticket 0.004 | 2 | yes
+2 | 3.11 | 0.022 | fs__list_directory 0.007, fs__read_multiple_files 0.008 | 2 | yes
+3 | 4.25 | 0.044 | fs__read_multiple_files 0.004, fs__list_directory 0.002 | 2 | yes
+4 | 6.57 | 0.022 | fs__read_multiple_files 0.007, fs__list_directory 0.004 | 2 | yes
+5 | 8.28 | 0.138 | shell__shell_execute 0.119, shell__shell_execute 0.123 ERR | 2 | yes
+6 | 16.54 | 0.033 | shell__shell_execute 0.018 | 1 | -
+7 | 26.20 | 19.167 | agent-mcp__tasks_batch[sync x2] 19.128 | 1 | -
+22 | 48.40 | 0.026 | fs__edit_file 0.004 ERR, fs__read_multiple_files 0.007 | 2 | yes
+23 | 49.76 | 0.014 | fs__edit_file 0.004 | 1 | -
+24 | 50.68 | 0.114 | shell__shell_execute 0.103 | 1 | -
+26 | 68.87 | 0.025 | fs__edit_file 0.010, fs__create_directory 0.006 | 2 | yes
+27 | 70.65 | 0.014 | fs__write_file 0.002 | 1 | -
+28 | 75.69 | 13.537 | agent-mcp__task[sync] 13.524, shell__shell_execute 0.101 | 2 | yes
+33 | 90.73 | 0.018 | fs__read_text_file 0.002 | 1 | -
+delegation turns: 2 | parent blocked on SYNC delegation: 32.704 s over 2 turn(s) [19.167, 13.537] | background delegation turns wait 0.000 s over 0 turn(s)
+tracing plugin cross-check: delegation tool spans agent-mcp__tasks_batch 19.128 s, agent-mcp__task 13.524 s

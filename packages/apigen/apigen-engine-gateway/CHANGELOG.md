@@ -1,3 +1,34 @@
+## 0.2.5 (2026-10-21)
+
+### 🩹 Fixes
+
+- **apigen-gateway:** idempotent owed-stop count and guarded post-start stop ([899994b8](https://github.com/PseudoSky/adhd/commit/899994b8))
+- **apigen-engine-gateway:** reject restart of a stopped gateway and stop children spawned by a racing start ([16b53560](https://github.com/PseudoSky/adhd/commit/16b53560))
+- **apigen-engine-gateway:** stop already-started hosts when start() partially fails ([7e49d096](https://github.com/PseudoSky/adhd/commit/7e49d096))
+
+### ❤️ Thank You
+
+- pseudosky
+
+## 0.2.4 (2026-10-15)
+
+### 🚀 Features
+
+- **apigen-engine-gateway:** serveMcpPassthrough SDK server fronting a bin: MCP source through the Layer stack (T08b) ([b68f0b94](https://github.com/PseudoSky/adhd/commit/b68f0b94))
+- **apigen-engine-gateway:** bin: source kind with argv fallback and stdio MCP resolver ([112fdc9e](https://github.com/PseudoSky/adhd/commit/112fdc9e))
+
+### 🩹 Fixes
+
+- **apigen-engine-gateway:** forward Layer-forced arguments to the upstream when the host sent none ([1615953d](https://github.com/PseudoSky/adhd/commit/1615953d))
+- **apigen-engine-gateway:** launcher transport close is a no-op once closed ([56c6bcda](https://github.com/PseudoSky/adhd/commit/56c6bcda))
+- **apigen-engine-gateway:** never stamp x-apigen-safe on MCP-sourced composed schemas (G3) ([0ccf5296](https://github.com/PseudoSky/adhd/commit/0ccf5296))
+- **apigen-engine-gateway:** user-chosen operation ids, verbatim passthrough of arguments and tool definitions, skip bad tools, follow host and upstream shutdown (G2-G8) ([0cf7897d](https://github.com/PseudoSky/adhd/commit/0cf7897d))
+- **apigen-engine-gateway:** kill process groups, honor abort and timeout, allowlist the child environment, cap the transport line buffer (G1, G9-G11) ([af678447](https://github.com/PseudoSky/adhd/commit/af678447))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 0.2.2 (2026-09-26)
 
 ### 🚀 Features

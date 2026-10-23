@@ -158,7 +158,7 @@ export const useFileDownload = ({
         } else if (status === 'complete') {
           const blob = new Blob([result.data], { type: result.type });
           cache.set(result.cacheKey, blob);
-          // eslint-disable-next-line react-hooks/exhaustive-deps
+           
           processDownload(blob, result.fileType);
         }
       };
@@ -181,7 +181,7 @@ export const useFileDownload = ({
     async (chunk: unknown[], fileType: FileType): Promise<Blob> => {
       switch (fileType) {
         case 'csv': {
-          // eslint-disable-next-line react-hooks/exhaustive-deps
+           
           const csvContent = await convertToCSV(chunk, options.csv);
           return new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
         }

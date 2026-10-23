@@ -7,12 +7,12 @@
  * server via `npx`/`uvx`/`srt`, a built bin via `child_process`) is slow,
  * load-sensitive, and depends on the host. 2026-10 it timed out under a full
  * `nx affected -t test` and blocked publishing agent-engine-orchestrator
- * (native-tooling-caller-cwd.test.ts). The lane model (docs/PIPELINE.md §2,
+ * (native-tooling-caller-cwd.spec.ts). The lane model (docs/PIPELINE.md §2,
  * docs/decisions/0009-test-lanes-unit-vs-e2e.md) is: unit `test` = no subprocess;
  * `e2e` = subprocess / real servers, `--parallel=1`, its own pipeline stage (never in `nx test`).
  *
  * WHAT IT CHECKS (any violation => exit 1). A UNIT-LANE file is any
- * `src/**\/*.{test,spec}.*` in an agent-family project that does NOT match the
+ * `test/unit/**\/*.spec.*` in an agent-family project that does NOT match the
  * e2e globs in `tools/vite-plugins/e2e-globs.mjs`.
  *   A. (spawn-in-unit-lane) A unit-lane file, with comments stripped, that
  *      - imports/requires `child_process` (static, `require`, or dynamic import)
@@ -28,10 +28,10 @@
  *      driven through the Orchestrator) that static scanning cannot prove. Each
  *      must still exist in the unit lane; once moved/renamed the entry must be
  *      removed (the ratchet can only shrink).
- *   C. (e2e-test-not-excluded-from-unit) A project that ships `*.e2e.test.ts`
+ *   C. (e2e-test-not-excluded-from-unit) A project that ships `*.e2e.ts`
  *      files must keep them out of its unit lane: its vite config must
  *      spread `E2E_FILE_EXCLUDES` into `test.exclude` (a comment or unused import
- *      does not count) (otherwise vitest's `*.test.ts` include
+ *      does not count) (otherwise vitest's unit include
  *      runs them in BOTH lanes).
  *
  * Agent family = packages/agent/*, entrypoint/agent-mcp, entrypoint/dispatch-cli.
@@ -43,21 +43,22 @@
  * `--workspace-root <dir>` points the scan at a fixture workspace; `--baseline <file>`
  * overrides agent-lane-spawn.baseline.json (fixture runs).
  */
-import { existsSync, globSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { realpathSync as realpathForEntry } from 'node:fs';
+import { globScan } from './glob-exclusions.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '../../../../..');
 const BASELINE_PATH = join(HERE, 'agent-lane-spawn.baseline.json');
 
-const IGNORE = ['**/node_modules/**', '**/dist/**', '**/.worktrees/**', '**/.claude/**'];
-const E2E_FILE = /\.e2e(\.test)?\.[cm]?[jt]sx?$/;
-const TEST_FILE = /\.(test|spec)\.[cm]?[jt]sx?$/;
+const E2E_FILE = /\.e2e\.[cm]?[jt]sx?$/;
+const TEST_FILE = /\.spec\.[cm]?[jt]sx?$/;
 
 /** Project roots that make up the agent family. */
 export function agentFamilyRoots(workspaceRoot) {
-  const roots = globSync('packages/agent/*/project.json', { cwd: workspaceRoot, ignore: IGNORE }).map(dirname);
+  const roots = globScan(workspaceRoot, 'packages/agent/*/project.json').map(dirname);
   for (const r of ['entrypoint/agent-mcp', 'entrypoint/dispatch-cli']) {
     if (existsSync(join(workspaceRoot, r, 'project.json'))) roots.push(r);
   }
@@ -122,22 +123,23 @@ export function collectAgentLaneSpawnViolations(workspaceRoot, baselineOverride)
   const unitFiles = new Set();
 
   for (const root of roots) {
-    const files = globSync('src/**/*.*', { cwd: join(workspaceRoot, root), ignore: IGNORE });
+    const files = globScan(join(workspaceRoot, root), 'test/**/*.*');
     let hasE2eTestFiles = false;
     for (const f of files) {
       if (!TEST_FILE.test(f) && !E2E_FILE.test(f)) continue;
       const rel = `${root}/${f}`;
       if (E2E_FILE.test(f)) {
-        if (/\.e2e\.test\./.test(f)) hasE2eTestFiles = true;
+        hasE2eTestFiles = true;
         continue;
       }
+      if (!f.startsWith('test/unit/')) continue;
       unitFiles.add(rel);
       scanned += 1;
       const why = spawnReason(readFileSync(join(workspaceRoot, rel), 'utf8'));
       if (why) {
         add(
           'A-spawn-in-unit-lane',
-          `${rel} — unit-lane test ${why}. Subprocess tests belong in the \`e2e\` lane: rename to \`*.e2e.test.ts\` (docs/decisions/0009-test-lanes-unit-vs-e2e.md; backlog 5b839b90 AC2).`,
+          `${rel} — unit-lane test ${why}. Subprocess tests belong in the \`e2e\` lane: move to \`test/e2e/\` as \`*.e2e.ts\` (docs/decisions/0009-test-lanes-unit-vs-e2e.md; backlog 5b839b90 AC2).`,
         );
       }
     }
@@ -153,7 +155,7 @@ export function collectAgentLaneSpawnViolations(workspaceRoot, baselineOverride)
       if (!excludesE2eFiles(text)) {
         add(
           'C-e2e-test-not-excluded-from-unit',
-          `${root} — ships *.e2e.test.ts but its vite config (vite.config.ts or .mts) does not exclude \`E2E_FILE_EXCLUDES\` (tools/vite-plugins/e2e-globs.mjs) from \`test.exclude\`, so they also run in the unit lane.`,
+          `${root} — ships *.e2e.ts but its vite config (vite.config.ts or .mts) does not exclude \`E2E_FILE_EXCLUDES\` (tools/vite-plugins/e2e-globs.mjs) from \`test.exclude\`, so they also run in the unit lane.`,
         );
       }
     }
@@ -187,4 +189,4 @@ function main() {
   console.log(`✔ agent lane-spawn check passed (${roots.length} projects, ${scanned} unit-lane test files scanned).`);
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main();
+if ((() => { try { return realpathForEntry(process.argv[1]) === realpathForEntry(fileURLToPath(import.meta.url)); } catch { return process.argv[1] === fileURLToPath(import.meta.url); } })()) main();

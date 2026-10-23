@@ -58,13 +58,14 @@ __pycache__/
 *.sqlite-shm
 *.sqlite-wal
 # The calc MCP fixture's runtime log (the fixture itself is a tracked test
-# asset at entrypoint/agent-mcp/src/__tests__/integration/fixtures/calc-server.mjs).
+# asset at entrypoint/agent-mcp/test/fixtures/integration/calc-server.mjs).
 # A bare `calc-server.*` ignored the .mjs fixture too, which is how backlog
 # 305a63d4's dangling reference went undetected. Ignore only the log.
 calc-server.log
 
 .nx/cache
 .nx/workspace-data
+.nx/test-gates
 
 # Claude Code local state. Only the genuinely local/huge/personal pieces are
 # ignored here -- .claude/settings.json (team-wide hooks/permissions),
@@ -165,6 +166,13 @@ packages/agent/*/tsconfig.tsbuildinfo
 # (published-state.json, which IS committed as source of truth). Regenerable
 # by just re-running any instrumented nx target; never meaningful to track.
 /metrics.json
+
+# tools/nx-plugins/test/metrics/store.mjs's per-test history lives in ~/.adhd/test-timings/ (outside any checkout);
+# this entry only covers pointing ADHD_TEST_METRICS_FILE into a checkout.
+/test-metrics.jsonl
+/test-metrics.jsonl.1
+/.test-metrics.jsonl.lock
+/test-metrics.jsonl.lock
 
 # Stray repo-root scratch artifact repeatedly swept into commits during agent
 # dispatch (DEBT-PROCESS-001 part b) — belt-and-braces guard. Anchored to the

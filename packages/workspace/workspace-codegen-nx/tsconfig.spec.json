@@ -10,8 +10,8 @@
   },
   "include": [
     "vite.config.ts",
-    "src/**/*.test.ts",
-    "src/**/*.spec.ts"
+    "test/**/*.ts",
+    "test/**/*.tsx"
   ],
   "exclude": [
     "node_modules"

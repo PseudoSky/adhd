@@ -12,6 +12,7 @@ import type {
   OutputPlugin,
   ComposedSchemas,
 } from '@adhd/apigen-core-client';
+import { resolveSourceReference } from '@adhd/apigen-core-client';
 import { emitResolutionScaffolding } from '../scaffold';
 import { describeTypeOption, unknownTypeError } from '../plugin-registry';
 // BUG-APIGEN-CLI-GENERATE-USE-UNRESOLVED-001: `generate` accepted `--use` but
@@ -246,6 +247,15 @@ export function registerGenerateCommand(
         const sourceFile = path.resolve(opts.source);
         const outputDir = path.resolve(opts.outDir);
 
+        // The resolver classifies `--source`; an unclassifiable source fails
+        // here in the same `--source <x>: ...` form `run` uses.
+        const resolvedSource = resolveSourceReference(sourceFile);
+        if (!resolvedSource.ok) {
+          throw new Error(
+            `--source ${opts.source}: ${resolvedSource.error.message}`
+          );
+        }
+
         // Separate plugin opts from projection overrides (http.verb.* keys).
         // All --opt pairs feed plugin options; override keys additionally update
         // the projection config (Tenet 1 — source never touched).
@@ -253,6 +263,11 @@ export function registerGenerateCommand(
         const cliOverrides = parseOverrides(allOpts);
         const overrides = loadOverrideConfig(opts.config, cliOverrides);
         const options = parseOptPairs(allOpts);
+        // The flat `--opt` bag: handed to the extraction entry as
+        // `extractLayerOptions` (each `extractLayer.createLayer` runs once per
+        // invocation). Request-stage `layer.createLayer` factories are NOT run
+        // on a generate path.
+        const layerOptions = { ...options };
 
         // BUG-APIGEN-CLI-GENERATE-USE-UNRESOLVED-001: resolve the `--use`
         // specifiers to loaded Plugin objects and thread them as
@@ -260,7 +275,7 @@ export function registerGenerateCommand(
         // buildDescriptor()/extractSource() can compose a declared
         // `extractLayer` capability (e.g. `apigen-plugin-ir-cache`) into
         // extraction, exactly as `run` already does.
-        const usePlugins = await loadUsePlugins(opts.use);
+        const usePlugins = await loadUsePlugins(opts.use, layerOptions, false);
 
         // Unified v2 orchestrator path: detect → extract → merge →
         // collision-check → gen. This is now the ONLY extraction pipeline
@@ -280,6 +295,7 @@ export function registerGenerateCommand(
             ],
             usePlugins: opts.use,
             usePluginObjects: usePlugins,
+            extractLayerOptions: layerOptions,
             overrides,
             logger,
           },

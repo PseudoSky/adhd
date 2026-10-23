@@ -1,0 +1,2588 @@
+{
+  "$comment": "Legacy test-header violations per file (check-test-headers.mjs). It only shrinks: a new violation fails, a fixed one must be removed here.",
+  "files": {
+    ".githooks/check-no-credentials.spec.mjs": [
+      "H1"
+    ],
+    ".githooks/detect-mass-deletion.spec.mjs": [
+      "H1"
+    ],
+    ".githooks/git-env-leak.spec.mjs": [
+      "H1"
+    ],
+    "docs/plan/actionable-store/demo/fixture/demo-gate.spec.mjs": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/e2e/agent-list-reflects-store.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/e2e/agent-mcp-follow-bin.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/unit/agent-not-found-names.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/unit/agent-store-mcp-patch.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/unit/agent-update-open-sessions.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/unit/api-log.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/e2e/audit-tracing-healthy.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/unit/docs-defaults-contract.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/unit/bind-host.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/e2e/bk6-store-launch.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/unit/bk6-store-path.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/unit/bucket-d-acceptance.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/unit/budget-ratecard-parity.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/e2e/calc-server.fixture.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/unit/channels.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/unit/claudecli-hint-external-list.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/unit/claudecli-host-temp-root.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/e2e/claudecli-task-cwd.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/unit/config.provider-credentials.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/unit/config.scope-resolution.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/unit/config.zero-config.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/unit/db.legacy-migration.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/unit/default-mcp-producer.guard.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/unit/default-plugins.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/unit/docs-and-config-contract.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/unit/docs-contract.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/unit/egress-guard.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/unit/engine-config-seams.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/unit/eol-hook.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/unit/eslint-directives.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/unit/follow-renderer.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/unit/hermetic-test-env.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/unit/install.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/e2e/integration/agent-portability-live.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/e2e/integration/agent-portability.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/e2e/integration/agent-prompt-projection.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/e2e/integration/default-mcp-servers.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/e2e/integration/eol-preserve.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/e2e/integration/esc-root-attribution.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/e2e/integration/hitl-suspend-resume.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/e2e/integration/live-budget.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/e2e/integration/live-cache-smoke.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/e2e/integration/live-dag.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/e2e/integration/live-oauth.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/e2e/integration/nat-tool-6-permission-gate.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/e2e/integration/native-tooling-adoption.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/e2e/integration/native-tooling-pattern-allowlist.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/e2e/integration/native-tooling-real-ops.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/e2e/integration/native-web-tools.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/e2e/integration/provider-selection-global.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/e2e/integration/provider-selection.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/e2e/integration/real-environment.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/e2e/integration/srt-consumer-install.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/e2e/integration/srt-policy-spawn.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/e2e/integration/tasks-batch.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/e2e/integration/tool-arg-coercion.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/e2e/integration/tool-result-cap.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/e2e/integration/tool-result-spill.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/e2e/integration/tracing-e2e.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/e2e/live/tracing-live.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/unit/load-env.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/unit/log-paths.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/e2e/main-entry-symlink.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/unit/mcp-config-paths.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/unit/mcpjson-registration.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/e2e/migrate-runner-concurrency.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/unit/migrate-runner-race.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/unit/native-tooling-config.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/unit/native-tooling-permissions.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/unit/native-tooling-resolution.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/unit/ops-log.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/unit/plugin-load-failure-surfacing.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/unit/plugin-resolution-base.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/unit/pricing-fix-b.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/e2e/pricing-live-feed.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/e2e/pricing-ops.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/unit/pricing-ops.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/e2e/pricing-pull.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/unit/pricing-pull.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/unit/pricing-tools-mcp.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/e2e/provider-wire.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/unit/provider-wire.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/unit/r3-par-c-parallel-guidance.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/unit/registry-prompt-resolver.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/unit/s8b-stray-writers.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/e2e/server-lifecycle-ops.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/unit/sqlite-locking-concurrency.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/e2e/srt-policy-bk7-boot.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/e2e/srt-policy-bk7.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/unit/srt-policy-bk7.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/e2e/srt-policy-bk9.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/unit/srt-policy-bk9.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/unit/srt-policy-denyread.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/e2e/srt-policy.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/unit/sse-port-contention.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/e2e/stdio-stdout-clean.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/unit/stray-writers.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/unit/tail-db-hint.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/unit/task-events-index.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/unit/tool-advertisement.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/unit/tool-call-concurrency.config.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/unit/tool-result-cap.config.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/unit/tool-result-spill.config.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/unit/traced-fetch.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/e2e/traced-spawn.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/unit/traced-transport.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/unit/tracing-default-load.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/unit/tracing-docs-contract.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/unit/typed-task-events.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/unit/wire-seams.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/agent-mcp/test/unit/wiring.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/apigen-cli/test/unit/lib/apigen-cli.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/apigen-cli/test/unit/lib/resolve-tsconfig.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/apigen-cli/test/e2e/bug-apigen-033-anonymous-default-dispatch.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/apigen-cli/test/unit/bug-apigen-033-anonymous-default-dispatch.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/apigen-cli/test/unit/cjs-import-meta-url.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/apigen-cli/test/e2e/dist-entry-no-argv-side-effect.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/apigen-cli/test/unit/dist-entry-no-argv-side-effect.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/apigen-cli/test/unit/dist-esm-load.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/apigen-cli/test/e2e/import-source-cjs-format.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/apigen-cli/test/unit/import-source-cjs-format.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/apigen-cli/test/e2e/real-consumer.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/apigen-cli/test/unit/real-consumer.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/apigen-cli/test/e2e/ts-types.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/apigen-cli/test/unit/ts-types.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/apigen-cli/test/e2e/generate.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/apigen-cli/test/unit/generate.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/apigen-cli/test/unit/integration/batch-plugin-cli-live-dispatch.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/apigen-cli/test/e2e/integration/batch-plugin-e2e-express.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/apigen-cli/test/unit/integration/batch-plugin-e2e-express.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/apigen-cli/test/e2e/integration/batch-plugin-e2e.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/apigen-cli/test/unit/integration/batch-plugin-e2e.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/apigen-cli/test/e2e/integration/canonical.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/apigen-cli/test/unit/integration/canonical.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/apigen-cli/test/e2e/integration/cross-host-response-envelope.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/apigen-cli/test/unit/integration/cross-host-response-envelope.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/apigen-cli/test/e2e/integration/envelope-capability-use-plugin.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/apigen-cli/test/unit/integration/envelope-capability-use-plugin.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/apigen-cli/test/e2e/integration/export-shape-matrix.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/apigen-cli/test/unit/integration/export-shape-matrix.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/apigen-cli/test/e2e/integration/gateway-mixed-host.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/apigen-cli/test/unit/integration/gateway-mixed-host.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/apigen-cli/test/e2e/integration/ir-cache-cross-target.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/apigen-cli/test/unit/integration/ir-cache-cross-target.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/apigen-cli/test/e2e/integration/ir-cache-plugin-registration.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/apigen-cli/test/unit/integration/ir-cache-plugin-registration.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/apigen-cli/test/e2e/integration/java-ts-decimal-parity.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/apigen-cli/test/unit/integration/java-ts-decimal-parity.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/apigen-cli/test/e2e/integration/mount-delegation-conformance.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/apigen-cli/test/unit/integration/mount-delegation-conformance.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/apigen-cli/test/e2e/integration/schema.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/apigen-cli/test/unit/integration/schema.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/apigen-cli/test/e2e/integration/streaming.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/apigen-cli/test/unit/integration/streaming.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/apigen-cli/test/unit/list-types.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/apigen-cli/test/e2e/orchestrator.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/apigen-cli/test/unit/orchestrator.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/apigen-cli/test/e2e/perf.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/apigen-cli/test/unit/perf.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/apigen-cli/test/unit/plugin-registry.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/apigen-cli/test/e2e/run.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/apigen-cli/test/unit/run.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/apigen-cli/test/e2e/serve.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/apigen-cli/test/unit/serve.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/api.catalog-invariant-write-path.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/api.semantic-laziness.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/e2e/api.semantic-production-seam.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/api.semantic-production-seam.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/e2e/api.surface.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/api.surface.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/e2e/batch-adoption.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/batch-adoption.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/c8-vocabulary.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/ci-node-version.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/e2e/cli-envelope.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/cli-envelope.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/cli-input-envelope.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/e2e/cli.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/cli.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/e2e/cli.store-check.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/cli.store-check.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/e2e/contract-matrix.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/e2e-timeout-budget.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/env.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/envelope-codes.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/e2e/install-skill-usage.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/install-skill-usage.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/install-skill.precondition.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/install-skill.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/install.codex-verify.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/e2e/install.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/install.mocked.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/e2e/install.published-layout.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/install.published-layout.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/install.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/ir-artifact.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/e2e/ir-cache.durability.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/ir-cache.durability.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/e2e/ir-cache.integration.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/ir-cache.integration.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/e2e/ir-cache.perf.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/ir-cache.perf.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/lifecycle.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/mcp-discoverability-real-ops.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/e2e/mcp-host.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/e2e/membership-backfill-runner.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/spec-append-docs.p7.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/e2e/phase6-ab.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/phase6-docs.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/e2e/production-write-gate.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/query-output-codec.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/query/c1-reference.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/query/card.obligations.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/query/card.page-keyed-edge-read.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/query/card.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/query/filter-plan-project-path.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/query/get-superseded-uid.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/query/get.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/query/identity-by-name.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/query/lookup-rm-location.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/query/markdown-format.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/query/markdown.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/e2e/query/meta-wire.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/query/meta-wire.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/query/meta.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/query/orphaned-parent.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/e2e/query/paging-wire.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/query/paging-wire.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/query/paging.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/query/query.ready.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/query/registry-orphans.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/e2e/query/registry-wire.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/query/registry-wire.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/query/reservations.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/query/search-ranked-zero-filter.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/query/similar-view.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/query/sort-priority-direction.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/query/spec-fragment.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/query/spec-staleness.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/query/stale-limit.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/query/superseded-fields.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/query/superseded-listing.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/query/superseded-ranking.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/query/superseded-views.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/query/text-routing.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/query/timeline.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/query/uid-prefix.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/query/unknown-filter-value.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/e2e/query/verdict-list-bound.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/query/verdict.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/e2e/query/views/registry.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/query/views/registry.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/query/views/semantic.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/query/views/stats.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/readiness.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/e2e/report-hygiene.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/report-hygiene.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/retry-policy.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/e2e/search-shortcut-wire.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/search-shortcut-wire.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/search-shortcut.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/e2e/serve.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/e2e/serve.readiness.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/e2e/serve.service-config.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/e2e/serve.singleton.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/serve.singleton.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/serve.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/serve.telemetry-role.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/e2e/server.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/e2e/server.mcp.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/server.mcp.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/e2e/server.published-layout.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/server.published-layout.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/server.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/e2e/server.startup-path.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/server.startup-path.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/server.tracing-required.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/server.tracing-six-tags.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/e2e/server.verbs.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/server.verbs.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/service-config.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/e2e/session-flows-doc.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/session-flows-doc.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/skill-quick-reference.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/e2e/stats-surface.wire.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/stats-surface.wire.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/e2e/store/acked-write-durability.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/store/acked-write-durability.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/store/catalog-invariant-guard.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/store/embed-drain.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/e2e/store/embed-funnel-watchdog.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/store/embed-funnel-watchdog.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/e2e/store/embed-funnel.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/store/embed-funnel.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/store/embed-write-path.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/store/graph-backlog-store.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/store/sidecar-hardening.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/store/signal-cleanup.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/store/vocabulary-drift.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/e2e/store/vocabulary-guard.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/store/vocabulary-guard.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/helpers/ci-env.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/e2e/helpers/spawn-isolated-bin.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/helpers/spawn-isolated-bin.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/helpers/spawn-timeout.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/uid-verbs.ambiguity.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/e2e/vocabulary-gate.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/vocabulary-gate.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/e2e/web-ui.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/web-ui.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/write/actor-mismatch.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/write/anchor-check.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/write/attestation.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/write/audit-fields.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/write/bootstrap-cache.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/write/bootstrap.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/write/catalog-case-variant.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/write/catalog-merge.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/write/catalog-mint-terminal.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/e2e/write/catalog-repair.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/write/catalog-repair.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/e2e/write/catalog-verbs.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/write/catalog-verbs.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/write/catalog.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/write/citation-path.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/write/citation.evidence-gate.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/write/citation.existence.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/write/citation.matrix.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/write/citation.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/e2e/write/claim.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/write/claim.gate.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/write/claim.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/write/create-duplicate-gate.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/write/create-fts-quote.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/write/create-issue.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/write/create-similar-scope.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/e2e/write/cross-process-gate-safety.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/e2e/write/cross-process-write-safety.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/write/cross-process-write-safety.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/write/delete-listing.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/write/delete.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/write/embedding-observer.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/write/gate.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/write/lifecycle.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/write/membership-backfill.guard.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/write/membership-backfill.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/write/membership.scan-count.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/write/membership.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/write/move.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/write/obligation.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/write/op-event.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/write/rag-optional-deps.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/e2e/write/relate-similar.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/write/relate.similar.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/write/relate.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/write/reservation.explicit-paths.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/write/reservation.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/write/review-nits.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/write/session.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/write/similarity-scan.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/write/spec-revision.p7.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/write/spec-revision.root-replace.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/write/spec-revision.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/write/spec-set-s02t1.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/write/stale-snapshot-classification.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/write/superseded-uid-guard.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/write/transition.claim-held.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/write/transition.deferred-reconcile.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/write/transition.gate.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/write/transition.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/write/transition.superseded.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/write/update.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/test/unit/write/write-io-failure.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/tools/etl/embed-backfill.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/tools/etl/restart.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/tools/etl/run-etl.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/backlog/tools/etl/status-vocabulary-canonicalization.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/decompile-cli/test/unit/lib/validators/local/index.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/decompile-cli/test/unit/lib/validators/url/index.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/dispatch-cli/test/unit/agent-mcp-env-rename.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/dispatch-cli/test/e2e/agents-import.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/dispatch-cli/test/e2e/cli-smoke.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/dispatch-cli/test/unit/core.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/dispatch-cli/test/unit/default-mcp-servers.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/dispatch-cli/test/e2e/dispatch-default-mcp-servers.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/dispatch-cli/test/unit/dispatch-guards.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/dispatch-cli/test/unit/dispatch-native-tooling-producer.guard.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/dispatch-cli/test/e2e/dispatch-native-tooling.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/dispatch-cli/test/unit/dispatch-self-producer.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/dispatch-cli/test/unit/docs-contract.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/dispatch-cli/test/unit/hitl-suspension.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/dispatch-cli/test/e2e/import-agents-no-provider.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/dispatch-cli/test/unit/import-agents.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/dispatch-cli/test/e2e/integration/live-dispatch-five-acs.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/dispatch-cli/test/unit/integration/live-guard-core.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/dispatch-cli/test/e2e/legacy-migration-skip.e2e.ts": [
+      "H1"
+    ],
+    "entrypoint/dispatch-cli/test/unit/live-harness-hermetic.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/dispatch-cli/test/unit/production-runner-no-auto-create.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/dispatch-cli/test/unit/resolve-dispatch-mcp-servers.spec.ts": [
+      "H1"
+    ],
+    "entrypoint/environment-cli/test/unit/cli.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-base-types/test/unit/failure-events.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-base-types/test/unit/hooks.trace-events.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-core-env/test/unit/open-registry-db.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-core-env/test/unit/open-registry-store.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-core-env/test/e2e/registry-adapter-concurrency.e2e.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-core-env/test/unit/resolve-registry-db-path.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-core-native-tooling/test/unit/index.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-core-native-tooling/test/unit/lib/eol.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-core-native-tooling/test/unit/lib/permissions.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-core-native-tooling/test/unit/lib/readme-egress-doc.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-core-native-tooling/test/unit/lib/resolver-roots.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-core-native-tooling/test/unit/lib/resolver.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-core-native-tooling/test/e2e/lib/shell-egress.e2e.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-core-policy/test/unit/agent-policy-store.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-core-policy/test/unit/enforcement-plugin.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-core-policy/test/unit/import-side-effect.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-core-policy/test/unit/inheritance.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-core-policy/test/unit/policy-template-store.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-core-policy/test/unit/roundtrip.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-core-provider/test/unit/adapter-resolve.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-core-provider/test/unit/binding-store.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-core-provider/test/unit/cache-write-1h.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-core-provider/test/unit/emit-tools.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-core-provider/test/unit/failure/classify.fixtures.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-core-provider/test/unit/failure/cooldown.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-core-provider/test/unit/failure/retry-after.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-core-provider/test/unit/feed.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-core-provider/test/unit/import-side-effect.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-core-provider/test/unit/model-store.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-core-provider/test/unit/price-source.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-core-provider/test/unit/pricing-snapshot-drift.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-core-provider/test/unit/pricing-snapshot.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-core-provider/test/unit/rate-card-haiku-5-5.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-core-provider/test/unit/rate-card.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-core-provider/test/unit/registry.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-core-provider/test/unit/roundtrip.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-core-provider/test/unit/tool-format-store.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-compiler/test/unit/compile-agent.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-compiler/test/unit/compile-cache.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-compiler/test/e2e/compile-cli-migration-resolution.e2e.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-compiler/test/e2e/compile-cli.e2e.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-compiler/test/unit/compile-e2e.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-compiler/test/unit/composition-resolve.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-compiler/test/unit/import-side-effect.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-compiler/test/unit/migrate-registry.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-compiler/test/unit/model-policy.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-compiler/test/unit/skeleton.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-compiler/test/unit/tool-header.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/unit/agent-crud-projection.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/unit/anthropic-cache-stall.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/e2e/bk3-cache-breakpoints.e2e.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/e2e/bridge-parity.e2e.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/unit/budget-denial-not-error.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/unit/budget-warn-never-blocks.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/unit/cacheguard-estimator-tolerance.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/unit/cacheguard-undercount.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/unit/claudecli-bridge-concurrency-task.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/unit/claudecli-bridge-config.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/e2e/claudecli-bridge-governance.e2e.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/e2e/claudecli-concurrency-hint.e2e.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/unit/claudecli-concurrency-hint.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/unit/claudecli-continuation-tool-replay.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/unit/claudecli-env-bleed.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/e2e/claudecli-failed-run-usage.e2e.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/unit/claudecli-failed-run-usage.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/unit/claudecli-first-turn-context.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/unit/claudecli-model-resolution.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/e2e/claudecli-parallel-dispatch.e2e.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/unit/claudecli-peak-context.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/e2e/claudecli-phase2-cache.e2e.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/e2e/claudecli-reap.e2e.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/e2e/claudecli-spawn-failure.e2e.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/unit/claudecli-spawn-failure.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/unit/claudecli-temp-root.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/e2e/claudecli-tool-bridge.e2e.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/unit/claudecli-usage-attempts.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/unit/claudecli-usage.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/unit/context-window.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/e2e/cp-cache-tool-determinism.e2e.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/unit/cp-cache-tool-determinism.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/unit/ctx-lean-context.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/unit/dag-engine.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/unit/env-name-guard.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/unit/ephemeral-task-resumable.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/unit/ephemeral-task-session.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/unit/flt-anthropic-faults.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/e2e/flt-claudecli-faults.e2e.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/unit/flt-claudecli-faults.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/unit/flt-engine-surface.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/e2e/mcp-verify.e2e.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/e2e/nat-tool-3-cwd-env.e2e.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/unit/native-tooling-caller-cwd.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/unit/native-tooling-hitl-gate.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/unit/native-tooling-validation.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/unit/one-shot-ask-fail-closed.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/unit/one-shot-snapshot-declarative.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/unit/orchestrator-escalate.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/unit/orchestrator.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/unit/plugins-loader-budget.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/unit/plugins-loader-defaults.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/unit/plugins-loader-failure-surfacing.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/unit/policy-delegation.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/unit/policy.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/unit/provider-parity-doc.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/unit/provider-timeout.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/unit/provider-usage-merge-keys.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/unit/provider-wire-helpers.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/unit/readme-provider-contract.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/e2e/registry-connect-retry.e2e.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/unit/resolve-selection.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/unit/response-model-capture.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/unit/server-tool-cache-guard.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/unit/sse-client-wire.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/e2e/task-cwd-spawn.e2e.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/unit/task-dependency-gating.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/unit/task-list-contract.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/unit/tool-arg-coercion.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/unit/tool-call-concurrency.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/unit/tool-limiter-hitl.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/unit/tool-naming.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/unit/tool-result-cap.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/unit/tool-result-spill.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/unit/tool-result-tokens.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/unit/trace-events.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/unit/usage-accounting.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/unit/usage-cache-write-1h.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/unit/usage-grain.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/unit/usage-in-chunking.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/unit/usage-normalisation.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/unit/usage-peak-context.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/unit/usage-provenance.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/unit/usage-query-projections.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/unit/usage-query.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/unit/usage-readpath.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/unit/vite-config-plugins.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-engine-orchestrator/test/unit/window-messages.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-generator-plugin/test/unit/generator.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-plugin-budget/test/unit/budget-plugin.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-plugin-budget/test/unit/budget-ratecard.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-plugin-budget/test/unit/readme-concurrency.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-plugin-sanitize/test/unit/sanitize-plugin.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-plugin-tracing/test/unit/lib/adopt-existing.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-plugin-tracing/test/unit/lib/audit-declared.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-plugin-tracing/test/unit/lib/exporter-failure.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-plugin-tracing/test/unit/lib/model-call-completeness.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-plugin-tracing/test/unit/lib/review-fixes.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-plugin-tracing/test/unit/lib/sox-api.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-plugin-tracing/test/unit/lib/tracing.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-store-prompts/test/unit/agent-store.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-store-prompts/test/unit/component-store.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-store-prompts/test/unit/composed-prompt-store.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-store-prompts/test/unit/composition-store.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-store-prompts/test/unit/import-side-effect.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-store-prompts/test/unit/roundtrip.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-store-prompts/test/unit/seed.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-store-prompts/test/unit/usecase-store.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-store-runtime/test/unit/price-history-cache-1h.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-store-runtime/test/unit/price-history-fix-b.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-store-runtime/test/unit/price-history-store.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-store-runtime/test/unit/price-schema-migration.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-store-runtime/test/unit/session-selection.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-store-runtime/test/unit/session-store.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-store-runtime/test/unit/task-cwd-migration.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-store-runtime/test/unit/task-store.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-store-runtime/test/unit/task-usage-cache-creation-1h-migration.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-store-runtime/test/unit/task-usage-model-resolution-migration.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-store-runtime/test/unit/usage-client.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-store-tools/test/unit/agent-tool-store.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-store-tools/test/unit/binding-store.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-store-tools/test/unit/import-side-effect.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-store-tools/test/unit/mcp-server-store.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-store-tools/test/unit/roundtrip.spec.ts": [
+      "H1"
+    ],
+    "packages/agent/agent-store-tools/test/unit/tool-store.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-base-errors/test/unit/lib/errors.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-base-logical/test/unit/lib/codecs/codecs.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-base-logical/test/unit/lib/descriptor-ext.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-base-logical/test/unit/lib/emit.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-base-logical/test/unit/lib/example.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-base-logical/test/unit/lib/hints.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-base-logical/test/unit/lib/registry.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-base-logical/test/unit/lib/runmode.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-base-schema/test/unit/schema.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-base-types/test/unit/lib/apigen-apigen-base-types.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-core-client/test/unit/lib/apigen-core.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-core-client/test/e2e/additional-properties.e2e.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-core-client/test/unit/additional-properties.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-core-client/test/unit/batch.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-core-client/test/unit/compose-schemas.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-core-client/test/e2e/dist-artifact-smoke.e2e.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-core-client/test/unit/dist-artifact-smoke.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-core-client/test/e2e/extract-classes.e2e.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-core-client/test/unit/extract-classes.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-core-client/test/e2e/extract.e2e.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-core-client/test/unit/extract.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-core-client/test/e2e/extraction-session.e2e.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-core-client/test/unit/extraction-session.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-core-client/test/e2e/format-alias.e2e.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-core-client/test/unit/format-alias.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-core-client/test/unit/get-safety.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-core-client/test/unit/morph-walk-boolean-union.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-core-client/test/unit/morph-walk-dedupe.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-core-client/test/unit/nominal.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-core-client/test/e2e/required-fields.e2e.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-core-client/test/unit/required-fields.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-core-client/test/e2e/schema-cache-stampede.e2e.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-core-client/test/unit/schema-cache-stampede.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-core-client/test/unit/source-language.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-core-client/test/e2e/startup-lazy-load.e2e.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-core-client/test/unit/startup-lazy-load.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-core-client/test/unit/stream-type.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-core-client/test/e2e/ts-json-schema.e2e.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-core-client/test/unit/ts-json-schema.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-core-client/test/unit/union-catchall.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-core-client/test/unit/union.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-engine-conformance/test/unit/gate-workspace-root.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-engine-conformance/test/e2e/gate.e2e.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-engine-conformance/test/unit/gate.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-engine-conformance/test/unit/vectors.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-engine-gateway/test/unit/gateway.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-engine-naming/test/unit/emit.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-engine-naming/test/unit/naming.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-engine-runtime/test/unit/lib/apigen-runtime.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-engine-runtime/test/unit/lib/bind-host.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-engine-runtime/test/unit/lib/describe-params.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-engine-runtime/test/unit/lib/logical/host-ts.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-engine-runtime/test/unit/lib/logical/nominal-codec.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-engine-runtime/test/unit/lib/logical/union-codec.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-engine-runtime/test/unit/lib/op-plan.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-engine-runtime/test/unit/lib/stream.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-engine-runtime/test/e2e/isolated-git.e2e.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-engine-runtime/test/unit/test-support/isolated-git.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-engine-runtime/test/e2e/parity-harness.e2e.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-engine-runtime/test/unit/test-support/parity-harness.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-engine-runtime/test/unit/api-package.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-engine-runtime/test/unit/batch.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-engine-runtime/test/unit/bug-apigen-029.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-engine-runtime/test/unit/bug-apigen-030.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-engine-runtime/test/unit/build-context.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-engine-runtime/test/unit/coerce-query.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-engine-runtime/test/unit/dispatch-for-plan-transport.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-engine-runtime/test/unit/dispatch.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-engine-runtime/test/unit/event-bus.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-engine-runtime/test/unit/instance-registry.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-engine-runtime/test/unit/invoke.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-engine-runtime/test/unit/mcp-output-schema.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-engine-runtime/test/unit/named-type-param.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-engine-runtime/test/unit/validate-layer.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-generator-nx/test/unit/lib/apigen-nx.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-generator-nx/test/unit/executor.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-generator-nx/test/unit/generator.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-generator-nx/test/unit/host-generator.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-plugin-api-express/test/unit/emit-injection.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-plugin-api-express/test/unit/generated-host-bind.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-plugin-api-express/test/unit/hyphenated-identifier.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-plugin-api-express/test/e2e/plugin.e2e.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-plugin-api-express/test/unit/plugin.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-plugin-api-express/test/unit/route-index.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-plugin-api-express/test/e2e/route-parity.e2e.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-plugin-api-express/test/unit/route-parity.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-plugin-api-express/test/e2e/tracing-transport.e2e.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-plugin-api-fastify/test/unit/emit-injection.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-plugin-api-fastify/test/unit/generated-host-bind.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-plugin-api-fastify/test/unit/hyphenated-identifier.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-plugin-api-fastify/test/unit/lifecycle-child.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-plugin-api-fastify/test/e2e/plugin.e2e.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-plugin-api-fastify/test/unit/plugin.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-plugin-api-fastify/test/unit/stream.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-plugin-api-fastify/test/e2e/tracing-transport.e2e.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-plugin-batch/test/unit/plugin.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-plugin-cli-output/test/unit/help-sections.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-plugin-cli-output/test/unit/hyphenated-namespace.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-plugin-cli-output/test/unit/mount-cli-flags.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-plugin-cli-output/test/unit/plugin.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-plugin-cli-output/test/unit/relative-import-path.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-plugin-cli-output/test/e2e/root-oneof-branch.e2e.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-plugin-cli-output/test/unit/root-oneof-branch.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-plugin-cli-output/test/e2e/run-cli-integration.e2e.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-plugin-cli-output/test/unit/run-cli-integration.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-plugin-cli-output/test/unit/run.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-plugin-cli-output/test/e2e/tracing-transport.e2e.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-plugin-health/test/unit/plugin.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-plugin-ir-cache/test/unit/index.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-plugin-ir-cache/test/unit/lib/atomic-write-json.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-plugin-ir-cache/test/unit/lib/ir-cache-layer.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-plugin-ir-cache/test/unit/lib/target.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-plugin-java-javalin/test/e2e/plugin.e2e.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-plugin-java-javalin/test/unit/plugin.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-plugin-java-javalin/test/e2e/process-cleanup.e2e.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-plugin-java-javalin/test/unit/process-cleanup.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-plugin-jsonschema/test/unit/plugin.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-plugin-logger/test/unit/plugin.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-plugin-mcp/test/unit/flat-content-payload.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-plugin-mcp/test/unit/generate.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-plugin-mcp/test/unit/generated-host-bind.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-plugin-mcp/test/unit/plugin.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-plugin-mcp/test/unit/run-lifecycle.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-plugin-mcp/test/e2e/run.e2e.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-plugin-mcp/test/unit/run.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-plugin-mcp/test/unit/stream.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-plugin-mcp/test/unit/tool-naming.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-plugin-mcp/test/e2e/tracing-transport.e2e.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-plugin-mcp/test/e2e/transport-http-parity.e2e.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-plugin-mcp/test/unit/transport-http-parity.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-plugin-openapi/test/unit/plugin.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-plugin-py-flask/test/e2e/plugin.e2e.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-plugin-py-flask/test/unit/plugin.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-plugin-py-grpc/test/e2e/plugin.e2e.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-plugin-py-grpc/test/unit/plugin.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-plugin-tracing/test/unit/lib/plugin.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/apigen-plugin-ts-types/test/unit/emit-types.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/codegen/openapi/test/unit/lib/to-openapi.spec.ts": [
+      "H1"
+    ],
+    "packages/apigen/python-env/test/e2e/python-env.e2e.ts": [
+      "H1"
+    ],
+    "packages/apigen/python-env/test/unit/python-env.spec.ts": [
+      "H1"
+    ],
+    "packages/data/data-base-transforms/test/unit/lib/collections.spec.ts": [
+      "H1"
+    ],
+    "packages/data/data-base-transforms/test/unit/lib/date.spec.ts": [
+      "H1"
+    ],
+    "packages/data/data-base-transforms/test/unit/lib/filters.spec.ts": [
+      "H1"
+    ],
+    "packages/data/data-base-transforms/test/unit/lib/function.spec.ts": [
+      "H1"
+    ],
+    "packages/data/data-base-transforms/test/unit/lib/humanize.spec.ts": [
+      "H1"
+    ],
+    "packages/data/data-base-transforms/test/unit/lib/object.spec.ts": [
+      "H1"
+    ],
+    "packages/data/data-base-transforms/test/unit/lib/regex.spec.ts": [
+      "H1"
+    ],
+    "packages/data/data-base-transforms/test/unit/lib/stats.spec.ts": [
+      "H1"
+    ],
+    "packages/data/data-base-transforms/test/unit/lib/structures.spec.ts": [
+      "H1"
+    ],
+    "packages/data/data-base-transforms/test/unit/lib/text.spec.ts": [
+      "H1"
+    ],
+    "packages/data/data-core-structures/test/unit/lib/data.spec.ts": [
+      "H1"
+    ],
+    "packages/data/data-core-structures/test/unit/lib/index-structures/audit-fixes.spec.ts": [
+      "H1"
+    ],
+    "packages/data/data-core-structures/test/unit/lib/index-structures/index-structures.big-o.spec.ts": [
+      "H1"
+    ],
+    "packages/data/data-core-structures/test/unit/lib/index-structures/index-structures.edge-cases.spec.ts": [
+      "H1"
+    ],
+    "packages/data/data-core-structures/test/unit/lib/index-structures/index-structures.independent.big-o.spec.ts": [
+      "H1"
+    ],
+    "packages/data/data-core-structures/test/unit/lib/index-structures/index-structures.spec.ts": [
+      "H1"
+    ],
+    "packages/data/data-query-engine/test/unit/index.spec.ts": [
+      "H1"
+    ],
+    "packages/data/data-query-engine/test/unit/lib/aggregate.spec.ts": [
+      "H1"
+    ],
+    "packages/data/data-query-engine/test/unit/lib/complexity.spec.ts": [
+      "H1"
+    ],
+    "packages/data/data-query-engine/test/unit/lib/gaps.spec.ts": [
+      "H1"
+    ],
+    "packages/data/data-query-engine/test/unit/lib/grouping-sets.spec.ts": [
+      "H1"
+    ],
+    "packages/data/data-query-engine/test/unit/lib/integration.spec.ts": [
+      "H1"
+    ],
+    "packages/data/data-query-engine/test/unit/lib/model/canonical.deep.spec.ts": [
+      "H1"
+    ],
+    "packages/data/data-query-engine/test/unit/lib/model/edge-cases.spec.ts": [
+      "H1"
+    ],
+    "packages/data/data-query-engine/test/unit/lib/model/model.big-o.spec.ts": [
+      "H1"
+    ],
+    "packages/data/data-query-engine/test/unit/lib/model/model.spec.ts": [
+      "H1"
+    ],
+    "packages/data/data-query-engine/test/unit/lib/model/plan.spec.ts": [
+      "H1"
+    ],
+    "packages/data/data-query-engine/test/unit/lib/model/review.independent.spec.ts": [
+      "H1"
+    ],
+    "packages/data/data-query-engine/test/unit/lib/model/scan.differential.spec.ts": [
+      "H1"
+    ],
+    "packages/data/data-query-engine/test/unit/lib/parser.spec.ts": [
+      "H1"
+    ],
+    "packages/data/data-query-engine/test/unit/lib/period.spec.ts": [
+      "H1"
+    ],
+    "packages/data/data-query-engine/test/unit/lib/query.spec.ts": [
+      "H1"
+    ],
+    "packages/data/data-query-engine/test/unit/lib/scan.spec.ts": [
+      "H1"
+    ],
+    "packages/dispatch/dispatch-base-spec/test/unit/lane-tool-grant.spec.ts": [
+      "H1"
+    ],
+    "packages/dispatch/dispatch-base-spec/test/unit/plan.spec.ts": [
+      "H1"
+    ],
+    "packages/dispatch/dispatch-base-spec/test/unit/provider-binding-migration.spec.ts": [
+      "H1"
+    ],
+    "packages/dispatch/dispatch-base-spec/test/unit/validate.spec.ts": [
+      "H1"
+    ],
+    "packages/dispatch/dispatch-base-types/test/unit/lib/dispatch-dispatch-base-types.spec.ts": [
+      "H1"
+    ],
+    "packages/dispatch/dispatch-core-client/test/unit/lib/dispatch-client.spec.ts": [
+      "H1"
+    ],
+    "packages/dispatch/dispatch-core-client/test/unit/client.spec.ts": [
+      "H1"
+    ],
+    "packages/dispatch/dispatch-core-optimizer/test/unit/lib/optimize.spec.ts": [
+      "H1"
+    ],
+    "packages/dispatch/dispatch-core-optimizer/test/unit/lib/snapshot.spec.ts": [
+      "H1"
+    ],
+    "packages/dispatch/dispatch-orchestrator/test/unit/agent-runner-comment.spec.ts": [
+      "H1"
+    ],
+    "packages/dispatch/dispatch-orchestrator/test/unit/agent-runner.spec.ts": [
+      "H1"
+    ],
+    "packages/dispatch/dispatch-orchestrator/test/unit/hitl-suspension.spec.ts": [
+      "H1"
+    ],
+    "packages/dispatch/dispatch-orchestrator/test/unit/liveness.spec.ts": [
+      "H1"
+    ],
+    "packages/dispatch/dispatch-orchestrator/test/unit/mock-agent-runner.spec.ts": [
+      "H1"
+    ],
+    "packages/dispatch/dispatch-orchestrator/test/unit/no-auto-create-dispatch.spec.ts": [
+      "H1"
+    ],
+    "packages/dispatch/dispatch-orchestrator/test/unit/orchestrator-cap-output.spec.ts": [
+      "H1"
+    ],
+    "packages/dispatch/dispatch-orchestrator/test/unit/orchestrator.spec.ts": [
+      "H1"
+    ],
+    "packages/dispatch/dispatch-orchestrator/test/unit/policy-dispatch-log.spec.ts": [
+      "H1"
+    ],
+    "packages/dispatch/dispatch-orchestrator/test/unit/process-guard.spec.ts": [
+      "H1"
+    ],
+    "packages/dispatch/dispatch-orchestrator/test/unit/provider-binding-chain.spec.ts": [
+      "H1"
+    ],
+    "packages/dispatch/dispatch-orchestrator/test/unit/real-turn-telemetry.spec.ts": [
+      "H1"
+    ],
+    "packages/dispatch/dispatch-serializer-json/test/unit/index.spec.ts": [
+      "H1"
+    ],
+    "packages/environment/environment-base-spec/test/unit/index.spec.ts": [
+      "H1"
+    ],
+    "packages/environment/environment-base-spec/test/unit/native-tooling-field-specs.spec.ts": [
+      "H1"
+    ],
+    "packages/environment/environment-builder/test/unit/config-resolver.spec.ts": [
+      "H1"
+    ],
+    "packages/environment/environment-builder/test/unit/dirs.spec.ts": [
+      "H1"
+    ],
+    "packages/environment/environment-builder/test/unit/layer-files.spec.ts": [
+      "H1"
+    ],
+    "packages/environment/environment-builder/test/unit/provenance.spec.ts": [
+      "H1"
+    ],
+    "packages/environment/environment-builder/test/unit/roots.spec.ts": [
+      "H1"
+    ],
+    "packages/environment/environment-builder/test/unit/scope.spec.ts": [
+      "H1"
+    ],
+    "packages/environment/environment-builder/test/unit/snapshot-writer.spec.ts": [
+      "H1"
+    ],
+    "packages/environment/environment-builder/test/unit/snapshot.spec.ts": [
+      "H1"
+    ],
+    "packages/environment/environment-builder/test/unit/validation.spec.ts": [
+      "H1"
+    ],
+    "packages/environment/environment-core-node/test/unit/dod-7.2-zero-config.spec.ts": [
+      "H1"
+    ],
+    "packages/environment/environment-core-node/test/unit/dod-7.3-cascade.spec.ts": [
+      "H1"
+    ],
+    "packages/environment/environment-core-node/test/unit/dod-7.4-scope.spec.ts": [
+      "H1"
+    ],
+    "packages/environment/environment-core-node/test/unit/dod-7.5-runtime-vs-build.spec.ts": [
+      "H1"
+    ],
+    "packages/environment/environment-core-node/test/unit/dod-7.6-multi-instance.spec.ts": [
+      "H1"
+    ],
+    "packages/environment/environment-core-node/test/unit/environment.spec.ts": [
+      "H1"
+    ],
+    "packages/ui-react/ui-react-base-hooks/test/unit/lib/use-async/index.spec.ts": [
+      "H1"
+    ],
+    "packages/ui-react/ui-react-base-hooks/test/unit/lib/use-copy-to-clipboard/index.spec.ts": [
+      "H1"
+    ],
+    "packages/ui-react/ui-react-base-hooks/test/unit/lib/use-debounce/index.spec.tsx": [
+      "H1"
+    ],
+    "packages/ui-react/ui-react-base-hooks/test/unit/lib/use-file-download/compression.spec.ts": [
+      "H1"
+    ],
+    "packages/ui-react/ui-react-base-hooks/test/unit/lib/use-file-download/encryption.spec.ts": [
+      "H1"
+    ],
+    "packages/ui-react/ui-react-base-hooks/test/unit/lib/use-file-download/import-meta-url.spec.ts": [
+      "H1"
+    ],
+    "packages/ui-react/ui-react-base-hooks/test/unit/lib/use-file-download/index.spec.tsx": [
+      "H1"
+    ],
+    "packages/ui-react/ui-react-base-hooks/test/unit/lib/use-infinite-scroll/index.spec.tsx": [
+      "H1"
+    ],
+    "packages/ui-react/ui-react-base-hooks/test/unit/lib/use-local-storage/index.spec.ts": [
+      "H1"
+    ],
+    "packages/ui-react/ui-react-base-hooks/test/unit/lib/use-throttle-state/index.spec.ts": [
+      "H1"
+    ],
+    "packages/ui-react/ui-react-base-hooks/test/unit/lib/use-throttle/index.spec.ts": [
+      "H1"
+    ],
+    "packages/ui-react/ui-react-base-storybook/test/unit/lib/storybook.spec.tsx": [
+      "H1"
+    ],
+    "packages/workspace/workspace-base-standard/test/unit/checker.spec.ts": [
+      "H1"
+    ],
+    "packages/workspace/workspace-base-standard/test/unit/managed-region.spec.ts": [
+      "H1"
+    ],
+    "packages/workspace/workspace-base-standard/test/unit/metadata.spec.ts": [
+      "H1"
+    ],
+    "packages/workspace/workspace-base-standard/test/unit/provenance.spec.ts": [
+      "H1"
+    ],
+    "packages/workspace/workspace-base-standard/test/unit/required.spec.ts": [
+      "H1"
+    ],
+    "packages/workspace/workspace-base-standard/test/unit/taxonomy.spec.ts": [
+      "H1"
+    ],
+    "packages/workspace/workspace-base-tools/test/unit/get-package-info.spec.ts": [
+      "H1"
+    ],
+    "packages/workspace/workspace-base-tools/test/unit/lib/workspace-workspace-base-tools.spec.ts": [
+      "H1"
+    ],
+    "packages/workspace/workspace-base-vite-paths/test/unit/lib/workspace-workspace-base-vite-paths.spec.ts": [
+      "H1"
+    ],
+    "packages/workspace/workspace-codegen-nx/test/unit/generators/base/generator.spec.ts": [
+      "H1"
+    ],
+    "packages/workspace/workspace-codegen-nx/test/unit/generators/shared/source-resolution-optout.spec.ts": [
+      "H1"
+    ],
+    "packages/workspace/workspace-codegen-nx/test/unit/generators/shared/typecheck-spec-wiring.spec.ts": [
+      "H1"
+    ],
+    "packages/workspace/workspace-codegen-nx/test/unit/generators/types/generator.spec.ts": [
+      "H1"
+    ],
+    "scripts/worktree-scripts.spec.mjs": [
+      "H1"
+    ],
+    "tools/evidence/evidence.spec.mjs": [
+      "H1"
+    ],
+    "tools/nx-plugins/assets/bug-017-assets-outputs.spec.mjs": [
+      "H1"
+    ],
+    "tools/nx-plugins/assets/bug-nxassets-001-chmod-survives-cache.spec.mjs": [
+      "H1"
+    ],
+    "tools/nx-plugins/assets/executors/chmod-bin/impl.spec.mjs": [
+      "H1"
+    ],
+    "tools/nx-plugins/build/bug-026-assets-output-scope.spec.mjs": [
+      "H1"
+    ],
+    "tools/nx-plugins/build/ci-hygiene.e2e.mjs": [
+      "H1"
+    ],
+    "tools/nx-plugins/build/ci-publish-wiring.spec.mjs": [
+      "H1"
+    ],
+    "tools/nx-plugins/build/executors/hygiene/check-publish-hygiene.spec.mjs": [
+      "H1"
+    ],
+    "tools/nx-plugins/build/executors/hygiene/impl.spec.mjs": [
+      "H1"
+    ],
+    "tools/nx-plugins/build/executors/lockfile/lockfile-gate.e2e.spec.mjs": [
+      "H1"
+    ],
+    "tools/nx-plugins/build/executors/lockfile/lockfile-gate.spec.mjs": [
+      "H1"
+    ],
+    "tools/nx-plugins/build/executors/manifest/generate-manifest.spec.mjs": [
+      "H1"
+    ],
+    "tools/nx-plugins/build/executors/publish/impl.spec.mjs": [
+      "H1"
+    ],
+    "tools/nx-plugins/build/executors/publish/manifest-backstop.spec.mjs": [
+      "H1"
+    ],
+    "tools/nx-plugins/build/executors/publish/release-commit.spec.mjs": [
+      "H1"
+    ],
+    "tools/nx-plugins/build/executors/reconcile/reconcile-core.spec.mjs": [
+      "H1"
+    ],
+    "tools/nx-plugins/build/executors/release-reset/release-reset.exit.spec.mjs": [
+      "H1"
+    ],
+    "tools/nx-plugins/build/executors/smoke-test/clean-room-smoke.spec.mjs": [
+      "H1"
+    ],
+    "tools/nx-plugins/build/executors/smoke-test/run-release-env-propagation.spec.mjs": [
+      "H1"
+    ],
+    "tools/nx-plugins/build/executors/smoke-test/run-release.spec.mjs": [
+      "H1"
+    ],
+    "tools/nx-plugins/build/executors/smoke-test/task-report.spec.mjs": [
+      "H1"
+    ],
+    "tools/nx-plugins/build/executors/sync-global/global-roots.spec.mjs": [
+      "H1"
+    ],
+    "tools/nx-plugins/build/executors/sync-global/sync-global.spec.mjs": [
+      "H1"
+    ],
+    "tools/nx-plugins/build/executors/typecheck-spec/ratchet.spec.mjs": [
+      "H1"
+    ],
+    "tools/nx-plugins/build/executors/verify/impl.spec.mjs": [
+      "H1"
+    ],
+    "tools/nx-plugins/build/executors/verify/verify-dist-load.spec.mjs": [
+      "H1"
+    ],
+    "tools/nx-plugins/build/executors/version/compare-published.spec.mjs": [
+      "H1"
+    ],
+    "tools/nx-plugins/build/executors/version/impl.spec.mjs": [
+      "H1"
+    ],
+    "tools/nx-plugins/build/git-env-regression.spec.mjs": [
+      "H1"
+    ],
+    "tools/nx-plugins/build/lib/changed-set.spec.mjs": [
+      "H1"
+    ],
+    "tools/nx-plugins/build/lib/lockfile-sync.spec.mjs": [
+      "H1"
+    ],
+    "tools/nx-plugins/build/lib/published-state.spec.mjs": [
+      "H1"
+    ],
+    "tools/nx-plugins/build/lib/range-resolvability.spec.mjs": [
+      "H1"
+    ],
+    "tools/nx-plugins/build/lib/release-manifest.spec.mjs": [
+      "H1"
+    ],
+    "tools/nx-plugins/build/lib/release-reset.spec.mjs": [
+      "H1"
+    ],
+    "tools/nx-plugins/build/lib/star-externals.spec.mjs": [
+      "H1"
+    ],
+    "tools/nx-plugins/build/plugin.spec.mjs": [
+      "H1"
+    ],
+    "tools/nx-plugins/build/test-hashes-dependent-build-outputs.spec.mjs": [
+      "H1"
+    ],
+    "tools/nx-plugins/deps/eslint-check.spec.mjs": [
+      "H1"
+    ],
+    "tools/nx-plugins/deps/executors/check/impl.spec.mjs": [
+      "H1"
+    ],
+    "tools/nx-plugins/deps/executors/sync/impl.spec.mjs": [
+      "H1"
+    ],
+    "tools/nx-plugins/lib/file-lock.spec.mjs": [
+      "H1"
+    ],
+    "tools/nx-plugins/lib/git-env.spec.mjs": [
+      "H1"
+    ],
+    "tools/nx-plugins/test/executors/wiring/check-agent-lane-spawn.spec.mjs": [
+      "H1"
+    ],
+    "tools/nx-plugins/test/executors/wiring/nat-tool-live-docs.spec.mjs": [
+      "H1"
+    ],
+    "tools/nx-plugins/verify-dist-load/plugin.spec.mjs": [
+      "H1"
+    ]
+  }
+}

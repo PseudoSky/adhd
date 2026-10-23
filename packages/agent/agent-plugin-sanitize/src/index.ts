@@ -5,6 +5,7 @@ import type {
   PluginContext,
   PluginFactory,
   PostToolCallPayload,
+  ServerResultPersistPayload,
 } from '@adhd/agent-base-types';
 
 // ── Config schema ────────────────────────────────────────────────────────────
@@ -26,7 +27,10 @@ export const configSchema = z.object({
 
   /**
    * When true, only sanitize delegation tool calls (agent-mcp__task and
-   * agent-mcp__agent). When false, sanitize all tool results.
+   * agent-mcp__agent). When false, sanitize all tool results AND forbid
+   * persisting provider server-tool result bodies (`web_fetch` / `web_search`
+   * results), which cannot be sanitized: they are replayed within the
+   * producing run only (`transform:server_result_persist` veto).
    */
   delegationOnly: z.boolean().default(true),
 });
@@ -118,6 +122,20 @@ class SanitizePlugin implements Plugin {
         payload.result = sanitized;
       }
     });
+
+    // delegationOnly:false means "treat all tool output as untrusted". Provider-executed
+    // (server) tool results never reach transform:tool_result and their blocks are opaque
+    // and signed, so they cannot be wrapped. The one thing this plugin can still guarantee
+    // is that they do not outlive the run that fetched them. Registered ONLY in the false
+    // case: the default configuration must not change what the orchestrator persists.
+    if (!this.config.delegationOnly) {
+      hooks.register(
+        'transform:server_result_persist',
+        (payload: ServerResultPersistPayload) => {
+          payload.persist = false;
+        }
+      );
+    }
   }
 }
 

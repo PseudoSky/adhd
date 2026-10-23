@@ -32,7 +32,7 @@
 | 8 | `cli-apigen-generated` | **apigen-generated CLI artifact** (2/7 command working) | ✅ shipped | ★★★ | source + runtime | `project.json:64`, `dist/entrypoint/dispatch-cli/cli/cli.ts` |
 | 9 | `cli-bin-absent` | **missing bin entry** in package.json | ✅ shipped | ★ | source + runtime | `package.json` (no `bin` field) |
 | 10 | `cli-paid-boundary-run` | **run --no-dry-run** — paid AgentMcpRunner path | ✅ shipped | ★ | source | `src/lib/core.ts:117`, `bin/cli.ts:124` |
-| 11 | `cli-e2e-real` | **real-e2e integration test harness** (8 scenarios) | ✅ shipped | ★★★★★ | source | `src/test/integration/real-e2e.ts` |
+| 11 | `cli-e2e-real` | **real-e2e integration test harness** (8 scenarios) | ✅ shipped | ★★★★★ | source | `test/helpers/integration/real-e2e.ts` |
 | 12 | `cli-publish-hygiene` | **publish life-cycle** (nx-release-publish) | ✅ shipped | ★ | source + runtime | `project.json:72`, npm registry v0.0.4 |
 
 ## Verification Notes

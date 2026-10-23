@@ -1,3 +1,29 @@
+## Unreleased
+
+### 🩹 Fixes
+
+- **apigen-engine-runtime:** nullable `oneOf` / `anyOf` query params (e.g. `GET /list-projects?limit=2`) are coerced like their non-nullable form (9429470e).
+- **apigen-engine-runtime:** `UsePlugin['capabilities']['layer']` is derived from core-client `LayerCapability` instead of duplicated (cfd37408). `UsePlugin.capabilities` is therefore typed from the core `LayerCapability`; readers typed against the runtime `Call` adapt to the core call shape.
+
+## 0.3.5 (2026-10-21)
+
+### 🩹 Fixes
+
+- **apigen-engine-runtime:** attach the run-mode $ref cause without ErrorOptions and clear spec type errors ([e5d386b0](https://github.com/PseudoSky/adhd/commit/e5d386b0))
+- **apigen-engine-runtime:** let rootRefResolver own run-mode $ref diagnosis and keep the cause ([f4a42a90](https://github.com/PseudoSky/adhd/commit/f4a42a90))
+- **apigen-base-logical:** detect run-mode cycles and align emit with batch encoding ([5fcf5ade](https://github.com/PseudoSky/adhd/commit/5fcf5ade))
+- **apigen-engine-runtime:** distinguish unsupported $ref forms; document batch chunk and stream-identity semantics ([a901ab8b](https://github.com/PseudoSky/adhd/commit/a901ab8b))
+- **apigen-engine-runtime:** encode streaming chunks instead of transcoding the stream object ([5701848e](https://github.com/PseudoSky/adhd/commit/5701848e))
+- **apigen-engine-runtime:** resolve $ref against the op schema root in run-mode dispatch ([373f1b0f](https://github.com/PseudoSky/adhd/commit/373f1b0f))
+
+### ❤️ Thank You
+
+- pseudosky
+
+## 0.3.4 (2026-10-15)
+
+This was a version bump only for apigen-engine-runtime to align it with other projects, there were no code changes.
+
 ## 0.3.3 (2026-10-09)
 
 ### 🩹 Fixes

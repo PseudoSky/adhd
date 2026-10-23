@@ -1,3 +1,17 @@
+## 0.2.9 (2026-10-21)
+
+This was a version bump only for apigen-plugin-py-grpc to align it with other projects, there were no code changes.
+
+## 0.2.8 (2026-10-15)
+
+### 🩹 Fixes
+
+- **workspace:** restore the publish gate's heavy lane and canonicalise the gate ([45532731](https://github.com/PseudoSky/adhd/commit/45532731))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 0.2.6 (2026-09-26)
 
 ### 🚀 Features

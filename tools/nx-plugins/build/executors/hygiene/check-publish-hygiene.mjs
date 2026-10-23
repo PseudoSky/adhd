@@ -37,6 +37,7 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { realpathSync as realpathForEntry } from 'node:fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -62,7 +63,7 @@ const DEFAULT_PACKAGE_ROOTS = [
 // already covers the generic test-dir patterns added for DEBT-002 #3
 // (`test/`, `tests/`, `__mocks__/`, `fixtures/`), not just the original
 // filename-shaped ones. Confirmed live: `apigen-generator-nx` ships
-// `src/generators/plugin/__files__/src/test/plugin.spec.ts__tmpl__` (a real
+// `src/generators/plugin/__files__/test/unit/lib/plugin.spec.ts__tmpl__` (a real
 // scaffold template for projects IT generates) and correctly passes — see
 // check-publish-hygiene.spec.mjs's dedicated "generator-template
 // false-positive fix" tests, including the negative control proving a
@@ -232,7 +233,7 @@ export function main(argv = process.argv.slice(2), { repoRoot = REPO_ROOT } = {}
 
 // Only run as a CLI when invoked directly (`node check-publish-hygiene.mjs ...`)
 // — not when imported in-process by the `publish-hygiene` executor.
-const isMain = process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1];
+const isMain = (() => { try { return realpathForEntry(process.argv[1]) === realpathForEntry(fileURLToPath(import.meta.url)); } catch { return process.argv[1] === fileURLToPath(import.meta.url); } })();
 if (isMain) {
   process.exit(main());
 }
