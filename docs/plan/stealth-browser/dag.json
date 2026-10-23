@@ -1218,6 +1218,22 @@
       ],
       "context": "contexts/fix-core-parsers.md",
       "notes": "executor=typescript-pro tier=sonnet/medium"
+    },
+    "fix-core-lifecycle": {
+      "kind": "work",
+      "phase": "migrate",
+      "depends_on": [
+        "conform-core"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py fix-core-lifecycle",
+      "artifacts": [
+        "packages/stealth/stealth-core-browser/src/lib/lifecycle/",
+        "packages/stealth/stealth-core-browser/test/unit/lifecycle/",
+        "packages/stealth/stealth-core-browser/test/helpers/lifecycle/",
+        "docs/plan/stealth-browser/evidence/fix-core-lifecycle.md"
+      ],
+      "context": "contexts/fix-core-lifecycle.md",
+      "notes": "executor=typescript-pro tier=sonnet/medium; backlog 86a2318f"
     }
   },
   "authored_with": {
