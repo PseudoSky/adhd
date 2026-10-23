@@ -41,6 +41,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 
 - [fix-search-fetch.1] A spec under test/unit/fetch cites [fix-search-fetch.1] and simulates a public hostname resolving to private addresses: titles carry `resolves`, `169.254.169.254`, `10.0.0.5`, `::1`, `FETCH_URL_REFUSED` and `injected resolver`; the refusal happens before any request; the spec is green.
 
+- [fix-search-fetch.2] fetch-route.spec.ts has no non-null assertion and `nx run stealth-search:lint` prints no warning naming it.
 ---
 
 ## Reservations
