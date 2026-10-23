@@ -417,11 +417,11 @@
       "end_ref": "1cc1afba43c34f4f66b993a1cc421e1fbeca12ad"
     },
     "search-usecases": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-10-23T20:59:09.772Z",
-      "done_at": null,
+      "done_at": "2026-10-23T21:20:50.540Z",
       "start_ref": "a811a487d03cceebf6f8367964a5441c14c11110",
-      "end_ref": null
+      "end_ref": "59c4d3688e1ca367315e1eb1a6fc9cfd36a1b3ac"
     },
     "search-examples": {
       "status": "in_progress",
@@ -1016,6 +1016,18 @@
       "audit_criteria_total": 23,
       "by": "pseudosky",
       "note": "guard exit 0 (orchestrator-verified) after search-hosts.11 guard amendment; sonnet; 612f29df7"
+    },
+    {
+      "ts": "2026-10-23T21:20:50.540Z",
+      "from": "tracing-log-validation",
+      "to": "search-usecases",
+      "start_ref": "a811a487d03cceebf6f8367964a5441c14c11110",
+      "end_ref": "59c4d3688e1ca367315e1eb1a6fc9cfd36a1b3ac",
+      "audit_exit": 0,
+      "audit_criteria_passed": 8,
+      "audit_criteria_total": 8,
+      "by": "pseudosky",
+      "note": "guard exit 0 (orchestrator-verified); sonnet"
     }
   ],
   "amendment_log": [
@@ -1780,7 +1792,7 @@
     "version": "0.8.35",
     "hash": "0b6bc1f3d70e"
   },
-  "current_state": "tracing-log-validation",
+  "current_state": "sp-switch",
   "dod_provenance": {
     "confirmed_at": "2026-10-12T23:49:38.410Z",
     "by": "pseudosky",
