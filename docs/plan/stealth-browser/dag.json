@@ -1234,6 +1234,23 @@
       ],
       "context": "contexts/fix-core-lifecycle.md",
       "notes": "executor=typescript-pro tier=sonnet/medium; backlog 86a2318f"
+    },
+    "fix-core-errors": {
+      "kind": "work",
+      "phase": "migrate",
+      "depends_on": [
+        "conform-core"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py fix-core-errors",
+      "artifacts": [
+        "packages/stealth/stealth-core-browser/src/errors.ts",
+        "packages/stealth/stealth-core-browser/docs/ERRORS.md",
+        "packages/stealth/stealth-core-browser/test/unit/surface/",
+        "packages/stealth/stealth-core-browser/test/unit/errors/",
+        "docs/plan/stealth-browser/evidence/fix-core-errors.md"
+      ],
+      "context": "contexts/fix-core-errors.md",
+      "notes": "executor=typescript-pro tier=sonnet/medium"
     }
   },
   "authored_with": {
