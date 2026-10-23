@@ -39,7 +39,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
      matching audit check ID so Check 3's ID-mirror holds. Do not hand-add
      bare [slug.N] tokens here without a matching audit check. -->
 
-_No criteria yet._
+- [fix-search-engine.1] A spec under test/unit/providers cites [fix-search-engine.1] and drives the real pypi dom config over a real-shape fixture (`test/fixtures/providers/pypi/*.html`, anchor containers): titles carry `pypi`, `anchor`, `findChild`, `url` and `description`; the spec is green.
 
 ---
 
