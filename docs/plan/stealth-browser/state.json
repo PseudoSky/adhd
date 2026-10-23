@@ -466,11 +466,11 @@
       "end_ref": "f1486b4db45c667fe363330f0ac328842daa4605"
     },
     "conform-core": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-10-23T22:23:58.836Z",
-      "done_at": null,
+      "done_at": "2026-10-23T22:49:13.286Z",
       "start_ref": "2d8569f80733c1b970bd90b468f4b063c77bc43f",
-      "end_ref": null
+      "end_ref": "fd279a520360d7a0fc7c4dcc2fdd896f1288ea70"
     },
     "conform-search": {
       "status": "in_progress",
@@ -1188,6 +1188,18 @@
       "audit_criteria_total": 9,
       "by": "pseudosky",
       "note": "commit f1486b4db; guard 9/9 exit 0 re-run by orchestrator"
+    },
+    {
+      "ts": "2026-10-23T22:49:13.286Z",
+      "from": "fix-tripwire",
+      "to": "conform-core",
+      "start_ref": "2d8569f80733c1b970bd90b468f4b063c77bc43f",
+      "end_ref": "fd279a520360d7a0fc7c4dcc2fdd896f1288ea70",
+      "audit_exit": 0,
+      "audit_criteria_passed": 9,
+      "audit_criteria_total": 9,
+      "by": "pseudosky",
+      "note": "commit 63c42cfdb; guard 9/9 exit 0 re-run by orchestrator"
     }
   ],
   "amendment_log": [
