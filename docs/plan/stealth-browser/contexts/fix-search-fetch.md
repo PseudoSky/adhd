@@ -39,7 +39,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
      matching audit check ID so Check 3's ID-mirror holds. Do not hand-add
      bare [slug.N] tokens here without a matching audit check. -->
 
-_No criteria yet._
+- [fix-search-fetch.1] A spec under test/unit/fetch cites [fix-search-fetch.1] and simulates a public hostname resolving to private addresses: titles carry `resolves`, `169.254.169.254`, `10.0.0.5`, `::1`, `FETCH_URL_REFUSED` and `injected resolver`; the refusal happens before any request; the spec is green.
 
 ---
 

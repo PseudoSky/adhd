@@ -5274,6 +5274,15 @@
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py fix-core-errors --only fix-core-errors.5",
       "expect": "exit0",
       "cwd": "repo-root"
+    },
+    {
+      "id": "fix-search-fetch.1",
+      "phase": "migrate",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py fix-search-fetch --only fix-search-fetch.1",
+      "expect": "exit0",
+      "cwd": "repo-root"
     }
   ]
 }
