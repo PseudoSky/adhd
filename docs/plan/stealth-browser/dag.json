@@ -1388,7 +1388,9 @@
         "entrypoint/stealth-search/docs/OBSERVABILITY.md",
         "entrypoint/stealth-search/docs/CONFIGURATION.md",
         "entrypoint/stealth-search/README.md",
-        "docs/plan/stealth-browser/evidence/search-tracing-fixes.md"
+        "docs/plan/stealth-browser/evidence/search-tracing-fixes.md",
+        "entrypoint/stealth-search/test/unit/use-cases/hosts.spec.ts",
+        "entrypoint/stealth-search/docs/ERRORS.md"
       ],
       "context": "contexts/search-tracing-fixes.md",
       "notes": "executor=typescript-pro tier=sonnet/high; fixes the failed tracing-log-validation"

@@ -56,7 +56,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 
 ```text
 read_only:  []
-mutates:    ["entrypoint/stealth-search/src/tracing.ts", "entrypoint/stealth-search/src/telemetry.ts", "entrypoint/stealth-search/src/cli.ts", "entrypoint/stealth-search/src/host-flags.ts", "entrypoint/stealth-search/src/host-errors.ts", "entrypoint/stealth-search/src/host-projection.ts", "entrypoint/stealth-search/src/api.ts", "entrypoint/stealth-search/src/index.ts", "entrypoint/stealth-search/test/unit/hosts/", "entrypoint/stealth-search/test/unit/tracing/", "entrypoint/stealth-search/test/unit/use-cases/hosts.spec.ts", "entrypoint/stealth-search/docs/ERRORS.md", "entrypoint/stealth-search/docs/OBSERVABILITY.md", "entrypoint/stealth-search/docs/CONFIGURATION.md", "entrypoint/stealth-search/README.md", "docs/plan/stealth-browser/evidence/search-tracing-fixes.md"]
+mutates:    ["entrypoint/stealth-search/src/tracing.ts", "entrypoint/stealth-search/src/telemetry.ts", "entrypoint/stealth-search/src/cli.ts", "entrypoint/stealth-search/src/host-flags.ts", "entrypoint/stealth-search/src/host-errors.ts", "entrypoint/stealth-search/src/host-projection.ts", "entrypoint/stealth-search/src/api.ts", "entrypoint/stealth-search/src/index.ts", "entrypoint/stealth-search/test/unit/hosts/", "entrypoint/stealth-search/test/unit/tracing/", "entrypoint/stealth-search/docs/OBSERVABILITY.md", "entrypoint/stealth-search/docs/CONFIGURATION.md", "entrypoint/stealth-search/README.md", "docs/plan/stealth-browser/evidence/search-tracing-fixes.md", "entrypoint/stealth-search/test/unit/use-cases/hosts.spec.ts", "entrypoint/stealth-search/docs/ERRORS.md"]
 ```
 
 ---
