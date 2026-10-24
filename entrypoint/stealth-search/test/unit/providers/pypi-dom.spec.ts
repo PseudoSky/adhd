@@ -29,7 +29,7 @@ describe('pypi dom config over a real-shape page [fix-search-engine.1]', () => {
   })
 
   it('pypi title and description: the name span is the title and the description is the p.package-snippet__description text', () => {
-    const results = extractFromDom(htmlToDomTree(page), pypi.dom.extract, pypi.network?.fields?.urlTemplate)
+    const results = extractFromDom(htmlToDomTree(page), dom.extract, pypi.network?.fields?.urlTemplate)
     expect(results.map((r) => r.title)).toEqual(['requests', 'requests-oauthlib'])
     expect(results.map((r) => r.snippet)).toEqual(['Python HTTP for Humans.', 'OAuthlib authentication support for Requests.'])
   })
@@ -40,7 +40,7 @@ describe('pypi dom config over a real-shape page [fix-search-engine.1]', () => {
   })
 
   it('pypi non-result anchor: the pager link outside a package-snippet container is not a result', () => {
-    const results = extractFromDom(htmlToDomTree(page), pypi.dom.extract, pypi.network?.fields?.urlTemplate)
+    const results = extractFromDom(htmlToDomTree(page), dom.extract, pypi.network?.fields?.urlTemplate)
     expect(results).toHaveLength(2)
   })
 

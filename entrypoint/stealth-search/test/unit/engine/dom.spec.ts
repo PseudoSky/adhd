@@ -53,13 +53,13 @@ describe('dom extraction and selector wait [search-port-engine.2]', () => {
     expect(page.methods().filter((m) => m === 'DOM.getDocument')).toHaveLength(2)
   })
 
-  it('result page: title, snippet and the extra version pattern are read from the pypi cards', async () => {
+  it('result page: title, snippet and the extra created-date pattern are read from the pypi cards', async () => {
     const page = new FakePage({ html: fixture('pypi-results.html') })
     const { response: r } = await run(pypi, page)
     expect(r.outcome).toBe('success')
     expect(r.count).toBe(2)
-    expect(r.results[0]).toMatchObject({ title: 'requests', snippet: 'Python HTTP for Humans.', meta: { version: '2.32.3' } })
-    expect(r.results[1]).toMatchObject({ title: 'httpx', meta: { version: '0.27.0' } })
+    expect(r.results[0]).toMatchObject({ title: 'requests', snippet: 'Python HTTP for Humans.', meta: { created: 'May 29, 2024' } })
+    expect(r.results[1]).toMatchObject({ title: 'httpx', meta: { created: 'Feb 21, 2024' } })
   })
 
   it('empty page: the results container renders with no organic results and the outcome is empty', async () => {
