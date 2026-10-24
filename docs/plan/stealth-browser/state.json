@@ -116,10 +116,10 @@
       "end_ref": "9830641c9bcb909ab67ba79e0e41efc73a3f5ad7"
     },
     "gates-first": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-10-24T11:02:27.502Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "652738d6aaa53b399d9806da3b0733d520e2f022",
       "end_ref": null
     },
     "review-prep": {
