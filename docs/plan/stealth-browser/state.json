@@ -438,11 +438,11 @@
       "end_ref": "25eee397d588c6e9f018b607dfe9c48caac89e35"
     },
     "search-cutover": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-10-24T02:35:11.987Z",
-      "done_at": null,
+      "done_at": "2026-10-24T03:18:06.583Z",
       "start_ref": "8cebe4403dff4a3f2540fcba1c027d39570f43c4",
-      "end_ref": null
+      "end_ref": "487afc7d1afaa417ee65eedcd773e03965f3c7d6"
     },
     "consumer-relink": {
       "status": "pending",
@@ -1356,6 +1356,18 @@
       "audit_criteria_total": 11,
       "by": "pseudosky",
       "note": "commit 4dbe2a284; guard 11/11 rc=0 after .4 amendment"
+    },
+    {
+      "ts": "2026-10-24T03:18:06.583Z",
+      "from": "search-cutover",
+      "to": "search-cutover",
+      "start_ref": "8cebe4403dff4a3f2540fcba1c027d39570f43c4",
+      "end_ref": "487afc7d1afaa417ee65eedcd773e03965f3c7d6",
+      "audit_exit": 0,
+      "audit_criteria_passed": 10,
+      "audit_criteria_total": 10,
+      "by": "pseudosky",
+      "note": "commits 0fea5952d acc1750c0 ac35a00a1 (scratch ca1f94d84); guard 10/10 rc=0 after .3 grep amendment"
     }
   ],
   "amendment_log": [
@@ -2133,7 +2145,7 @@
     "version": "0.8.35",
     "hash": "0b6bc1f3d70e"
   },
-  "current_state": "search-cutover",
+  "current_state": "release-readiness",
   "dod_provenance": {
     "confirmed_at": "2026-10-12T23:49:38.410Z",
     "by": "pseudosky",
