@@ -22,10 +22,7 @@
   {
     "bucket": "foundation",
     "src": "adhd/helpers.ts",
-    "dst": "src/lib/helpers.ts",
-    "must_contain": [
-      "immutable=1"
-    ]
+    "dst": "src/lib/helpers.ts"
   },
   {
     "bucket": "cdp",
@@ -126,7 +123,10 @@
   {
     "bucket": "domains-storage",
     "src": "adhd/storage/helpers.ts",
-    "dst": "src/lib/storage/helpers.ts"
+    "dst": "src/lib/storage/helpers.ts",
+    "must_contain": [
+      "immutable=1"
+    ]
   },
   {
     "bucket": "domains-storage",

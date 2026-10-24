@@ -934,7 +934,7 @@ standard_port_checks("mig-domains-storage", "domains-storage")
 
 @check("mig-domains-storage", 4)
 def _mds4():
-    """storage/helpers.ts still opens Chrome databases `mode=ro&immutable=1` (no file locking) and still exports openDb via helpers."""
+    """storage/helpers.ts still opens Chrome databases `mode=ro&immutable=1` (no file locking) and still exports openDb via helpers. (The `immutable=1` must_contain token lives on the adhd/storage/helpers.ts manifest entry, the file that holds the read-only open path; src/lib/helpers.ts re-exports the single openDb implementation.)"""
     t = read(f"{P}/src/lib/helpers.ts") + read(f"{P}/src/lib/storage/helpers.ts")
     return "immutable=1" in t and "mode=ro" in t, "immutable read-only open"
 
@@ -1023,7 +1023,7 @@ NS_RE = re.compile(r"export\s+\*\s+as\s+(\w+)\s+from\s+['\"]([^'\"]+)['\"]")
 # The five library areas the package root exposes as namespaces (ADR-0003: one root entry, no exports map) and where each lives.
 AREAS = {"cdp": "lib/cdp/index", "storage": "lib/storage/index", "capture": "lib/capture/index", "parsers": "lib/parsers", "chromeManager": "lib/chrome-manager"}
 # Namespaces the capture-upgrade and chrome-lifecycle states add; surface-hosts wires `lifecycle` and prod-errors `recording` into the package root.
-AREAS_EXTRA = {"recording": "lib/recording/index", "lifecycle": "lib/lifecycle/index"}
+AREAS_EXTRA = {"recording": "lib/recording/index", "lifecycle": "lib/lifecycle/index", "endpoint": "lib/endpoint"}
 AREAS_ALL = {**AREAS, **AREAS_EXTRA}
 # Names the agent-search consumer files need from each area (the ~10 deep-imported cdp-connection names plus the barrel names it re-exported).
 AREA_NEEDS = {
@@ -1080,7 +1080,7 @@ def _sa2():
 
 @check("surface-api", 3)
 def _sa3():
-    """The package root (src/index.ts) is the greenfield public API, one root entry (ADR-0003, no subpaths): the five core library areas as namespace exports `cdp`, `storage`, `capture`, `parsers`, `chromeManager` (surface-hosts adds `lifecycle`, prod-errors adds `recording`) (`export * as <area> from './lib/...'`), `export * from './api.js'` for the six verbs, and `export type * from './lib/types.js'` for the shared types, optionally `export * from './errors.js'` (the typed errors); no default export and no other export statement; every name the agent-search consumer files import (the ~10 deep-imported cdp-connection names included) resolves inside its namespace."""
+    """The package root (src/index.ts) is the greenfield public API, one root entry (ADR-0003, no subpaths): the five core library areas as namespace exports `cdp`, `storage`, `capture`, `parsers`, `chromeManager` (surface-hosts adds `lifecycle`, prod-errors adds `recording`, audit-fixes P9 adds the `endpoint` policy namespace: loopback-only by default, greenfield public API accepted as intended) (`export * as <area> from './lib/...'`), `export * from './api.js'` for the six verbs, and `export type * from './lib/types.js'` for the shared types, optionally `export * from './errors.js'` (the typed errors); no default export and no other export statement; every name the agent-search consumer files import (the ~10 deep-imported cdp-connection names included) resolves inside its namespace."""
     idx = read(f"{P}/src/index.ts")
     ns = dict(NS_RE.findall(idx))
     if not (set(AREAS) <= set(ns) <= set(AREAS_ALL)):

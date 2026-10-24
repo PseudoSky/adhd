@@ -60,7 +60,8 @@ def _d_sm12():
         old = blob_at(start, path)
         if old is None or not exists(path):
             bad.append(f"{rel}: missing at the state start or now")
-        elif assertion_lines(old) != assertion_lines(read(path)):
+        # a later state's greenfield edit (audit-fixes) does not reopen core-seam: measure the file as core-seam committed it when another state changed it since
+        elif assertion_lines(old) != assertion_lines(migration_snapshot("core-seam", path) or read(path)):
             bad.append(f"{rel}: an expect/it/describe line differs from the state start")
     if bad:
         return False, f"specs changed beyond fixtures: {bad}"

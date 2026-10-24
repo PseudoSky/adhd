@@ -40,3 +40,12 @@ Items the plan deliberately does not build. Each has an owner decision recorded 
 - Kill -9 of the last out-of-process reaper with no returning client orphans Chrome (no parent-death signal on darwin); bound: the next `ready()` of any process adopts or reaps.
 - The capture/dom.ts Google-SERP walker is kept as a feature; whether it is only a search-provider leftover is a user decision flagged by the failsafe inventory.
 - The default `extraWaitMs` change (500 ms effective to 0, CU8; OD-4) needs the user's approval.
+
+## getOpenTabs removal (audit-fixes P32)
+
+2026-10-24. `ProfileClient.getOpenTabs()` was removed from the public client in audit-fixes P32. Findings:
+
+- Legacy source (scratch repo commit `4dc2b7ea0`, recorded in `evidence/source-baseline.txt`): `agent-browser/adhd/storage/profile.ts:81-82` is `getOpenTabs(): SessionTab[] { notYet('getOpenTabs'); return [] }`, a stub that warns and returns an empty array. The legacy docs list it as not implemented (`agent-browser/adhd/docs/storage.md:303`, `agent-browser/docs/architecture.md:367`, `agent-browser/docs/cdp-query-client-spec.md:175`) and `agent-browser/BACKLOG.md:9` records it as needing a Chrome Session protobuf parser.
+- No failsafe row relied on it: `evidence/failsafe-inventory.json` (the profile row fs-170 lists top sites, favicons, autofill, search engines, preferences, extension ids and saved-credential presence) and `evidence/search-failsafe-inventory.json` contain no `getOpenTabs` or open-tab row; the only `notYet` mention (inventory line 3363) is for the helper, which stays.
+- No consumer relied on it: `git grep getOpenTabs` at the baseline commit finds only the definition and docs, and a search of `packages/`, `entrypoint/` and the scratch repo working tree finds only the absence test `test/unit/domains-storage/profile.spec.ts`.
+- The open tabs of a running Chrome come from `listPageTargets()`; parsing the profile's session files is not planned.
