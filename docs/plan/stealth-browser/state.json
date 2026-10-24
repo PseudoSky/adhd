@@ -144,11 +144,11 @@
       "end_ref": "a8245098ef6b9222cd7be6e80de0680f18ebaa4c"
     },
     "gates-rerun": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-10-24T18:03:31.056Z",
-      "done_at": null,
+      "done_at": "2026-10-24T18:22:40.535Z",
       "start_ref": "35f4287edb8850e312473a78a59c20f5a7addfe1",
-      "end_ref": null
+      "end_ref": "68ddca92cafe9728678b79d39e2b6cffd4dab876"
     },
     "docs-marketing-run": {
       "status": "pending",
@@ -1471,6 +1471,18 @@
       "audit_criteria_total": 4,
       "by": "pseudosky",
       "note": "159 findings resolved by one implementer: 155 fixed, 4 rejected (F55 F66 F82 F99) with evidence; all package gates, sweep of 70 completed states and resolve-findings guard green"
+    },
+    {
+      "ts": "2026-10-24T18:22:40.535Z",
+      "from": "gates-rerun",
+      "to": "gates-rerun",
+      "start_ref": "35f4287edb8850e312473a78a59c20f5a7addfe1",
+      "end_ref": "68ddca92cafe9728678b79d39e2b6cffd4dab876",
+      "audit_exit": 0,
+      "audit_criteria_passed": 7,
+      "audit_criteria_total": 7,
+      "by": "pseudosky",
+      "note": "post-fix gates green: 7/7 gates-rerun criteria, evidence gates-rerun.json all_green at a8581af33"
     }
   ],
   "amendment_log": [
@@ -2248,7 +2260,7 @@
     "version": "0.8.35",
     "hash": "0b6bc1f3d70e"
   },
-  "current_state": "gates-rerun",
+  "current_state": "docs-marketing-run",
   "dod_provenance": {
     "confirmed_at": "2026-10-12T23:49:38.410Z",
     "by": "pseudosky",
