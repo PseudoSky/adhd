@@ -64,8 +64,8 @@ export type SearchStrategyInput = 'auto' | 'network' | 'dom' | 'fetch'
 
 /** Input of search. */
 export interface SearchInput {
-  /** Provider id (see listProviders), or `fetch` to read a URL as markdown. */
-  provider: SearchProvider
+  /** Provider id (see listProviders), or `fetch` to read a URL as markdown. An id outside the registry raises UNKNOWN_PROVIDER. */
+  provider: string
   /** The search query; for the `fetch` provider the URL to read. */
   query: string
   /** Search syntax prepended to the query (for example `site:example.com` or `repo:owner/name`); ignored by `fetch`. */
@@ -182,7 +182,8 @@ export interface ListProvidersResult {
 
 /** Input of describeProvider. */
 export interface DescribeProviderInput {
-  provider: SearchProvider
+  /** Provider id (see listProviders). An id outside the registry raises UNKNOWN_PROVIDER. */
+  provider: string
 }
 
 /** Result of describeProvider. */
@@ -223,7 +224,8 @@ export interface TripwireStatusRecord {
 
 /** Input of clearTripwire. */
 export interface ClearTripwireInput {
-  provider: SearchProvider
+  /** Provider id (see listProviders). An id outside the registry raises UNKNOWN_PROVIDER. */
+  provider: string
 }
 
 /** Result of clearTripwire: `cleared` is false when the provider was not tripped. */

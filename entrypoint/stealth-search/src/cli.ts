@@ -31,7 +31,7 @@ import type { Plugin, RunInput } from '@adhd/apigen-core-client'
 import { createLogger } from '@adhd/apigen-engine-runtime'
 import { lifecycle, shutdownChrome } from '@adhd/stealth-core-browser'
 import { HostBootFailedError, asHostError, bootFailed, flagInvalid, nodeTooOldError, renderHostError } from './host-errors.js'
-import { renderCliHelpFlags, parseHostFlags, toSearchHostConfig } from './host-flags.js'
+import { defaultHostSettings, renderCliHelpFlags, parseHostFlags, toSearchHostConfig } from './host-flags.js'
 import type { HostSettings, ParsedHostArgs } from './host-flags.js'
 import { StealthSearchError, exitCodeFor, searchError } from './errors.js'
 import type { GateDecision, GatePromptInfo, InteractionPort, SolvedAnswer, SolvedPromptInfo } from './lib/config.js'
@@ -39,7 +39,7 @@ import { configureSearch } from './lib/search.js'
 import type { ConfigureSearchOptions } from './lib/search.js'
 import { FORCE_EXIT_MS, OPERATION_NAMES, buildStealthSearchPackage, resolveCoreEntry, stderrLine, stderrLogger } from './server.js'
 import type { BuildPackageOptions, OperationName, StealthSearchPackage, SurfaceEntry } from './server.js'
-import { tracingPlugin } from './tracing.js'
+import { traceRejection, tracingPlugin } from './tracing.js'
 
 // ─── Node preflight ───────────────────────────────────────────────────────────
 
@@ -391,6 +391,35 @@ export interface CliDeps {
   parse?: (argv: readonly string[]) => ParsedHostArgs
 }
 
+/** The `--log-dir` value of an argument list (`--log-dir x` or `--log-dir=x`), read before the flags are validated. */
+function scanLogDir(argv: readonly string[]): string | undefined {
+  for (let i = 0; i < argv.length; i++) {
+    const token = argv[i] as string
+    if (token === '--log-dir') {
+      const next = argv[i + 1]
+      return next !== undefined && next.length > 0 ? next : undefined
+    }
+    if (token.startsWith('--log-dir=') && token.length > '--log-dir='.length) return token.slice('--log-dir='.length)
+  }
+  return undefined
+}
+
+/**
+ * A host flag failed validation before the dispatch: write the start and error span of the operation the command
+ * line names. No span when no operation is named (there is no operation id to record) or the package cannot be built.
+ */
+async function traceRejectedFlag(argv: readonly string[], err: unknown, build: (o: BuildPackageOptions) => Promise<StealthSearchPackage>): Promise<void> {
+  const named = argv.find((t) => (OPERATION_NAMES as readonly string[]).includes(t))
+  if (named === undefined) return
+  try {
+    const built = await build({ cacheFile: join(defaultHostSettings().dataDir, 'cache', 'operations.json') })
+    const entry = built.surface.find((s) => s.operation === named)
+    if (entry) await traceRejection(entry.id, 'cli', err)
+  } catch {
+    // tracing a rejection is best effort: the typed flag error is what the caller reports
+  }
+}
+
 /** What one run produced, before it is written. */
 interface Outcome {
   stdout: string | undefined
@@ -557,8 +586,21 @@ export async function runCli(argv: readonly string[], deps: CliDeps = {}): Promi
 
   try {
     assertSupportedNode(deps.nodeVersion ?? process.versions.node)
-    const parsed = (deps.parse ?? ((a) => parseHostFlags(a, 'cli')))(argv)
     const build = deps.build ?? buildStealthSearchPackage
+    // Telemetry starts before any flag is validated, so a rejected flag still leaves its span. `--help` is not a
+    // dispatch: it starts no telemetry and writes no span.
+    const dispatching = argv.length > 0 && !argv.some((t) => t === '--help' || t === '-h')
+    if (dispatching) {
+      const logDir = scanLogDir(argv)
+      deps.initTelemetry?.({ role: 'cli', ...(logDir ? { logDir } : {}) })
+    }
+    let parsed: ParsedHostArgs
+    try {
+      parsed = (deps.parse ?? ((a) => parseHostFlags(a, 'cli')))(argv)
+    } catch (e) {
+      if (dispatching) await traceRejectedFlag(argv, e, build)
+      throw e
+    }
     const built = await build({ cacheFile: join(parsed.settings.dataDir, 'cache', 'operations.json') })
     const surface = built.surface
 
@@ -570,10 +612,15 @@ export async function runCli(argv: readonly string[], deps: CliDeps = {}): Promi
     if (!entry) throw flagInvalid(parsed.operation, `unknown operation (one of ${OPERATION_NAMES.join(', ')})`)
     const shape = inputShape(built, entry.operation)
     if (parsed.help) return await finish({ stdout: renderOperationHelp(entry, shape), stderr: undefined, code: 0 })
-    const verbInput = buildVerbInput(shape, parsed.rest, parsed.settings, parsed.given as ReadonlySet<string>)
+    let verbInput: Json | undefined
+    try {
+      verbInput = buildVerbInput(shape, parsed.rest, parsed.settings, parsed.given as ReadonlySet<string>)
+    } catch (e) {
+      await traceRejection(entry.id, 'cli', e)
+      throw e
+    }
 
     const settings = parsed.settings
-    deps.initTelemetry?.({ role: 'cli', ...(settings.logDir ? { logDir: settings.logDir } : {}) })
 
     const log = stderrLogger('[stealth-search]')
     const quiet = settings.verbose ? log : (): void => undefined

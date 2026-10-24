@@ -176,7 +176,7 @@ describe('CLI and MCP report the same tripwire status [search-hosts.20]', () => 
 
 describe('a hitl outcome on the MCP host [search-hosts.22]', () => {
   it(
-    '591e1a7 isError: a tripped provider answers outcome hitl with attempts 0 as data (isError unset), and ADR-0018 makes a schema-rejected provider an isError result with invalid_argument text',
+    '591e1a7 isError: a tripped provider answers outcome hitl with attempts 0 as data (isError unset), and an unknown provider reaches the verb, which rejects the call with UNKNOWN_PROVIDER',
     async () => {
       const world = await trippedWorld()
       const { client } = await session(api as unknown as Verbs, { build: () => packageFor(api as unknown as Verbs), configure: wire(world, scriptedEngine(response()).strategies) })
@@ -185,7 +185,8 @@ describe('a hitl outcome on the MCP host [search-hosts.22]', () => {
       const out = res.structuredContent as Record<string, unknown>
       expect(out).toMatchObject({ outcome: 'hitl', attempts: 0, provider: 'github' })
       expect(out['hitl']).toMatchObject({ reason: 'captcha' })
-      await expectInvalidArgument(client.callTool({ name: 'stealth_describeProvider', arguments: { data: { input: { provider: 'not-a-provider' } } } }), /not one of/)
+      // the provider input has no enum: the verb raises the typed UNKNOWN_PROVIDER, which rejects the call (it is not an ApiError)
+      await expect(client.callTool({ name: 'stealth_describeProvider', arguments: { data: { input: { provider: 'not-a-provider' } } } })).rejects.toThrow(/not-a-provider/)
     },
     BUILD_TIMEOUT_MS
   )

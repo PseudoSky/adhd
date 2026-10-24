@@ -253,24 +253,29 @@ describe('a wrong provider surfaces UNKNOWN_PROVIDER with its code and exit mapp
   )
 
   it(
-    'the CLI refuses an unregistered --provider value up front as a typed flag error, before any verb runs',
+    'the CLI passes an unregistered --provider value to the verb, which raises the typed UNKNOWN_PROVIDER (exit 70)',
     async () => {
-      const verbs = fakeVerbs(vi.fn)
+      const verbs = fakeVerbs(vi.fn, { describeProvider: async () => getProvider('altavista') })
       const h = cliHarness(verbs)
       const code = await runCli(['describeProvider', '--provider', 'altavista'], h.deps)
-      expect(code).not.toBe(0)
+      expect(code).toBe(exitCodeFor('UNKNOWN_PROVIDER'))
       expect(h.stdout).toEqual([])
-      expect(h.stderr[0]).toMatch(/^HOST_FLAG_INVALID: /)
-      expect(verbs.describeProvider).not.toHaveBeenCalled()
+      expect(h.stderr[0]).toMatch(/^UNKNOWN_PROVIDER: /)
+      expect(verbs.describeProvider).toHaveBeenCalledTimes(1)
     },
     BUILD_TIMEOUT_MS
   )
 
   it(
-    '[search-mcp-iserror.1] ADR-0018: over MCP an unknown provider returns isError true with invalid_argument text at the schema boundary, and the session keeps serving',
+    '[search-mcp-iserror.1] ADR-0018: over MCP an unknown provider reaches the verb, which raises the typed UNKNOWN_PROVIDER as a JSON-RPC rejection (not an ApiError), and the session keeps serving',
     async () => {
       const { client } = await session(realVerbs, { build: () => packageFor(realVerbs) })
-      await expectInvalidArgument(client.callTool({ name: 'stealth_describeProvider', arguments: { data: { input: { provider: 'altavista' } } } }), /provider/)
+      const outcome = await client.callTool({ name: 'stealth_describeProvider', arguments: { data: { input: { provider: 'altavista' } } } }).then(
+        (res) => ({ res }),
+        (err: unknown) => ({ err })
+      )
+      expect(outcome).toHaveProperty('err')
+      expect(String((outcome as { err: Error }).err.message)).toMatch(/altavista/)
       expect((await client.listTools()).tools).toHaveLength(11)
     },
     BUILD_TIMEOUT_MS
