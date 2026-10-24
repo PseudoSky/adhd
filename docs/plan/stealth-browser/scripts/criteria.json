@@ -786,7 +786,7 @@
     },
     {
       "id": "gates-first.1",
-      "phase": "verify",
+      "phase": "review",
       "tier": null,
       "kind": "command",
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py gates-first --only gates-first.1",
@@ -795,7 +795,7 @@
     },
     {
       "id": "gates-first.2",
-      "phase": "verify",
+      "phase": "review",
       "tier": null,
       "kind": "command",
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py gates-first --only gates-first.2",
@@ -804,7 +804,7 @@
     },
     {
       "id": "gates-first.3",
-      "phase": "verify",
+      "phase": "review",
       "tier": null,
       "kind": "command",
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py gates-first --only gates-first.3",
@@ -813,7 +813,7 @@
     },
     {
       "id": "gates-first.4",
-      "phase": "verify",
+      "phase": "review",
       "tier": null,
       "kind": "command",
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py gates-first --only gates-first.4",
@@ -822,7 +822,7 @@
     },
     {
       "id": "gates-first.5",
-      "phase": "verify",
+      "phase": "review",
       "tier": null,
       "kind": "command",
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py gates-first --only gates-first.5",
@@ -831,7 +831,7 @@
     },
     {
       "id": "gates-first.6",
-      "phase": "verify",
+      "phase": "review",
       "tier": null,
       "kind": "command",
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py gates-first --only gates-first.6",
@@ -840,7 +840,7 @@
     },
     {
       "id": "gates-first.7",
-      "phase": "verify",
+      "phase": "review",
       "tier": null,
       "kind": "command",
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py gates-first --only gates-first.7",
@@ -849,7 +849,7 @@
     },
     {
       "id": "gates-first.8",
-      "phase": "verify",
+      "phase": "review",
       "tier": null,
       "kind": "command",
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py gates-first --only gates-first.8",
@@ -858,7 +858,7 @@
     },
     {
       "id": "gates-first.9",
-      "phase": "verify",
+      "phase": "review",
       "tier": null,
       "kind": "command",
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py gates-first --only gates-first.9",
@@ -867,7 +867,7 @@
     },
     {
       "id": "gates-first.10",
-      "phase": "verify",
+      "phase": "review",
       "tier": null,
       "kind": "command",
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py gates-first --only gates-first.10",
@@ -876,7 +876,7 @@
     },
     {
       "id": "gates-first.11",
-      "phase": "verify",
+      "phase": "review",
       "tier": null,
       "kind": "command",
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py gates-first --only gates-first.11",
@@ -885,7 +885,7 @@
     },
     {
       "id": "gates-first.12",
-      "phase": "verify",
+      "phase": "review",
       "tier": null,
       "kind": "command",
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py gates-first --only gates-first.12",
@@ -1740,7 +1740,7 @@
     },
     {
       "id": "audit-fixes.1",
-      "phase": "verify",
+      "phase": "review",
       "tier": null,
       "kind": "command",
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py audit-fixes --only audit-fixes.1",
@@ -1749,7 +1749,7 @@
     },
     {
       "id": "audit-fixes.2",
-      "phase": "verify",
+      "phase": "review",
       "tier": null,
       "kind": "command",
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py audit-fixes --only audit-fixes.2",
@@ -1758,7 +1758,7 @@
     },
     {
       "id": "audit-fixes.3",
-      "phase": "verify",
+      "phase": "review",
       "tier": null,
       "kind": "command",
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py audit-fixes --only audit-fixes.3",
@@ -1767,7 +1767,7 @@
     },
     {
       "id": "audit-fixes.4",
-      "phase": "verify",
+      "phase": "review",
       "tier": null,
       "kind": "command",
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py audit-fixes --only audit-fixes.4",
@@ -1776,7 +1776,7 @@
     },
     {
       "id": "audit-fixes.5",
-      "phase": "verify",
+      "phase": "review",
       "tier": null,
       "kind": "command",
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py audit-fixes --only audit-fixes.5",
@@ -1785,7 +1785,7 @@
     },
     {
       "id": "audit-fixes.6",
-      "phase": "verify",
+      "phase": "review",
       "tier": null,
       "kind": "command",
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py audit-fixes --only audit-fixes.6",

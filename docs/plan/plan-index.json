@@ -3688,6 +3688,7 @@
         ".adhd/workspace.json",
         "/Users/nix/.claude/agents/",
         "/Users/nix/.config/opencode/",
+        "/Users/nix/dev/ai/scratch/INDEX.md",
         "/Users/nix/dev/ai/scratch/agent-browser/",
         "/Users/nix/dev/ai/scratch/agent-browser/AGENTS.md",
         "/Users/nix/dev/ai/scratch/agent-browser/FEATURES.md",
@@ -3719,9 +3720,6 @@
         "/Users/nix/dev/ai/sox-ecosystem/extensions/agents/",
         "/Users/nix/dev/ai/sox-ecosystem/libs/host-registry/",
         "/Users/nix/dev/ai/sox-ecosystem/tools/test-c1b17653-researcher-single-definition.mjs",
-        "/Users/nix/dev/node/adhd/.worktrees/stealth-browser/docs/plan/stealth-browser/review/PRE-REVIEW-RESOLUTION.json",
-        "/Users/nix/dev/node/adhd/.worktrees/stealth-browser/docs/plan/stealth-browser/review/PRE-REVIEW.json",
-        "/Users/nix/dev/node/adhd/.worktrees/stealth-browser/docs/plan/stealth-browser/review/PRE-REVIEW.md",
         "/Users/nix/dev/projects/reverse-apis/.git/info/exclude",
         "/Users/nix/dev/projects/reverse-apis/.worktrees/tripwire-adopt/",
         "/Users/nix/dev/projects/reverse-apis/.worktrees/tripwire-adopt/package.json",
@@ -3761,6 +3759,7 @@
         "docs/plan/stealth-browser/evidence/naming-decision.md",
         "docs/plan/stealth-browser/evidence/plan-notes.md",
         "docs/plan/stealth-browser/evidence/product-claims.json",
+        "docs/plan/stealth-browser/evidence/release-gate-fixes.dry.json",
         "docs/plan/stealth-browser/evidence/release-gate-fixes.md",
         "docs/plan/stealth-browser/evidence/release-readiness.md",
         "docs/plan/stealth-browser/evidence/relink/",
@@ -3781,6 +3780,9 @@
         "docs/plan/stealth-browser/review/BRIEF.txt",
         "docs/plan/stealth-browser/review/FINDINGS.json",
         "docs/plan/stealth-browser/review/INPUT.sha256",
+        "docs/plan/stealth-browser/review/PRE-REVIEW-RESOLUTION.json",
+        "docs/plan/stealth-browser/review/PRE-REVIEW.json",
+        "docs/plan/stealth-browser/review/PRE-REVIEW.md",
         "docs/plan/stealth-browser/review/RESOLUTION.json",
         "docs/plan/stealth-browser/review/migration.diff",
         "docs/plan/stealth-browser/scripts/",
@@ -3791,6 +3793,7 @@
         "docs/plan/stealth-browser/smoke/sp-link.md",
         "docs/plan/stealth-browser/smoke/switch.md",
         "docs/plan/stealth-browser/tripwire-reverse/",
+        "entrypoint/backlog/project.json",
         "entrypoint/backlog/test/unit/c8-vocabulary.spec.ts",
         "entrypoint/decompile-cli/test/unit/lib/validators/local/index.spec.ts",
         "entrypoint/stealth-browser/",
@@ -3891,6 +3894,7 @@
         "entrypoint/stealth-search/test/unit/engine/",
         "entrypoint/stealth-search/test/unit/errors/",
         "entrypoint/stealth-search/test/unit/fetch/",
+        "entrypoint/stealth-search/test/unit/guards/tripwire-wiring.spec.ts",
         "entrypoint/stealth-search/test/unit/hosts/",
         "entrypoint/stealth-search/test/unit/providers/",
         "entrypoint/stealth-search/test/unit/tracing/",
@@ -3957,6 +3961,8 @@
         "packages/stealth/stealth-core-browser/test/unit/surface/",
         "packages/stealth/stealth-core-browser/tsconfig.spec.json",
         "pnpm-lock.yaml",
+        "tools/nx-plugins/build/executors/publish/impl.js",
+        "tools/nx-plugins/build/executors/publish/impl.spec.mjs",
         "tools/nx-plugins/build/executors/typecheck-spec/resilience-core-tripwire.baseline.json",
         "tools/nx-plugins/build/executors/typecheck-spec/stealth-core-browser.baseline.json",
         "tools/nx-plugins/build/executors/typecheck-spec/stealth-search.baseline.json",
@@ -3983,7 +3989,6 @@
         "docs/plan/stealth-browser/evidence/source-baseline.txt",
         "docs/plan/stealth-browser/evidence/tripwire/tripwire-tarball.json",
         "docs/plan/stealth-browser/review/FINDINGS.json",
-        "docs/plan/stealth-browser/review/PRE-REVIEW.json",
         "docs/plan/stealth-browser/scripts/port-manifest.json",
         "docs/plan/stealth-browser/smoke/reaper-load-proof.md",
         "docs/plan/stealth-browser/tripwire-reverse/reverse-verify.json",
@@ -4004,7 +4009,6 @@
         "entrypoint/stealth-browser/src/test/fixtures/cdp/",
         "entrypoint/stealth-browser/src/test/support/",
         "entrypoint/stealth-browser/vite.config.ts",
-        "entrypoint/stealth-search/",
         "entrypoint/stealth-search/src/api.ts",
         "entrypoint/stealth-search/src/host-flags.ts",
         "entrypoint/stealth-search/src/telemetry.ts",
@@ -4015,7 +4019,6 @@
         "packages/resilience/resilience-core-tripwire/src/lib/",
         "packages/resilience/resilience-core-tripwire/src/lib/types.ts",
         "packages/resilience/resilience-core-tripwire/vite.config.ts",
-        "packages/stealth/stealth-core-browser/",
         "packages/stealth/stealth-core-browser/examples/",
         "packages/stealth/stealth-core-browser/package.json",
         "packages/stealth/stealth-core-browser/src/api.ts",
@@ -4296,17 +4299,14 @@
         },
         "audit-pre-review": {
           "mutates": [
-            "/Users/nix/dev/node/adhd/.worktrees/stealth-browser/docs/plan/stealth-browser/review/PRE-REVIEW.json",
-            "/Users/nix/dev/node/adhd/.worktrees/stealth-browser/docs/plan/stealth-browser/review/PRE-REVIEW.md"
+            "docs/plan/stealth-browser/review/PRE-REVIEW.json",
+            "docs/plan/stealth-browser/review/PRE-REVIEW.md"
           ],
-          "read_only": [
-            "/Users/nix/dev/ai/scratch/agent-browser/",
-            "entrypoint/stealth-search/",
-            "packages/stealth/stealth-core-browser/"
-          ]
+          "read_only": []
         },
         "audit-fixes": {
           "mutates": [
+            "/Users/nix/dev/ai/scratch/INDEX.md",
             "/Users/nix/dev/ai/scratch/agent-browser/AGENTS.md",
             "/Users/nix/dev/ai/scratch/agent-browser/FEATURES.md",
             "/Users/nix/dev/ai/scratch/agent-browser/FETCH.md",
@@ -4328,14 +4328,12 @@
             "/Users/nix/dev/ai/scratch/agent-browser/search/queries/activity.ts",
             "/Users/nix/dev/ai/scratch/agent-browser/search/queries/context.ts",
             "/Users/nix/dev/ai/scratch/agent-browser/search/queries/last-search.ts",
-            "/Users/nix/dev/node/adhd/.worktrees/stealth-browser/docs/plan/stealth-browser/review/PRE-REVIEW-RESOLUTION.json",
+            "docs/plan/stealth-browser/review/PRE-REVIEW-RESOLUTION.json",
             "entrypoint/stealth-search/",
             "packages/resilience/resilience-core-tripwire/",
             "packages/stealth/stealth-core-browser/"
           ],
-          "read_only": [
-            "docs/plan/stealth-browser/review/PRE-REVIEW.json"
-          ]
+          "read_only": []
         },
         "capture-upgrade": {
           "mutates": [
@@ -4899,10 +4897,14 @@
         },
         "release-gate-fixes": {
           "mutates": [
+            "docs/plan/stealth-browser/evidence/release-gate-fixes.dry.json",
             "docs/plan/stealth-browser/evidence/release-gate-fixes.md",
+            "entrypoint/backlog/project.json",
             "entrypoint/backlog/test/unit/c8-vocabulary.spec.ts",
             "entrypoint/decompile-cli/test/unit/lib/validators/local/index.spec.ts",
             "package.json",
+            "tools/nx-plugins/build/executors/publish/impl.js",
+            "tools/nx-plugins/build/executors/publish/impl.spec.mjs",
             "tools/nx-plugins/test/executors/wiring/check-test-wiring.mjs",
             "tools/nx-plugins/test/executors/wiring/check-test-wiring.spec.mjs",
             "tools/nx-plugins/test/executors/wiring/release-dry-clean.spec.mjs"
@@ -4920,7 +4922,7 @@
       },
       "assumed_baseline": [],
       "depends_on": [],
-      "updated_at": "2026-10-24T03:51:11.648Z"
+      "updated_at": "2026-10-24T08:15:04.303Z"
     },
     {
       "plan": "task-dependency-dag",
@@ -5357,6 +5359,6 @@
       "updated_at": "2026-07-17T23:56:00.980Z"
     }
   ],
-  "updated_at": "2026-10-24T03:51:11.655Z",
+  "updated_at": "2026-10-24T08:15:04.310Z",
   "verified_at": null
 }
