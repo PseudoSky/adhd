@@ -1277,7 +1277,9 @@ def unit_checks(slug, buckets, owned_hint):
                 bad.append(f"{s}: child_process not mocked")
             if any(sp in t for sp in SPAWNERS) and not re.search(r"vi\.mock\(|vi\.stubGlobal\(|vi\.spyOn\(", t):
                 bad.append(f"{s}: spawning/network module imported with no mock")
-            if "Application Support" in t or "homedir()" in t and "vi.mock" not in t:
+            # A profile path literal is pure when the spec fakes the filesystem and the home directory (vi.mock of node:fs AND node:os): the path never reaches a real disk.
+            fakes_fs_and_home = bool(re.search(r"vi\.mock\(\s*['\"](?:node:)?fs['\"]", t)) and bool(re.search(r"vi\.mock\(\s*['\"](?:node:)?os['\"]", t))
+            if ("Application Support" in t and not fakes_fs_and_home) or ("homedir()" in t and "vi.mock" not in t):
                 bad.append(f"{s}: real profile/HOME access")
         return not bad and bool(specs()), "; ".join(bad[:5]) or "ok"
 
@@ -3442,9 +3444,19 @@ def inventory_rows():
     return (jread(INV, {}) or {}).get("rows", [])
 
 
+def pin_path(pin_file, base=None):
+    """Current location of an inventory pin file.  The inventory was authored against the pre-layout-move tree (`src/test/...`); the unit lane now lives at
+    `test/unit/...` (docs/standards/testing.md), so a pin file recorded under `src/test/` resolves to the same path under `test/` when it no longer exists
+    at the recorded location."""
+    base = base or P
+    if pin_file and not exists(f"{base}/{pin_file}") and pin_file.startswith("src/test/"):
+        return f"{base}/{pin_file[len('src/'):]}"
+    return f"{base}/{pin_file or ''}"
+
+
 def row_pinned(r):
     pin = r.get("pin") or {}
-    p = f"{P}/{pin.get('file', '')}"
+    p = pin_path(pin.get("file", ""))
     txt = read(p)
     return bool(pin.get("file")) and bool(txt.strip()) and f"[{r['id']}]" in txt and bool(pin.get("test")) and pin["test"] in txt
 
