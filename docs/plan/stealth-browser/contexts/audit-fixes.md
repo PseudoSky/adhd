@@ -1,40 +1,22 @@
-# audit-fixes — WORK STATE
+# audit-fixes — STATE_NAME
 
-**Phase:** verify · **Kind:** work · **Depends on:** audit-pre-review · **Guard:** `python3 docs/plan/stealth-browser/scripts/guard.py audit-fixes`
-**Executor:** `typescript-pro` (sonnet/high) · **Worktree:** `/Users/nix/dev/node/adhd/.worktrees/stealth-browser` on branch `stealth-browser` (shared by every state, [inv:shared-worktree], [inv:worktree-required], [inv:no-ai-attribution])
+**Phase:** review · **Kind:** work · **Depends on:** audit-pre-review · **Guard:** `python3 docs/plan/stealth-browser/scripts/guard.py audit-fixes`
 
 ---
 
 ## Goal
 
-Every pre-review finding is fixed or rejected with evidence by ONE implementer, so the blind review sees a tree that already survived a careful read. The corrected tree passes lint, typecheck, typecheck-spec and the unit lane, and `audit_dod.py --phase pre-review` exits 0.
-
----
-
-## Semantic Distillation
-
-- **Primitive:** MODIFY whatever the findings cite inside `packages/stealth/stealth-core-browser/` and `entrypoint/stealth-search/` (and the owned cutover consumer files in the scratch repo); CREATE `review/PRE-REVIEW-RESOLUTION.json`.
-
-- **Reference Pattern:** `review/PRE-REVIEW.json` (the findings), `scripts/audit_dod.py`, `docs/plan/stealth-browser/review/` conventions of `resolve-findings`.
-
-- **Delta Spec:** `PRE-REVIEW-RESOLUTION.json` has one `agent` value and one resolution per finding id: `fixed` (with the `[psm:audit-fixes]` commit sha that touches the cited file) or `rejected` (with at least 40 characters of evidence and a reproduction command). Nothing is left open or deferred. One implementer, one git author for every `[psm:audit-fixes]` commit. No new TODO/FIXME/XXX.
-
-- **Invariants:** [inv:one-implementer] [inv:greenfield] [inv:typed-errors] [inv:esm-js-specifiers] [inv:unit-purity]. Also: [inv:shared-worktree] (commit only your own explicit paths, tag every commit `[psm:audit-fixes]`), [inv:owned-paths-only], [inv:no-main-writes].
-
-- **Validation:** `python3 docs/plan/stealth-browser/scripts/guard.py audit-fixes` — runs every acceptance criterion below (red until the work is done); `--only audit-fixes.N` runs one. Re-run `audit_dod.py --phase pre-review` last.
+<What is true after this state that was not true before?>
 
 ---
 
 ## Acceptance criteria
 
-Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/guard.py` (`python3 docs/plan/stealth-browser/scripts/guard.py audit-fixes --only audit-fixes.N`). None may be deferred. Tests written by this plan cite ticket `8468f7b1` and these ids ([inv:tests-cite]).
+<!-- Author criteria with `plan-scaffold.js add-criterion`. Each writes a
+     matching audit check ID so Check 3's ID-mirror holds. Do not hand-add
+     bare [slug.N] tokens here without a matching audit check. -->
 
-- [audit-fixes.1] review/PRE-REVIEW-RESOLUTION.json covers 100% of PRE-REVIEW finding ids (or records `no_findings: true` when the audit had none); every finding is `fixed` or `rejected` - none open or deferred.
-- [audit-fixes.2] Each `fixed` entry names a commit sha tagged [psm:audit-fixes] that touches the cited file; each `rejected` entry carries >=40 chars of evidence and a reproduction command.
-- [audit-fixes.3] ONE implementer corrected every finding: PRE-REVIEW-RESOLUTION.json has a single `agent` value and all [psm:audit-fixes] commits share one git author.
-- [audit-fixes.4] No new TODO/FIXME/XXX in packages/stealth/stealth-core-browser/src or entrypoint/stealth-search/src and only owned paths changed by [psm:audit-fixes] commits.
-- [audit-fixes.5] After the corrections lint, typecheck, typecheck-spec and the unit lane exit 0 (`nx run <project>:lint typecheck typecheck-spec test` for stealth-core-browser and stealth-search); the full gate run follows in gates-first.
-- [audit-fixes.6] `audit_dod.py --phase pre-review` exits 0 on the corrected tree (every dod clause that was available before the gates now passes).
+_No criteria yet._
 
 ---
 
@@ -47,25 +29,6 @@ mutates:    ["packages/stealth/stealth-core-browser/", "entrypoint/stealth-searc
 
 ---
 
-## Contract Promise
-
-(Also may fix the second approved package under `packages/resilience/resilience-core-tripwire/` when a finding concerns it; the same one implementer resolves it, [inv:one-implementer].)
-
-Modified: files cited by findings. Added: `review/PRE-REVIEW-RESOLUTION.json`. Deleted: only what a finding calls dead.
-
----
-
-## Commit points
-
-Every plan-file write is committed (R1). Work-product commits for this state, always by explicit path, always tagged `[psm:audit-fixes]`:
-
-- [ ] Per finding, or per tightly related group — commit: `fix(stealth-browser): <finding ids> [psm:audit-fixes]`
-- [ ] After the resolution file — commit: `docs(stealth-browser): pre-review resolution [psm:audit-fixes]`
-- [ ] **After the guard passes** (mandatory) — commit the source changes and the `state.json` update together by explicit path.
-
----
-
 ## Notes for executor
 
-- Do not re-run or edit `PRE-REVIEW.json`; it is the auditor's record.
-- A rejected finding needs a reproduction command that shows the claimed defect does not exist.
+executor=typescript-pro tier=sonnet/high; ONE implementer resolves every pre-review finding

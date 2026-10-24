@@ -481,7 +481,7 @@
     },
     "audit-fixes": {
       "kind": "work",
-      "phase": "verify",
+      "phase": "review",
       "depends_on": [
         "audit-pre-review"
       ],
