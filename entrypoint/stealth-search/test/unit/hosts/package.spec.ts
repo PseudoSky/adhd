@@ -1,9 +1,9 @@
 /**
  * guards: the apigen package misses a verb, mis-inlines a $ref, or the operations cache is stale or rebuilt needlessly
  * tier: S
- * cites: ticket 8468f7b1 [search-hosts.4] [search-hosts.7] [search-hosts.8] [search-hosts.16]
+ * cites: ticket 8468f7b1 [audit-fixes.1] [search-hosts.4] [search-hosts.7] [search-hosts.8] [search-hosts.16]
  * The apigen package of the eleven verbs both hosts serve: extraction from `src/api.ts`, $ref
- * inlining, naming, descriptions, the launchChrome hardening and the operations cache. Ticket
+ * resolution inside each schema, naming, descriptions, the launchChrome hardening and the operations cache. Ticket
  * 8468f7b1 · plan state search-hosts.
  *
  * Criteria: [search-hosts.4] [search-hosts.7] [search-hosts.8] [search-hosts.16] · inventory row
@@ -54,6 +54,34 @@ describe('the package of the eleven verbs [search-hosts.4] [search-hosts.8]', ()
     expect(typeof built.pkg.version).toBe('string')
     expect(Object.keys(built.pkg.schemas).sort()).toEqual([...OPERATION_NAMES].sort())
     expect(built.pkg.importPath).toBe(API_SOURCE)
+  })
+
+  it('[audit-fixes.1] P42 every composed schema is self-contained: each $ref points at a definition the same schema carries, and none is inlined away', () => {
+    const refsOf = (node: unknown, out: string[] = []): string[] => {
+      if (Array.isArray(node)) node.forEach((n) => refsOf(n, out))
+      else if (node !== null && typeof node === 'object') {
+        for (const [k, v] of Object.entries(node)) {
+          if (k === '$ref' && typeof v === 'string') out.push(v)
+          else refsOf(v, out)
+        }
+      }
+      return out
+    }
+    let total = 0
+    for (const [name, schema] of Object.entries(built.pkg.schemas)) {
+      for (const side of ['input', 'output'] as const) {
+        const doc = (schema as Record<string, unknown>)[side] as { definitions?: Record<string, unknown> } | undefined
+        if (!doc) continue
+        for (const ref of refsOf(doc)) {
+          total += 1
+          const m = /^#\/definitions\/(.+)$/.exec(ref)
+          expect(m, `${name}.${side} ${ref}`).not.toBeNull()
+          expect(doc.definitions?.[m?.[1] ?? ''], `${name}.${side} ${ref}`).toBeDefined()
+        }
+      }
+    }
+    // getPageContext's output keeps `{"$ref":"#/definitions/CookieSummary"}`: the schemas really contain refs.
+    expect(total).toBeGreaterThan(0)
   })
 
   it('P1: the launchChrome input accepts only port and userDataDir and REQUIRES data.input (an empty call can never start a default Chrome)', () => {

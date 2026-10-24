@@ -3,9 +3,11 @@
  *
  * The MCP host, and the one place the apigen package of the eleven verbs is built (the CLI host
  * mounts the same package). `buildStealthSearchPackage` extracts the operations from the BUILT
- * `dist/api.d.ts` (a shipped package carries declarations, not TypeScript source), inlines `$ref`
- * (run-mode dispatch cannot resolve them), composes the schemas and binds the live functions of
- * `./api.js`: the verbs, the guard and the tripwire the hosts configure are one module instance.
+ * `dist/api.d.ts` (a shipped package carries declarations, not TypeScript source), composes the
+ * schemas and binds the live functions of `./api.js`: the verbs, the guard and the tripwire the
+ * hosts configure are one module instance. Nothing is inlined: a composed schema keeps its `$ref`s
+ * and carries the `definitions` they point at, so every schema is self-contained (proved per schema
+ * in test/unit/hosts/package.spec.ts).
  *
  * Naming (decision recorded in evidence/naming-decision.md): the namespace is `stealth`, the file
  * segment is dropped and each operation keeps its verb as ONE word, so the MCP tool is
