@@ -147,6 +147,32 @@ def criteria_ids():
     return {c["id"] for c in doc.get("criteria", [])}
 
 
+def walk_dist(root, exts=(".js", ".cjs", ".mjs")):
+    """Every built file under a dist directory. `walk` skips any path containing `/dist` (it is a source walker), so a dist inspection must use this one."""
+    out = []
+    for d, _, fs in os.walk(root):
+        if "node_modules" in d:
+            continue
+        out += [os.path.join(d, f) for f in fs if f.endswith(exts)]
+    return sorted(out)
+
+
+def registry_published(name):
+    """True when the pnpm lockfile resolves `name` from the npm registry: some `/<name>@<ver>:` entry whose resolution carries an integrity hash and no tarball/directory/path override."""
+    lock = read("pnpm-lock.yaml")
+    ents = re.findall(r"^  /" + re.escape(name) + r"@[^:\n]+:\n    resolution: \{([^}\n]*)\}", lock, re.M)
+    return any("integrity: sha512-" in e and not re.search(r"tarball:|directory:|path:", e) for e in ents)
+
+
+def ensure_full_dist():
+    """Build both published dists completely (core: build, dist-manifest; search: build + build-bin + assets + dist-manifest) through verify-dist-load, whose dependsOn chain is the build graph. A bare `build` empties dist/ (vite emptyOutDir), so every dist inspection starts here and no check depends on which check ran before it."""
+    rc, out = 0, ""
+    for proj in (CORE_PROJECT, SEARCH_PROJECT):
+        r, o = nx_run(proj, "verify-dist-load", timeout=2400)
+        rc, out = max(rc, r), out + o[-300:]
+    return rc, out
+
+
 def walk(root, exts=(".ts",)):
     out = []
     for d, _, fs in os.walk(root):
@@ -1429,6 +1455,7 @@ def _gf7():
         if isinstance(d, dict) and d.get("name"):
             names[d["name"]] = d
     pub = jread("published-state.json", {}) or {}
+    brc, bout = ensure_full_dist()
     meta_all, deps_all, bad_bin = True, {}, []
     for d, bins in ((CORE_DIR, ()), (SEARCH_DIR, ("cli.js", "mcp.js"))):
         p = jread(f"{d}/package.json", {}) or {}
@@ -1437,16 +1464,18 @@ def _gf7():
         meta_all = meta_all and meta
         deps_all.update({**(p.get("dependencies") or {}), **(p.get("peerDependencies") or {})})
         bad_bin += [f"{d}/{f}" for f in bins if not (exists(f"{d}/dist/bin/{f}") and read(f"{d}/dist/bin/{f}").startswith("#!") and os.access(f"{d}/dist/bin/{f}", os.X_OK))]
-    bad_dep = [n for n in deps_all if n.startswith("@adhd/") and not ((n in names and not names[n].get("private")) or n in pub or n in (pub.get("packages") or {}))]
-    return meta_all and not bad_bin and bool(deps_all) and not bad_dep, f"meta={meta_all} bins={bad_bin} unpublished deps={bad_dep}"
+    bad_dep = [n for n in deps_all if n.startswith("@adhd/") and not ((n in names and not names[n].get("private")) or n in pub or n in (pub.get("packages") or {}) or (n not in names and registry_published(n)))]
+    return brc == 0 and meta_all and not bad_bin and bool(deps_all) and not bad_dep, f"build rc={brc} meta={meta_all} bins={bad_bin} unpublished deps={bad_dep}"
 
 
 @check("gates-first", 8)
 def _gf8():
     """(PA10.3) `npm pack --dry-run` against each built dist output lists README.md, CHANGELOG.md and the main/types targets (stealth-search also bin/cli.js and bin/mcp.js); the output is recorded in evidence/publish-dry-run.txt."""
+    brc, _ = ensure_full_dist()
     rc, miss = tarballs_missing()
     rec = read(f"{PLAN}/evidence/publish-dry-run.txt")
-    return rc == 0 and not miss and bool(rec.strip()) and exists(f"{SEARCH_DIR}/dist"), f"missing from tarballs: {miss}; evidence recorded={bool(rec.strip())}"
+    recorded = all(m in rec for m in ("README.md", "CHANGELOG.md", "bin/cli.js", "bin/mcp.js"))
+    return brc == 0 and rc == 0 and not miss and recorded and exists(f"{SEARCH_DIR}/dist"), f"build rc={brc} missing from tarballs: {miss}; evidence lists the members={recorded}"
 
 
 @check("gates-first", 9)
@@ -1459,8 +1488,9 @@ def _gf10():
     """After a full build, neither owned dependency is inlined into any dist (module-format proof for ADR-0003): no dist/**/*.js file of either package defines `createStoreAdapter`, `ensureBackend`, `serveBackend` or `dialBackend`, the core dist references `@adhd/sox-service-proxy` as an external require, no file `require`s `@adhd/sox-store-adapter` (it is reached only through a dynamic `import()`), and the stealth-search dist references `@adhd/stealth-core-browser` and `@adhd/resilience-core-tripwire` as externals and defines neither package's code."""
     rc1, _ = nx_run(CORE_PROJECT, "build", timeout=1800)
     rc2, _ = nx_run(SEARCH_PROJECT, "build", timeout=1800)
-    core = {f: read(f) for f in walk(f"{CORE_DIR}/dist", (".js", ".cjs", ".mjs"))}
-    srch = {f: read(f) for f in walk(f"{SEARCH_DIR}/dist", (".js", ".cjs", ".mjs"))}
+    core = {f: read(f) for f in walk_dist(f"{CORE_DIR}/dist")}
+    srch = {f: read(f) for f in walk_dist(f"{SEARCH_DIR}/dist")}
+    ensure_full_dist()  # the bare builds above empty dist/; restore the complete layout for the checks that follow
     alltxt = {**core, **srch}
     inlined = [f for f, t in alltxt.items() if re.search(r"function\s+(createStoreAdapter|ensureBackend|serveBackend|dialBackend)\b", t)]
     req_store = [f for f, t in alltxt.items() if re.search(r"require\(\s*['\"]@adhd/sox-store-adapter['\"]", t)]
