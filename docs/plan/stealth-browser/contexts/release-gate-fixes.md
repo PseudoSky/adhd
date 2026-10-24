@@ -66,7 +66,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 
 ```text
 read_only:  []
-mutates:    ["package.json", "tools/nx-plugins/test/executors/wiring/check-test-wiring.mjs", "tools/nx-plugins/test/executors/wiring/check-test-wiring.spec.mjs", "tools/nx-plugins/test/executors/wiring/release-dry-clean.spec.mjs", "entrypoint/decompile-cli/test/unit/lib/validators/local/index.spec.ts", "entrypoint/backlog/test/unit/c8-vocabulary.spec.ts", "entrypoint/backlog/project.json", "docs/plan/stealth-browser/evidence/release-gate-fixes.md", "docs/plan/stealth-browser/evidence/release-gate-fixes.dry.json"]
+mutates:    ["package.json", "tools/nx-plugins/test/executors/wiring/check-test-wiring.mjs", "tools/nx-plugins/test/executors/wiring/check-test-wiring.spec.mjs", "tools/nx-plugins/test/executors/wiring/release-dry-clean.spec.mjs", "entrypoint/decompile-cli/test/unit/lib/validators/local/index.spec.ts", "entrypoint/backlog/test/unit/c8-vocabulary.spec.ts", "entrypoint/backlog/project.json", "tools/nx-plugins/build/executors/publish/impl.js", "tools/nx-plugins/build/executors/publish/impl.spec.mjs", "docs/plan/stealth-browser/evidence/release-gate-fixes.md", "docs/plan/stealth-browser/evidence/release-gate-fixes.dry.json"]
 ```
 
 ---
