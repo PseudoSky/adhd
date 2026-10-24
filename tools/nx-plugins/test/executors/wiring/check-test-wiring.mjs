@@ -74,7 +74,7 @@ function main() {
   if (gaps.length > 0) {
     console.error('✖ projects with test files but NO `test` target, literal or inferred (their tests can NEVER run):');
     for (const { root, specCount } of gaps) console.error(`   ${root}  (${specCount} spec file(s))`);
-    console.error('  Fix: add a `test` target (see packages/agent/agent-store-runtime/project.json for the shape).');
+    console.error('  Fix: add a `test` target (see docs/standards/testing.md for the shape).');
     process.exit(1);
   }
   return scanned;
