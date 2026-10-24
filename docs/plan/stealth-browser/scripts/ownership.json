@@ -116,7 +116,9 @@
     "packages/stealth/stealth-core-browser/",
     "entrypoint/stealth-search/",
     "docs/plan/stealth-browser/review/RESOLUTION.json",
-    "packages/resilience/resilience-core-tripwire/"
+    "packages/resilience/resilience-core-tripwire/",
+    "docs/plan/stealth-browser/evidence/tracing-log-validation.json",
+    "docs/plan/stealth-browser/evidence/tracing-log-validation.md"
   ],
   "gates-rerun": [
     "docs/plan/stealth-browser/evidence/"

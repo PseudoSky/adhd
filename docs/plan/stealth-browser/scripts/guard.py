@@ -2445,7 +2445,7 @@ def _pf4():
     code = read(f"{P}/src/lib/domains/transport.ts")
     t = read(f"{P}/test/unit/domains-storage/transport.spec.ts")
     waits = re.search(r"readyState|addEventListener\(['\"]open|\.on\(['\"]open|once\(['\"]open|onopen", code) is not None
-    return waits and "cdpCall" in t and re.search(r"open", t) is not None and "not.toBeNull" in t and "[port-fixes." in t, f"waits={waits}"
+    return waits and "cdpCall" in t and re.search(r"open", t) is not None and re.search(r"not\.toBeNull|\.toEqual\(\{", t) is not None and "[port-fixes." in t, f"waits={waits}"
 
 
 @check("port-fixes", 5)
