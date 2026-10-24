@@ -137,10 +137,10 @@
       "end_ref": "9410d766bc8b230b0ebaf3fa35a92a3c7fe28327"
     },
     "resolve-findings": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-10-24T14:50:34.743Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "372c8d5b51b5a2b1025810fa64e79b1705e8f49f",
       "end_ref": null
     },
     "gates-rerun": {
