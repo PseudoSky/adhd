@@ -4,7 +4,7 @@
  * cites: ticket 8468f7b1 [search-port-engine.3]
  * Cloudflare managed-challenge recovery: reveal the window, poll the provider's ban markers until they clear, retry the
  * search exactly once. An unrecoverable challenge is reported as captcha and no second retry is attempted.
- * Inventory row I-12 (challenge recovery retries once).
+ * Inventory row [I-12] (challenge recovery retries once).
  * Ticket 8468f7b1 · [search-port-engine.3]
  */
 import { describe, expect, it } from 'vitest'

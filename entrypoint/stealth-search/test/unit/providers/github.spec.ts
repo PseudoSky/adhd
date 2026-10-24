@@ -5,7 +5,7 @@
  * The github provider over real captured pages (test fixtures copied byte-for-byte from the source
  * runner): repository search is API-primary with the rendered page (embedded JSON) as fallbackNetwork,
  * type:code is a network-only override that reports the signed-out login wall as login_required, and a
- * rate-limit response returns rate_limited. Inventory rows I-22.a, I-10.a.
+ * rate-limit response returns rate_limited. Inventory rows [I-22.a], [I-10.a].
  * Ticket 8468f7b1 · [search-port-providers.9] [search-port-providers.5]
  * · backlog 861571da, 224e7a44 · commits 591e1a7, c00edea.
  */

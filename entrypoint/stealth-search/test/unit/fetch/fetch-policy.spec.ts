@@ -2,7 +2,7 @@
  * guards: the SSRF policy admits a private, loopback or link-local target
  * tier: S
  * cites: ticket 8468f7b1 [search-port-fetch.3]
- * SSRF policy matrix: a security failsafe (inventory I-28).
+ * SSRF policy matrix: a security failsafe (inventory [I-28]).
  * Ticket 8468f7b1 · [search-port-fetch.3]
  */
 import { describe, expect, it } from 'vitest'

@@ -2,7 +2,7 @@
  * guards: PDF text extraction fails or returns wrong text for fixture bytes
  * tier: S
  * cites: ticket 8468f7b1 [search-port-fetch.4] [search-port-fetch.1]
- * PDF text extraction through the real pdfjs on fixture bytes read in-process (inventory I-30).
+ * PDF text extraction through the real pdfjs on fixture bytes read in-process (inventory [I-30]).
  * Ticket 8468f7b1 · [search-port-fetch.4] [search-port-fetch.1]
  */
 import { describe, expect, it } from 'vitest'

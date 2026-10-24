@@ -20,7 +20,7 @@ import { countingFs, hitlResponse, input, makeFakeCore, makeWorld, recordingInte
 const fire = (world: ReturnType<typeof makeWorld>, reason: string) =>
   world.svc.tripwire.fire({ provider: 'github', query: 'vite', reason, pageUrl: 'https://github.com/sorry', strategy: 'network', browserSessionId: 'tab-0', lastOperation: 'x' })
 
-describe('I-04 unknown provider is raised before any gate [search-verbs.4]', () => {
+describe('[I-04] unknown provider is raised before any gate [search-verbs.4]', () => {
   it('UNKNOWN_PROVIDER: a provider that is not registered raises before the tripwire, the cooldown or Chrome', async () => {
     const io = { counter: undefined as undefined | (() => number) }
     const world = makeWorld({
@@ -52,7 +52,7 @@ describe('I-04 unknown provider is raised before any gate [search-verbs.4]', () 
   })
 })
 
-describe('I-02 I-05 a tripwire-locked provider is a fail-fast hitl with attempts 0 [search-verbs.4]', () => {
+describe('[I-02] [I-05] a tripwire-locked provider is a fail-fast hitl with attempts 0 [search-verbs.4]', () => {
   it.each(['captcha', 'banned', 'rate_limited'])('a provider tripped for %s answers outcome hitl, attempts 0, zero Chrome calls', async (reason) => {
     const world = makeWorld({ strategies: scriptedEngine(response()).strategies })
     await fire(world, reason)
@@ -75,7 +75,7 @@ describe('I-02 I-05 a tripwire-locked provider is a fail-fast hitl with attempts
   })
 })
 
-describe('I-06 the cooldown gate answers rate_limited with a retry hint and no window [search-verbs.4]', () => {
+describe('[I-06] the cooldown gate answers rate_limited with a retry hint and no window [search-verbs.4]', () => {
   it('an armed cooldown returns rate_limited, attempts 0, a retry-in hint and opens no window', async () => {
     const world = makeWorld({ strategies: scriptedEngine(response()).strategies })
     await world.svc.guard.setProviderCooldown('github', 'rate_limited', 20_000, 'vite')
@@ -94,7 +94,7 @@ describe('I-06 the cooldown gate answers rate_limited with a retry hint and no w
   })
 })
 
-describe('I-07 the concurrency cap queues the third call [search-verbs.4]', () => {
+describe('[I-07] the concurrency cap queues the third call [search-verbs.4]', () => {
   it('with a cap of 2 the third concurrent search waits for a slot and runs after one finishes', async () => {
     const gates: Array<() => void> = []
     const world = makeWorld({
@@ -116,7 +116,7 @@ describe('I-07 the concurrency cap queues the third call [search-verbs.4]', () =
   })
 })
 
-describe('I-13 hostile outcomes arm the cooldown, hitl does not [search-verbs.4]', () => {
+describe('[I-13] hostile outcomes arm the cooldown, hitl does not [search-verbs.4]', () => {
   it.each(['captcha', 'rate_limited', 'banned'] as const)('outcome %s arms the cooldown and ends the call with attempts 1', async (outcome) => {
     const engine = scriptedEngine(response({ outcome, error: outcome }))
     const world = makeWorld({ strategies: engine.strategies })
@@ -140,7 +140,7 @@ describe('I-13 hostile outcomes arm the cooldown, hitl does not [search-verbs.4]
   })
 })
 
-describe('I-13 a HITL outcome fires the tripwire, reveals the page and keeps the context alive [search-verbs.4]', () => {
+describe('[I-13] a HITL outcome fires the tripwire, reveals the page and keeps the context alive [search-verbs.4]', () => {
   it('captcha: the tripwire is fired with the page, the window is revealed and not disposed', async () => {
     const world = makeWorld({ strategies: scriptedEngine(hitlResponse('captcha', 'https://github.com/sorry')).strategies })
     const out = await world.svc.search(input())
@@ -187,7 +187,7 @@ describe('I-13 a HITL outcome fires the tripwire, reveals the page and keeps the
   })
 })
 
-describe('I-05 the interactive gate prompt [search-verbs.4]', () => {
+describe('[I-05] the interactive gate prompt [search-verbs.4]', () => {
   const seeded = async (answer: 'retry' | 'clear' | 'abort' | Error) => {
     const order: string[] = []
     const interaction = recordingInteraction(order, { gate: answer })
@@ -218,7 +218,7 @@ describe('I-05 the interactive gate prompt [search-verbs.4]', () => {
   })
 })
 
-describe('I-14 pageDisposal and the outer catch [search-verbs.4]', () => {
+describe('[I-14] pageDisposal and the outer catch [search-verbs.4]', () => {
   it('pageDisposal dispose (the default) closes the page in the finally path', async () => {
     const world = makeWorld({ strategies: scriptedEngine(response()).strategies })
     await world.svc.search(input())

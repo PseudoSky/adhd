@@ -2,7 +2,7 @@
  * guards: a provider cooldown is written non-atomically, expires late, survives expiry, or arms for a hitl outcome
  * tier: S
  * cites: ticket 8468f7b1 [search-port-guards.2]
- * Provider cooldown (inventory row I-19): atomic temp-file-then-rename writes to
+ * Provider cooldown (inventory row [I-19]): atomic temp-file-then-rename writes to
  * `<data>/guard/<provider>.json`, the three durations, lazy removal of an expired cooldown,
  * the hitl exclusion and PROVIDER_STATE_IO for unreadable state.
  * Ticket 8468f7b1 · [search-port-guards.2]
@@ -11,7 +11,7 @@ import { describe, expect, it } from 'vitest'
 import { isSearchError } from '../../../src/errors.js'
 import { makeEnv } from '../../helpers/guards/guards-harness.js'
 
-describe('provider cooldown [search-port-guards.2] I-19', () => {
+describe('provider cooldown [search-port-guards.2] [I-19]', () => {
   it('cooldown arms and disarms atomically', async () => {
     const env = makeEnv()
     await env.guard.recordSearchOutcome('github', 'captcha', 'repo:x')

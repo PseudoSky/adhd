@@ -2,7 +2,7 @@
  * guards: the fetch provider route applies a qualifier or a strategy loop to the URL query
  * tier: S
  * cites: ticket 8468f7b1 [search-port-fetch.2]
- * The fetch provider route (inventory I-09): the query is the URL, no qualifier, no strategy loop.
+ * The fetch provider route (inventory [I-09]): the query is the URL, no qualifier, no strategy loop.
  * Ticket 8468f7b1 · [search-port-fetch.2]
  */
 import { describe, expect, it } from 'vitest'

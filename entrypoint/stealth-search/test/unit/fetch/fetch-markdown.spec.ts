@@ -2,7 +2,7 @@
  * guards: HTML-to-markdown lets an oversized input through uncapped, drops the truncation marker, or fails without the degraded fallback
  * tier: S
  * cites: ticket 8468f7b1 [search-port-fetch.4]
- * HTML to markdown: the 1 MiB input cap, truncation marker and degraded fallback (inventory I-29).
+ * HTML to markdown: the 1 MiB input cap, truncation marker and degraded fallback (inventory [I-29]).
  * Ticket 8468f7b1 · [search-port-fetch.4]
  */
 import { describe, expect, it } from 'vitest'

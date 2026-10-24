@@ -2,7 +2,7 @@
  * guards: a tripwire fire, gate, clear, resolve or read misreports state, or a legacy agent-search lock is not honoured
  * tier: S
  * cites: ticket 8468f7b1 [search-port-guards.3]
- * Tripwire over the tripwire package (inventory row I-21): fire, gate with blocked-count, cleared,
+ * Tripwire over the tripwire package (inventory row [I-21]): fire, gate with blocked-count, cleared,
  * resolved, read, isTripped, an expired lock, a corrupt lock and the typed errors.
  * Decision O8: the namespace is `stealth-search`; a legacy `agent-search` flat lock under the same
  * root is still read and lapses with the 2 h TTL.
@@ -13,7 +13,7 @@ import { TRIPWIRE_NAMESPACE } from '../../../src/lib/tripwire.js'
 import { isSearchError } from '../../../src/errors.js'
 import { auditLines, fireInput, makeEnv, T0 } from '../../helpers/guards/guards-harness.js'
 
-describe('tripwire wiring [search-port-guards.3] I-21', () => {
+describe('tripwire wiring [search-port-guards.3] [I-21]', () => {
   it('uses the stealth-search namespace of decision O8 (existing agent-search locks expire in 2 h)', async () => {
     expect(TRIPWIRE_NAMESPACE).toBe('stealth-search')
     const env = makeEnv()

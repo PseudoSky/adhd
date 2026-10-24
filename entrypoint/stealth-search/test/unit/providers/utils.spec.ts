@@ -3,7 +3,7 @@
  * tier: S
  * cites: ticket 8468f7b1 [search-port-providers.3] [search-port-providers.10]
  * Qualifier prepend and the GitHub type:code resolution on real provider ids, plus fallbackView.
- * Inventory rows I-10, I-10.a. Ticket 8468f7b1 · [search-port-providers.3] [search-port-providers.10] · commit 591e1a7.
+ * Inventory rows [I-10], [I-10.a]. Ticket 8468f7b1 · [search-port-providers.3] [search-port-providers.10] · commit 591e1a7.
  */
 import { describe, expect, it } from 'vitest'
 import { PROVIDERS, PROVIDER_NAMES, getProvider } from '../../../src/lib/providers.js'

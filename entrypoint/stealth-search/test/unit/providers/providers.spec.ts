@@ -4,7 +4,7 @@
  * cites: ticket 8468f7b1 [search-port-providers.1] [search-port-providers.6]
  * The provider registry: the twelve real provider ids in order, each with its extractor config and
  * qualifier examples, and getProvider on an unknown id through the real call.
- * Inventory rows I-22. Ticket 8468f7b1 · [search-port-providers.1] [search-port-providers.6].
+ * Inventory rows [I-22]. Ticket 8468f7b1 · [search-port-providers.1] [search-port-providers.6].
  */
 import { describe, expect, it } from 'vitest'
 import { capture, StealthCoreBrowserError } from '@adhd/stealth-core-browser'

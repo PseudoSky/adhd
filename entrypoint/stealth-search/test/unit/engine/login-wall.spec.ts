@@ -4,7 +4,7 @@
  * cites: ticket 8468f7b1 [search-port-engine.11]
  * A zero-result page behind a login wall is a hitl interrupt, not an error: GitHub code search signed out
  * renders zero results; the engine answers outcome hitl reason login_required with the sign-in page.
- * Inventory row I-24.b (login wall returns hitl login_required). Fixtures are byte-copies of the captured pages.
+ * Inventory row [I-24.b] (login wall returns hitl login_required). Fixtures are byte-copies of the captured pages.
  * Ticket 8468f7b1 · [search-port-engine.11] · commit 591e1a7.
  */
 import { describe, expect, it } from 'vitest'

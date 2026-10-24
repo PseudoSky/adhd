@@ -2,7 +2,7 @@
  * guards: a login_required interrupt writes a lock or blocks the gate, or captcha, banned and rate_limited stop blocking
  * tier: S
  * cites: ticket 8468f7b1 [search-port-guards.11]
- * A login interrupt is not a ban (inventory row I-13.b, commit 591e1a7): login_required writes no
+ * A login interrupt is not a ban (inventory row [I-13.b], commit 591e1a7): login_required writes no
  * lock and no audit line, a stored login_required lock never blocks the gate and a later
  * successful search clears it, while captcha, banned and rate_limited still block and count.
  * The cooldown stays unarmed for a hitl outcome. Real tripwire wiring over a temp data dir.

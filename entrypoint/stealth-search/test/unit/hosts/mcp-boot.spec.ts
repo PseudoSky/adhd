@@ -335,7 +335,7 @@ describe('boot behaviours of server.mjs as flag-driven code [search-hosts.14]', 
     expect(() => none.unregister()).not.toThrow()
   })
 
-  it('I-33 uncaughtException and unhandledRejection handlers are registered next to the core exit hooks, and the hooks do the soft Chrome shutdown then exit 1', async () => {
+  it('I-33 [I-17] uncaughtException and unhandledRejection handlers are registered next to the core exit hooks, and the hooks do the soft Chrome shutdown then exit 1', async () => {
     const rec = recorder({ proc: undefined })
     const registered: string[] = []
     rec.deps.proc = { on: (e) => void registered.push(e), removeListener: () => undefined }

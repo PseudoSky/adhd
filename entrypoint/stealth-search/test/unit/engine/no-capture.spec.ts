@@ -4,7 +4,7 @@
  * cites: ticket 8468f7b1 [search-port-engine.15]
  * A capture that produced no body is never `empty`: it is `timeout` (no error or the capture timeout) or `error`
  * (a socket error), and the retry policy retries both while a parsed zero-result page is not retried.
- * Inventory row I-24.a (no-body capture is timeout or error). Ports retry-policy-test.ts.
+ * Inventory row [I-24.a] (no-body capture is timeout or error). Ports retry-policy-test.ts.
  * Ticket 8468f7b1 · [search-port-engine.15] · commit c00edea.
  */
 import { describe, expect, it } from 'vitest'

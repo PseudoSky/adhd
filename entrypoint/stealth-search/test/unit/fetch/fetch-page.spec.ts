@@ -2,7 +2,7 @@
  * guards: the cookieless render, PDF branch or two-phase Cloudflare wait is skipped or mis-ordered
  * tier: S
  * cites: ticket 8468f7b1 [search-port-fetch.2] [search-port-fetch.4]
- * The cookieless render, PDF branch and two-phase Cloudflare wait (inventory I-27).
+ * The cookieless render, PDF branch and two-phase Cloudflare wait (inventory [I-27]).
  * Ticket 8468f7b1 · [search-port-fetch.2] [search-port-fetch.4]
  */
 import { describe, expect, it } from 'vitest'

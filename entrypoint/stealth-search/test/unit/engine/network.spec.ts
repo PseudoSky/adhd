@@ -4,7 +4,7 @@
  * cites: ticket 8468f7b1 [search-port-engine.1] [search-port-engine.4]
  * The network strategy: the missing-config error outcome, the direct JSON-API fetch (no browser), and the
  * capture path through the core's `capture.captureNetworkResponse` with the engine's `select` function.
- * Inventory rows I-24 (network search and missing config error).
+ * Inventory rows [I-24] (network search and missing config error).
  * Ticket 8468f7b1 · [search-port-engine.1] [search-port-engine.4] · commits 591e1a7, c00edea.
  */
 import { describe, expect, it } from 'vitest'

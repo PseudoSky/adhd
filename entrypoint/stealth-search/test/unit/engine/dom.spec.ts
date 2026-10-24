@@ -5,7 +5,7 @@
  * The DOM strategy over a fake page session built from HTML fixtures: pattern extraction, the structural Google
  * result-page (SERP) walker, ban checks (selector probes, serialized-DOM rules, redirect URL rules) and the selector
  * wait with jittered 600-1800 ms retries raising SELECTOR_TIMEOUT. Fixtures labelled synthetic-protocol-conformant.
- * Inventory rows I-25 (dom extraction and selector wait), I-25.a (google serp walker extracts results).
+ * Inventory rows [I-25] (dom extraction and selector wait), [I-25.a] (google serp walker extracts results).
  * Ticket 8468f7b1 · [search-port-engine.2] [search-port-engine.10] · backlog 406a4e66.
  */
 import { readFileSync } from 'node:fs'

@@ -3,7 +3,7 @@
  * tier: S
  * cites: ticket 8468f7b1 [search-port-providers.2] [search-port-providers.10]
  * Shared types: the eight outcomes, HitlInfo including the login_required reason, the core PageSource
- * on a result, and the two-config provider shape. Inventory row I-23.
+ * on a result, and the two-config provider shape. Inventory row [I-23].
  * Ticket 8468f7b1 · [search-port-providers.2] [search-port-providers.10] · commit 591e1a7.
  */
 import { readFileSync } from 'node:fs'

@@ -139,13 +139,13 @@ describe('getPageContext redacts cookie values at one site [search-verbs.3]', ()
 })
 
 describe('the chrome verbs are the core verbs [search-verbs.1] [search-verbs.2]', () => {
-  it('chromeStatus keeps the managed flag (I-16): the re-exported verb is the core verb', async () => {
+  it('chromeStatus keeps the managed flag [I-16]: the re-exported verb is the core verb', async () => {
     core.chromeStatus.mockResolvedValue({ running: true, version: 'Chrome/130', protocol: '1.3', managed: true })
     await expect(api.chromeStatus({ port: 9333 })).resolves.toMatchObject({ running: true, managed: true })
     expect(core.chromeStatus).toHaveBeenCalledWith({ port: 9333 })
   })
 
-  it('shutdownChrome (I-17) delegates to the core verb with the same input', async () => {
+  it('shutdownChrome [I-17] delegates to the core verb with the same input', async () => {
     core.shutdownChrome.mockResolvedValue({ ok: true, port: 9333 })
     await expect(api.shutdownChrome({ port: 9333 })).resolves.toEqual({ ok: true, port: 9333 })
     expect(core.shutdownChrome).toHaveBeenCalledWith({ port: 9333 })
@@ -153,7 +153,7 @@ describe('the chrome verbs are the core verbs [search-verbs.1] [search-verbs.2]'
 })
 
 describe('the search-owned verbs [search-verbs.2]', () => {
-  it('listProviders lists the twelve providers with strategies (I-03)', async () => {
+  it('listProviders lists the twelve providers with strategies [I-03]', async () => {
     const out = await api.listProviders()
     expect(out.providers).toHaveLength(12)
     const github = out.providers.find((p) => p.id === 'github')
@@ -161,7 +161,7 @@ describe('the search-owned verbs [search-verbs.2]', () => {
     expect(out.providers.find((p) => p.id === 'fetch')?.strategies).toEqual(['fetch'])
   })
 
-  it('describeProvider returns the qualifier examples and usage (I-18) and raises UNKNOWN_PROVIDER for an unknown id', async () => {
+  it('describeProvider returns the qualifier examples and usage [I-18] and raises UNKNOWN_PROVIDER for an unknown id', async () => {
     const d = await api.describeProvider({ provider: 'github' })
     expect(d).toMatchObject({ id: 'github', name: 'GitHub' })
     expect(d.qualifierExamples.length).toBeGreaterThan(0)

@@ -2,7 +2,7 @@
  * guards: tripwireStatus omits a locked provider, or clearTripwire does not record the cleared audit event
  * tier: S
  * cites: ticket 8468f7b1 [search-port-guards.3] [search-port-guards.10]
- * tripwireStatus / clearTripwire (inventory row I-15) and the researcher flow that makes the clear
+ * tripwireStatus / clearTripwire (inventory row [I-15]) and the researcher flow that makes the clear
  * path discoverable to agents (backlog 93dee018): search returns hitl, tripwireStatus lists the
  * provider with clearWith and expiresAt, clearTripwire records a cleared audit event, the next
  * search succeeds.
@@ -12,7 +12,7 @@ import { describe, expect, it } from 'vitest'
 import { fireInput, makeEnv, auditLines, T0 } from '../../helpers/guards/guards-harness.js'
 import type { Env } from '../../helpers/guards/guards-harness.js'
 
-describe('tripwireStatus is a sparse string-keyed record [search-port-guards.3] I-15', () => {
+describe('tripwireStatus is a sparse string-keyed record [search-port-guards.3] [I-15]', () => {
   it('clear returns false when not tripped', async () => {
     const env = makeEnv()
     expect(await env.tripwire.clearTripwire('github')).toBe(false)

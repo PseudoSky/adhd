@@ -31,8 +31,8 @@
     "anchor": "gateBlocked(p.id)"
    },
    "pin": {
-    "file": "test/unit/verbs/search-gate.spec.ts",
-    "test": "tripwire lock fails fast with attempts 0"
+    "file": "test/unit/verbs/orchestration.spec.ts",
+    "test": "answers outcome hitl, attempts 0, zero Chrome calls"
    }
   },
   {
@@ -49,8 +49,8 @@
     "anchor": "export async function listProviders"
    },
    "pin": {
-    "file": "test/unit/verbs/list-providers.spec.ts",
-    "test": "lists the 12 providers"
+    "file": "test/unit/verbs/surface.spec.ts",
+    "test": "listProviders lists the twelve providers with strategies"
    }
   },
   {
@@ -65,8 +65,8 @@
     "anchor": "Resolve the provider before any gate"
    },
    "pin": {
-    "file": "test/unit/verbs/search-unknown.spec.ts",
-    "test": "unknown provider raises UNKNOWN_PROVIDER"
+    "file": "test/unit/verbs/orchestration.spec.ts",
+    "test": "UNKNOWN_PROVIDER: a provider that is not registered raises before the tripwire"
    }
   },
   {
@@ -81,8 +81,8 @@
     "anchor": "gateBlocked(p.id)"
    },
    "pin": {
-    "file": "test/unit/verbs/search-gate.spec.ts",
-    "test": "gate counts blocked calls"
+    "file": "test/unit/verbs/orchestration.spec.ts",
+    "test": "the block is counted by the gate and clearTripwire lets the next search proceed"
    }
   },
   {
@@ -97,8 +97,8 @@
     "anchor": "outcome: 'rate_limited'"
    },
    "pin": {
-    "file": "test/unit/verbs/search-cooldown.spec.ts",
-    "test": "cooldown returns rate_limited without window"
+    "file": "test/unit/verbs/orchestration.spec.ts",
+    "test": "an armed cooldown returns rate_limited, attempts 0, a retry-in hint and opens no window"
    }
   },
   {
@@ -113,8 +113,8 @@
     "anchor": "return withSearchConcurrency(async"
    },
    "pin": {
-    "file": "test/unit/verbs/search-concurrency.spec.ts",
-    "test": "bounded FIFO concurrency"
+    "file": "test/unit/verbs/orchestration.spec.ts",
+    "test": "with a cap of 2 the third concurrent search waits for a slot"
    }
   },
   {
@@ -262,8 +262,8 @@
     "anchor": "Hostile outcomes arm"
    },
    "pin": {
-    "file": "test/unit/verbs/search-hitl.spec.ts",
-    "test": "hostile outcomes arm cooldown"
+    "file": "test/unit/verbs/orchestration.spec.ts",
+    "test": "arms the cooldown and ends the call with attempts 1"
    }
   },
   {
@@ -310,8 +310,8 @@
     "anchor": "finally"
    },
    "pin": {
-    "file": "test/unit/verbs/search-cleanup.spec.ts",
-    "test": "isolated page cleanup on every path"
+    "file": "test/unit/verbs/orchestration.spec.ts",
+    "test": "an engine that throws leaves no leaked page"
    }
   },
   {
@@ -348,8 +348,8 @@
     "anchor": "export async function chromeStatus"
    },
    "pin": {
-    "file": "test/unit/verbs/chrome-status.spec.ts",
-    "test": "chromeStatus reports managed"
+    "file": "test/unit/verbs/surface.spec.ts",
+    "test": "chromeStatus keeps the managed flag"
    }
   },
   {
@@ -366,8 +366,8 @@
     "anchor": "export async function shutdownSearchChrome"
    },
    "pin": {
-    "file": "test/unit/verbs/shutdown.spec.ts",
-    "test": "soft shutdown"
+    "file": "test/unit/hosts/mcp-boot.spec.ts",
+    "test": "the hooks do the soft Chrome shutdown then exit 1"
    }
   },
   {
@@ -384,8 +384,8 @@
     "anchor": "export function providerUsage"
    },
    "pin": {
-    "file": "test/unit/verbs/describe-provider.spec.ts",
-    "test": "qualifier examples"
+    "file": "test/unit/verbs/surface.spec.ts",
+    "test": "describeProvider returns the qualifier examples and usage"
    }
   },
   {

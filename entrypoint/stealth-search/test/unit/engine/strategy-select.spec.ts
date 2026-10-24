@@ -5,7 +5,7 @@
  * The strategy pass is provider-shaped: strategy index 0 runs against the provider as given, a network strategy at
  * index above 0 runs against fallbackView(provider), and a dom strategy on a provider with no dom config (github)
  * returns outcome error without throwing, touching a page or entering a retry.
- * Inventory rows I-11 (strategy select), I-11.a (dom strategy without config errors).
+ * Inventory rows [I-11] (strategy select), [I-11.a] (dom strategy without config errors).
  * Ticket 8468f7b1 · [search-port-engine.14] · commit 591e1a7.
  */
 import { describe, expect, it } from 'vitest'

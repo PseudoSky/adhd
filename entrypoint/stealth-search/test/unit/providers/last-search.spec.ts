@@ -3,7 +3,7 @@
  * tier: S
  * cites: ticket 8468f7b1 [search-port-providers.4]
  * Google-history keyword recovery over a history fixture (a result, an empty history, a non-Google
- * URL), through the core storage.history API shape. Inventory row I-31.
+ * URL), through the core storage.history API shape. Inventory row [I-31].
  * Ticket 8468f7b1 · [search-port-providers.4].
  */
 import { readFileSync } from 'node:fs'

@@ -2,7 +2,7 @@
  * guards: more than maxConcurrent searches run at once, the queue is not FIFO, or a slot is never handed over
  * tier: S
  * cites: ticket 8468f7b1 [search-port-guards.2]
- * Per-process concurrency cap (inventory row I-20): maxConcurrent default 2, a FIFO queue,
+ * Per-process concurrency cap (inventory row [I-20]): maxConcurrent default 2, a FIFO queue,
  * <= 0 disables, slots are handed over so the cap is never overshot.
  * Ticket 8468f7b1 · [search-port-guards.2]
  */
@@ -17,7 +17,7 @@ function gate() {
 
 const tick = () => new Promise<void>((r) => setImmediate(r))
 
-describe('search concurrency cap [search-port-guards.2] I-20', () => {
+describe('search concurrency cap [search-port-guards.2] [I-20]', () => {
   it('FIFO queue honours the limit', async () => {
     const env = makeEnv()
     expect(env.guard.searchConcurrencyInfo()).toEqual({ active: 0, queued: 0, max: 2 })
