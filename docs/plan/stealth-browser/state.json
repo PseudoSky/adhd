@@ -550,10 +550,10 @@
       "end_ref": null
     },
     "plan-notes": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-10-24T01:31:23.025Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "b262677497507db569ca96e0f18c7ba47d7010c9",
       "end_ref": null
     },
     "release-readiness": {
@@ -2097,7 +2097,7 @@
     "version": "0.8.35",
     "hash": "0b6bc1f3d70e"
   },
-  "current_state": "search-tracing-fixes",
+  "current_state": "plan-notes",
   "dod_provenance": {
     "confirmed_at": "2026-10-12T23:49:38.410Z",
     "by": "pseudosky",
