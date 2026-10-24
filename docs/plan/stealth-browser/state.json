@@ -529,11 +529,11 @@
       "end_ref": "f193d55fb179001597a4f69489f4cde4b7aed10b"
     },
     "search-mcp-iserror": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-10-24T00:16:43.565Z",
-      "done_at": null,
+      "done_at": "2026-10-24T00:43:50.533Z",
       "start_ref": "ca63d9e5ff8538b515612640ab79216202843aad",
-      "end_ref": null
+      "end_ref": "de35d528611fbf2c6d2dec4b51aff9eb15fe3568"
     },
     "fix-search-build": {
       "status": "pending",
@@ -1296,6 +1296,18 @@
       "audit_criteria_total": 6,
       "by": "pseudosky",
       "note": "orchestrator-verified; guard 6/6 exit 0 standalone rerun"
+    },
+    {
+      "ts": "2026-10-24T00:43:50.533Z",
+      "from": "search-mcp-iserror",
+      "to": "search-mcp-iserror",
+      "start_ref": "ca63d9e5ff8538b515612640ab79216202843aad",
+      "end_ref": "de35d528611fbf2c6d2dec4b51aff9eb15fe3568",
+      "audit_exit": 0,
+      "audit_criteria_passed": 7,
+      "audit_criteria_total": 7,
+      "by": "pseudosky",
+      "note": "commit de35d5286; guard 7/7 rc=0"
     }
   ],
   "amendment_log": [
@@ -2073,7 +2085,7 @@
     "version": "0.8.35",
     "hash": "0b6bc1f3d70e"
   },
-  "current_state": "search-mcp-iserror",
+  "current_state": "fix-search-build",
   "dod_provenance": {
     "confirmed_at": "2026-10-12T23:49:38.410Z",
     "by": "pseudosky",
