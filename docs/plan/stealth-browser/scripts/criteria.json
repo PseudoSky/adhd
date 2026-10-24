@@ -5742,6 +5742,15 @@
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py release-readiness --only release-readiness.6",
       "expect": "exit0",
       "cwd": "repo-root"
+    },
+    {
+      "id": "release-gate-fixes.8",
+      "phase": "release",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py release-gate-fixes --only release-gate-fixes.8",
+      "expect": "exit0",
+      "cwd": "repo-root"
     }
   ]
 }

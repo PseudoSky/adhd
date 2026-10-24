@@ -60,6 +60,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 - [release-gate-fixes.6] The backlog c8-vocabulary failure is fixed at its root cause: evidence/release-gate-fixes.md has a `ROOT-CAUSE backlog: <mechanism>` line, `nx run backlog:test --skip-nx-cache` exits 0, and the end-to-end release:dry run (release-gate-fixes.4) is green for the current code.
 - [release-gate-fixes.7] Only owned paths changed by [psm:release-gate-fixes] commits (package.json, the wiring check and its two specs, the decompile-cli and backlog specs, backlog project.json, the state's evidence).
 
+- [release-gate-fixes.8] The publish executor (tools/nx-plugins/build/executors/publish/impl.js) fails a package that is already on npm at the same version with different built content, unless options.dryRun is true AND process.env.ADHD_NX_VERSION_DRY_RUN === '1', where it logs that a bump would be required and returns success with the 'dry-run' outcome; impl.spec.mjs has three cases (dryRun + env + same version/different hash succeeds, dryRun without the env fails, non-dry fails), each citing 8468f7b1 and [release-gate-fixes.8], it passes `node --test`, and check-lane-reachability exits 0.
 ---
 
 ## Reservations
