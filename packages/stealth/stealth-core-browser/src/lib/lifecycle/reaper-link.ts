@@ -143,7 +143,9 @@ export function defaultReaperEntry(source?: ReaperEntrySource): string {
  */
 export function currentModuleUrl(): string | undefined {
   if (typeof __filename === 'string' && __filename !== '') return pathToFileURL(__filename).href
-  const frame = /(file:\/\/[^\s)]+?):\d+:\d+/.exec(new Error().stack ?? '')
+  const holder: { stack?: string } = {}
+  Error.captureStackTrace(holder)
+  const frame = /(file:\/\/[^\s)]+?):\d+:\d+/.exec(holder.stack ?? '')
   return frame?.[1]
 }
 
