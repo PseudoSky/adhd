@@ -1,12 +1,14 @@
 /**
  * guards: the operations cache is written at the first run (a ~13 s cold start against the 15 s limit), a stale baked cache is trusted, or the build does not produce the baked file in dist
  * tier: S
- * cites: ticket 8468f7b1 [fix-search-build.1]
+ * cites: ticket 8468f7b1 [fix-search-build.1] [resolve-findings.4]
  * I-35: the operations are extracted at BUILD time and shipped as `dist/operations.baked.json`; a cold
  * start reads that file and never extracts. Only a stale baked file (key mismatch) re-extracts, and it
  * says so through a typed HOST_BOOT_FAILED diagnostic. The extractor is injected (a TypeScript program is
  * what costs the ~13 s) and the clock is a counter the fake extractor advances: no disk, no process.
  * Ticket 8468f7b1 · plan state fix-search-build.
+ * plan: resolve-findings
+ * teeth: red: npx vitest run test/unit/build/baked-operations.spec.ts -> exit 1; with the default bakedFile removed from buildStealthSearchPackage the default-location test extracts (calls 1)
  *
  * Criteria: [fix-search-build.1]
  */
@@ -15,7 +17,7 @@ import { join } from 'node:path'
 import type { Operation } from '@adhd/apigen-core-client'
 import { describe, expect, it } from 'vitest'
 import { HostBootFailedError } from '../../../src/host-errors.js'
-import { BAKED_OPERATIONS_FILE, bakeOperations, resolveOperations } from '../../../src/server.js'
+import { BAKED_OPERATIONS_FILE, bakeOperations, buildStealthSearchPackage, packageRoot, resolveOperations } from '../../../src/server.js'
 import type { HostFs } from '../../../src/server.js'
 
 const root = join(__dirname, '..', '..', '..')
@@ -83,13 +85,17 @@ describe('I-35 baked operations cache [fix-search-build.1]', () => {
     expect(fs.files[RUNTIME_CACHE]).toBeUndefined()
   })
 
-  it('I-35 control: with no baked file a cold start pays the whole extraction and the 15 s limit is at risk', async () => {
+  it('I-35 control: with no baked file a cold start pays the whole extraction once, then the runtime cache spares the next start', async () => {
     const fs = memoryFs({ [API]: 'declare const a: 1' })
-    const cold = slowExtractor()
-    await resolveOperations({ apiSource: API, bakedFile: BAKED, cacheFile: RUNTIME_CACHE, fs, extractor: cold.extractor })
-    expect(cold.state.calls).toBe(1)
-    expect(cold.state.clockMs).toBe(COLD_EXTRACTION_MS)
-    expect(COLD_START_LIMIT_MS - cold.state.clockMs).toBeLessThanOrEqual(2_000)
+    const first = slowExtractor()
+    await resolveOperations({ apiSource: API, bakedFile: BAKED, cacheFile: RUNTIME_CACHE, fs, extractor: first.extractor })
+    expect(first.state.calls).toBe(1)
+    expect(first.state.clockMs).toBe(COLD_EXTRACTION_MS)
+    expect(fs.files[RUNTIME_CACHE]).toBeDefined()
+    const second = slowExtractor()
+    const ops = await resolveOperations({ apiSource: API, bakedFile: BAKED, cacheFile: RUNTIME_CACHE, fs, extractor: second.extractor })
+    expect(second.state.calls).toBe(0)
+    expect(ops.map((o) => o.id)).toEqual(['search', 'fetch'])
   })
 
   it('I-35 stale baked cache: a key mismatch re-extracts once and reports a typed HOST_BOOT_FAILED diagnostic', async () => {
@@ -157,8 +163,13 @@ describe('I-35 the build produces the baked cache file in dist [fix-search-build
     expect(script).toContain('BAKED_OPERATIONS_FILE')
   })
 
-  it('I-35 the host reads the baked file next to the shipped declarations by default', () => {
-    const server = readFileSync(join(root, 'src', 'server.ts'), 'utf8')
-    expect(server).toMatch(/bakedFile:\s*options\.bakedFile \?\? join\(packageRoot\(\), BAKED_OPERATIONS_FILE\)/)
+  it('I-35 the host reads the baked file next to the shipped declarations by default', async () => {
+    const api = join(packageRoot(), 'api.d.ts')
+    const baked = join(packageRoot(), BAKED_OPERATIONS_FILE)
+    const fs = memoryFs({ [api]: 'declare const a: 1' })
+    await bakeOperations({ apiSource: api, outFile: baked, fs, extractor: slowExtractor().extractor })
+    const run = slowExtractor()
+    await buildStealthSearchPackage({ fs, extractor: run.extractor, onStale: () => undefined }).catch(() => undefined)
+    expect(run.state.calls).toBe(0) // the baked file at the default location was trusted; nothing was extracted
   })
 })

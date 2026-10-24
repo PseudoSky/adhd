@@ -39,7 +39,8 @@ export default defineConfig(() => ({
     dts({
       entryRoot: 'src',
       tsconfigPath: path.join(import.meta.dirname, 'tsconfig.lib.json'),
-      // test/ holds the test lane (specs, helpers, fixtures) and is never shipped declarations.
+      // bin/ is compiled by the build-bin target; the declarations cover src/ only (entryRoot). test/ is outside
+      // tsconfig.lib.json's include, so it never receives declarations either.
       exclude: ['bin/**'],
       pathsToAliases: false,
     }),

@@ -1,7 +1,9 @@
 /**
  * guards: UNKNOWN_PROVIDER is unreachable from the CLI or the MCP host (an enum rejects the provider first), or its span does not record the failure of the verb
  * tier: S
- * cites: ticket 8468f7b1 [search-tracing-fixes.1] [search-hosts.16] [audit-fixes.1] backlog 5152786d
+ * cites: ticket 8468f7b1 [search-tracing-fixes.1] [search-hosts.16] [audit-fixes.1] backlog 5152786d [resolve-findings.4]
+ * plan: resolve-findings
+ * teeth: red: npx vitest run test/unit/hosts/search-tracing-unknown-provider.spec.ts -> exit 1; with providerSchemaOf walking to a missing property the no-enum test fails its toBeDefined assertion
  * The REAL `runCli` and the REAL `startMcpHost` (in-memory MCP client) over the real package, with the REAL
  * `describeProvider` verb bound to it, an unknown provider id, a real sox-telemetry file sink in a temp dir and a
  * process-spawn fake (no Chrome, no socket, no subprocess). Criteria: [search-tracing-fixes.1].
@@ -81,6 +83,14 @@ function ofOp(recs: Rec[], id: string): Rec[] {
   return recs.filter((r) => r.event.startsWith(`adhd.${id}.`))
 }
 
+/** The `provider` property schema of an operation input: input.properties.data.properties.input.properties.provider. */
+function providerSchemaOf(input: unknown): unknown {
+  const child = (node: unknown, key: string): unknown => (node as Record<string, unknown> | undefined)?.[key]
+  let node = input
+  for (const key of ['properties', 'data', 'properties', 'input', 'properties', 'provider']) node = child(node, key)
+  return node
+}
+
 describe('UNKNOWN_PROVIDER reaches the verb and is recorded on the span [search-tracing-fixes.1]', () => {
   it(
     'UNKNOWN_PROVIDER cli span: an unknown provider passes the flag check, the verb throws UNKNOWN_PROVIDER, exit status follows it and the adhd span records the message of the verb',
@@ -149,10 +159,7 @@ describe('UNKNOWN_PROVIDER reaches the verb and is recorded on the span [search-
     const built = await packageFor(fakeVerbs(vi.fn))
     for (const op of ['search', 'describeProvider', 'clearTripwire']) {
       const schema = built.pkg.schemas[op] as { input?: unknown } | undefined
-      const provider = [schema?.input, 'properties', 'data', 'properties', 'input', 'properties', 'provider'].reduce(
-        (node: unknown, key) => (key === schema?.input ? node : (node as Record<string, unknown> | undefined)?.[key as string]),
-        schema?.input
-      )
+      const provider = providerSchemaOf(schema?.input)
       expect(provider, op).toBeDefined()
       expect(JSON.stringify(provider), op).not.toMatch(/"enum"|"const"|anyOf|oneOf/)
     }

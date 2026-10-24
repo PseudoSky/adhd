@@ -1,12 +1,14 @@
 /**
  * guards: an end-to-end fetch returns the wrong page, skips the SSRF policy, or breaks markdown or PDF extraction
  * tier: S
- * cites: ticket 8468f7b1 [search-usecases.1] [search-usecases.3] [search-usecases.5] [search-usecases.6]
+ * cites: ticket 8468f7b1 [search-usecases.1] [search-usecases.3] [search-usecases.5] [search-usecases.6] [resolve-findings.4]
  * Use case: an agent fetches a URL through the stealth browser. The real fetch policy, page
  * pipeline, markdown conversion and pdfjs extraction run over a scripted CDP page session (the
  * only fake) and fixture PDFs read in-process. No process, no socket, no Chrome.
  * Ported from the agent-search end-to-end fetch scenarios (I-28, I-29, I-30).
- * Ticket 8468f7b1 · [search-usecases.1] [search-usecases.3] [search-usecases.5] [search-usecases.6]
+ * Ticket 8468f7b1 · [search-usecases.1] [search-usecases.3] [search-usecases.5] [search-usecases.6] [resolve-findings.4]
+ * plan: resolve-findings
+ * teeth: red: npx vitest run test/unit/use-cases/fetch.spec.ts -> exit 1; with the extractor failure code changed from PDF_EXTRACT_FAILED the corrupt-pdf test fails its typed-code assertion
  */
 import { describe, expect, it } from 'vitest'
 import { fetchPage } from '../../../src/lib/fetch/fetch.js'
@@ -59,13 +61,15 @@ describe('a PDF response takes the PDF branch', () => {
   })
 
   it('a corrupt pdf is a typed outcome, not a crash', async () => {
-    const bad = new Uint8Array(readFixture('corrupt.pdf'))
+    // Over the 1 KiB completeness floor, so the failure comes from the extractor and not from the size check.
+    const bad = new Uint8Array(Buffer.concat([Buffer.from('%PDF-1.4\n'), Buffer.alloc(1100, 0x41), Buffer.from('\n%%EOF\n')]))
     const url = 'https://arxiv.example.org/pdf/bad.pdf'
     const w = makeWorld({ html: ['<html></html>'], pdf: bad, responses: [{ url, status: 200, mimeType: 'application/pdf' }] })
 
     const r = await fetchPage(PROVIDER, url, {}, w.deps)
 
     expect(r.outcome).toBe('error')
+    expect(r.error).toMatch(/^PDF_EXTRACT_FAILED:/)
   })
 })
 

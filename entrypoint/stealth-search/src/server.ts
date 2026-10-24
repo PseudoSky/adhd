@@ -134,7 +134,11 @@ export interface BuildPackageOptions {
   version?: string
 }
 
-/** The directory of the package root (`dist/` once built, the package directory under test). */
+/**
+ * The directory that holds `api.d.ts`, `operations.baked.json` and `package.json`. The host module is compiled to
+ * `dist/src/server.js`, so one level up from its directory is `dist/` once built (the package directory under test,
+ * where `src/` sits directly under it).
+ */
 export function packageRoot(): string {
   return join(__dirname, '..')
 }
@@ -161,20 +165,32 @@ export function keepVerbWhole(ops: readonly Operation[]): Operation[] {
 /** Bumped when the cached shape changes. */
 const OPERATIONS_CACHE_VERSION = 1
 
-function packageVersionOf(name: string): string {
+/**
+ * The installed version of `name`. A package that cannot be resolved never yields '' (which would make the cache key
+ * blind to that package's upgrades): the baker refuses with a typed HOST_BOOT_FAILED (`package-version-unresolved`),
+ * and a run-time lookup returns a marker no real version equals, so a baked cache written against a real version misses.
+ */
+export function packageVersionOf(name: string, strict = false): string {
   try {
     const req = createRequire(join(__dirname, 'server.js'))
     const parsed: unknown = JSON.parse(readFileSync(req.resolve(`${name}/package.json`), 'utf8'))
     const v = (parsed as { version?: unknown }).version
-    return typeof v === 'string' ? v : ''
-  } catch {
-    return ''
+    if (typeof v === 'string' && v !== '') return v
+    return unresolved(name, undefined, strict)
+  } catch (e) {
+    if (e instanceof HostBootFailedError) throw e
+    return unresolved(name, e, strict)
   }
 }
 
+function unresolved(name: string, cause: unknown, strict: boolean): string {
+  if (strict) throw bootFailed(`could not read the installed version of ${name}; the operations cache key depends on it`, cause, { reason: 'package-version-unresolved', package: name })
+  return `unresolved:${name}`
+}
+
 /** What an extraction depends on: the declarations, the extractor and the core the types are re-exported from. */
-function operationsCacheKey(apiSource: string, fs: HostFs): string {
-  const parts = [String(OPERATIONS_CACHE_VERSION), fs.readFile(apiSource), packageVersionOf('@adhd/apigen-core-client'), packageVersionOf('@adhd/stealth-core-browser')]
+function operationsCacheKey(apiSource: string, fs: HostFs, strict = false): string {
+  const parts = [String(OPERATIONS_CACHE_VERSION), fs.readFile(apiSource), packageVersionOf('@adhd/apigen-core-client', strict), packageVersionOf('@adhd/stealth-core-browser', strict)]
   try {
     // The declarations of the core carry the types api.d.ts re-exports: key on their content, never on a timestamp
     // (a rebuild or a cache restore changes mtimes without changing a type).
@@ -282,7 +298,7 @@ export async function resolveOperations(options: ResolveOperationsOptions): Prom
 export async function bakeOperations(options: { apiSource: string; outFile: string; fs?: HostFs; extractor?: OperationsExtractor }): Promise<{ file: string; key: string; count: number }> {
   const fs = options.fs ?? nodeHostFs
   try {
-    const key = operationsCacheKey(options.apiSource, fs)
+    const key = operationsCacheKey(options.apiSource, fs, true)
     const operations = await (options.extractor ?? defaultExtractor)({ sourceFile: options.apiSource, namespace: STEALTH_NAMESPACE, dropFileSegment: true })
     if (operations.length === 0) throw bootFailed(`the extraction of ${options.apiSource} produced no operations`, undefined, { reason: 'bake-empty', apiSource: options.apiSource })
     writeOperationsCache(options.outFile, key, operations, fs, BAKED_FILE_MODE)
@@ -487,7 +503,8 @@ export function registerPid(opts: PidRegistryOptions): PidRegistration {
   try {
     for (const line of fs.readFile(file).trim().split('\n')) {
       const other = parseInt(line, 10)
-      if (!Number.isNaN(other) && other !== pid && isAlive(other)) alive.add(other)
+      // Only a positive pid: process.kill(0, ...) and process.kill(-n, ...) address a whole process group.
+      if (Number.isInteger(other) && other > 0 && other !== pid && isAlive(other)) alive.add(other)
     }
   } catch {
     // no registry yet
@@ -655,9 +672,6 @@ export async function startMcpHost(settings: HostSettings, deps: McpHostDeps = {
   trace('pid-registered', { siblings: registration.siblings })
 
   const proc = deps.proc ?? (process as unknown as NonNullable<McpHostDeps['proc']>)
-  // The core hooks own the crash path (soft Chrome shutdown, then exit 1); the trace records where it happened.
-  proc.on('uncaughtException', (e) => trace('uncaughtException', { message: e instanceof Error ? e.message : String(e) }))
-  proc.on('unhandledRejection', (e) => trace('unhandledRejection', { message: e instanceof Error ? e.message : String(e) }))
 
   const configureManagers = deps.configureManagers ?? lifecycle.configureManagers
   configureManagers({
@@ -685,19 +699,48 @@ export async function startMcpHost(settings: HostSettings, deps: McpHostDeps = {
     set: deps.setTimer ?? ((fn: () => void, ms: number) => setTimeout(fn, ms)),
     clear: deps.clearTimer ?? ((h: unknown) => clearTimeout(h as ReturnType<typeof setTimeout>)),
   }
-  const uninstall = installHooks(lifecycle.chromeExitTarget, {
-    forceExitMs: FORCE_EXIT_MS,
-    logger: logLine,
-    proc,
-    ...(deps.exit ? { exit: deps.exit } : {}),
-    ...(deps.setTimer ? { setTimer: deps.setTimer } : {}),
-    ...(deps.clearTimer ? { clearTimer: deps.clearTimer } : {}),
-    ...(orphanWatch ? { stdinEof: true, stdin: graceStdin(stdin, STDIN_GRACE_MS, timers) } : {}),
-  })
+  let uninstallHooks: () => void
+  try {
+    uninstallHooks = installHooks(lifecycle.chromeExitTarget, {
+      forceExitMs: FORCE_EXIT_MS,
+      logger: logLine,
+      proc,
+      ...(deps.exit ? { exit: deps.exit } : {}),
+      ...(deps.setTimer ? { setTimer: deps.setTimer } : {}),
+      ...(deps.clearTimer ? { clearTimer: deps.clearTimer } : {}),
+      ...(orphanWatch ? { stdinEof: true, stdin: graceStdin(stdin, STDIN_GRACE_MS, timers) } : {}),
+    })
+  } catch (e) {
+    // The pid was registered above: a host that never started must not stay in the registry.
+    registration.unregister()
+    throw e
+  }
   trace('hooks-installed', { orphanWatch })
 
+  // The core hooks own the crash path (soft Chrome shutdown, then exit 1); the trace records where it happened. These
+  // listeners go on AFTER the hooks are installed: a listener on uncaughtException suppresses Node's own crash, so it must
+  // never exist while nothing else ends the process.
+  const traceListeners: Array<[string, (e: unknown) => void]> = [
+    ['uncaughtException', (e) => trace('uncaughtException', { message: e instanceof Error ? e.message : String(e) })],
+    ['unhandledRejection', (e) => trace('unhandledRejection', { message: e instanceof Error ? e.message : String(e) })],
+  ]
+  for (const [event, listener] of traceListeners) proc.on(event, listener as (...args: unknown[]) => void)
+  // Everything this boot installed: the exit hooks, the trace listeners and the pid registration.
+  const uninstall = (): void => {
+    for (const [event, listener] of traceListeners) proc.removeListener(event, listener as (...args: unknown[]) => void)
+    uninstallHooks()
+    registration.unregister()
+  }
+
   const build = deps.build ?? buildStealthSearchPackage
-  const built = await build({ cacheFile: join(settings.dataDir, 'cache', 'operations.json') })
+  let built: StealthSearchPackage
+  try {
+    built = await build({ cacheFile: join(settings.dataDir, 'cache', 'operations.json') })
+  } catch (e) {
+    // A failed build must not leave hooks, listeners and a pid behind for an in-process retry.
+    uninstall()
+    throw e
+  }
   trace('package-built', { tools: built.surface.length })
 
   const level = settings.logLevel ?? 'info'
@@ -722,7 +765,10 @@ export async function startMcpHost(settings: HostSettings, deps: McpHostDeps = {
     logger,
   }
   const runMcp = deps.runMcp ?? mcpPlugin.run?.bind(mcpPlugin)
-  if (!runMcp) throw bootFailed('the apigen MCP plugin declares no run()')
+  if (!runMcp) {
+    uninstall()
+    throw bootFailed('the apigen MCP plugin declares no run()')
+  }
   trace('run-invoked', { transport })
   const done = Promise.resolve()
     .then(() => runMcp(input))

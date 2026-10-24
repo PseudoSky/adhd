@@ -120,7 +120,16 @@ export function selectCandidate(candidates: readonly Candidate[]): Candidate | u
   if (candidates.length === 0) return undefined
   const limited = candidates.find((c) => RATE_LIMIT_STATUSES.includes(statusOf(c)))
   if (limited) return limited
-  const bodyOf = (c: Candidate): string => recording.decodeBody(c.response)
+  // Each body is decoded once: the rso scan and the size comparison share the decoded text.
+  const decoded = new Map<Candidate, string>()
+  const bodyOf = (c: Candidate): string => {
+    let body = decoded.get(c)
+    if (body === undefined) {
+      body = recording.decodeBody(c.response)
+      decoded.set(c, body)
+    }
+    return body
+  }
   const rso = candidates.find((c) => {
     const body = bodyOf(c)
     return body.includes('id="rso"') || body.includes('#rso')
@@ -239,6 +248,29 @@ export async function networkSearch(
   const pageUrl = captured.url || searchUrl
   const retryAfter = retryAfterOf(captured.headers)
 
+  try {
+    return processCaptured(provider, query, options, plan, deps, startedAt, { body, status, pageUrl, retryAfter, searchUrl })
+  } catch (e) {
+    // Ban rules or a parser threw on the captured body: the page was captured, so this is an engine
+    // error outcome carrying the cause, never an exception out of networkSearch.
+    deps.log(`[network] post-capture processing failed: ${messageOf(e)}`)
+    return emptyResponse(provider, query, 'error', `Processing failed: ${messageOf(e)}`, startedAt, deps)
+  }
+}
+
+interface CapturedView { body: string; status: number; pageUrl: string; retryAfter: string | undefined; searchUrl: string }
+
+/** Ban rules, the signed-out wall and the parser over one captured body. May throw; the caller converts it. */
+function processCaptured(
+  provider: ProviderConfig,
+  query: string,
+  options: NetworkSearchOptions,
+  plan: NonNullable<ProviderConfig['network']>,
+  deps: EngineDeps,
+  startedAt: number,
+  view: CapturedView,
+): SearchResponse {
+  const { body, status, pageUrl, retryAfter, searchUrl } = view
   // Ban detection: a challenge needing the user is a hitl interrupt; a rate limit is its own outcome.
   const banSignal = deps.checkBans(provider.bans, { url: pageUrl, status, body })
   if (banSignal) {
@@ -319,7 +351,7 @@ async function directFetchSearch(provider: ProviderConfig, query: string, option
       }
     }
 
-    const results = plan.parser === 'json' ? parsers.extractResultsFromJson(body, plan) : parsers.extractResultsFromHtml(body, plan)
+    const results = parseBody(body, plan)
     return {
       provider: provider.id,
       query,

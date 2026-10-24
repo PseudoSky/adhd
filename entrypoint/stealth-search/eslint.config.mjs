@@ -12,24 +12,9 @@ export default [
             '{projectRoot}/eslint.config.{js,cjs,mjs,ts,cts,mts}',
             '{projectRoot}/vite.config.{js,ts,mjs,mts}',
           ],
-          // Dependencies the later search states import; declared up front so no
-          // later state edits package.json or the lockfile (search-scaffold.4).
-          ignoredDependencies: [
-            '@adhd/stealth-core-browser',
-            '@adhd/resilience-core-tripwire',
-            '@adhd/sox-telemetry',
-            '@adhd/apigen-core-client',
-            '@adhd/apigen-engine-naming',
-            '@adhd/apigen-engine-runtime',
-            '@adhd/apigen-plugin-mcp',
-            '@adhd/apigen-plugin-cli-output',
-            '@adhd/apigen-plugin-ir-cache',
-            '@adhd/apigen-plugin-tracing',
-            '@modelcontextprotocol/sdk',
-            'commander',
-            'turndown',
-            'pdfjs-dist',
-          ],
+          // Declared but never imported here: @adhd/apigen-plugin-mcp loads the SDK at run time (its own dependency),
+          // and a consumer of stealth-search installs it next to the plugin. Every other dependency is checked.
+          ignoredDependencies: ['@modelcontextprotocol/sdk'],
         },
       ],
     },

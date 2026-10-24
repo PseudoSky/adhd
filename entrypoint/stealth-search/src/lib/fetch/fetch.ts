@@ -38,8 +38,8 @@ export const CHALLENGE_SPARSE_CHARS = 3000
 /** Default size, in bytes, of the `content: 'full'` window ([search-port-fetch.9], backlog cd05ad09). */
 export const DEFAULT_MAX_CONTENT_SIZE = 20_000
 
-/** The CDP endpoint used when none is given. */
-export const DEFAULT_CDP_HOST = '127.0.0.1:9222'
+/** The CDP endpoint (`host:port`) a fetch uses when none is given. The host flag `--cdp-host` is a bare host with its own default (see host-flags.ts). */
+export const DEFAULT_FETCH_CDP_ENDPOINT = '127.0.0.1:9222'
 
 const DEFAULT_DEADLINE_MS = 20_000
 const DEFAULT_CHALLENGE_WAIT_MS = 25_000
@@ -321,6 +321,9 @@ async function pdfBytesDirect(url: string, pinned: readonly string[], deps: Fetc
       current = verdict.url.toString()
       continue
     }
+    if (res.status >= 400) {
+      throw searchError('SEARCH_FAILED', `HTTP ${res.status} fetching ${current}`, { detail: { reason: 'direct-fetch-http-status', status: res.status } })
+    }
     if (res.body.length > PDF_MAX_BYTES) {
       throw searchError('SEARCH_FAILED', `the response for ${current} is larger than ${PDF_MAX_BYTES} bytes`, { detail: { reason: 'direct-fetch-too-large', maxBytes: PDF_MAX_BYTES } })
     }
@@ -360,7 +363,7 @@ function banOutcome(signal: string): FetchOutcome {
  */
 export async function fetchPage(provider: FetchProviderConfig, url: string, options: FetchOptions = {}, overrides: Partial<FetchDeps> = {}): Promise<FetchResult> {
   const deps: FetchDeps = { ...defaultFetchDeps(), ...overrides }
-  const cdpHost = options.cdpHost ?? DEFAULT_CDP_HOST
+  const cdpHost = options.cdpHost ?? DEFAULT_FETCH_CDP_ENDPOINT
   const deadlineMs = options.deadlineMs ?? DEFAULT_DEADLINE_MS
   const challengeWaitMs = options.challengeWaitMs ?? DEFAULT_CHALLENGE_WAIT_MS
   const wantContent = options.content === 'full'
@@ -415,6 +418,9 @@ export async function fetchPage(provider: FetchProviderConfig, url: string, opti
     const refusals: unknown[] = []
     const checkedHosts = new Set<string>([verdict.url.hostname])
     const pendingHosts = new Set<string>()
+    // Detection after connect, not prevention: the address is known only once Chrome reports it, and a response
+    // with no `remoteIPAddress` (served from cache) carries nothing to check here; the policy checks on the
+    // request URL, each redirect hop and the resolved extra hosts still apply to it.
     const checkConnected = (resp: { url?: unknown; remoteIPAddress?: unknown }): void => {
       const addr = str(resp.remoteIPAddress).replace(/^\[|\]$/g, '')
       if (addr && isForbiddenAddress(addr)) {
@@ -555,6 +561,7 @@ export async function fetchPage(provider: FetchProviderConfig, url: string, opti
       const rateLimited = mainStatus === 429
       return finish(md.markdown, rateLimited ? 'rate_limited' : 'error', htmlTitle(outerHTML) ?? finalUrl, {
         error: `SEARCH_FAILED: HTTP ${mainStatus} for ${target}`,
+        truncated: md.truncated,
       })
     }
 

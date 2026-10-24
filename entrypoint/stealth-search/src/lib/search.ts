@@ -97,6 +97,9 @@ const SNIPPET_MAX_CHARS = 300
 /** The settle deadline of the fetch pipeline when the caller's timeout is larger. */
 const FETCH_SETTLE_DEADLINE_MS = 20_000
 
+/** After the deadline, how long the call waits for the abandoned work to stop before it frees its concurrency slot anyway. */
+export const ABANDONED_WORK_GRACE_MS = 2_000
+
 type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false
 type Assert<T extends true> = T
 /** Compile-time proof that the verb's `SearchProvider` union is exactly the registry's key set. */
@@ -440,6 +443,8 @@ export function createSearchService(options: SearchServiceOptions = {}): SearchS
   const interaction = options.interaction
   const guard = createSearchGuard(config)
   const tripwire = createSearchTripwire(config)
+  /** The sign-in window kept open per provider: a sign-in wall writes no tripwire, so nothing else stops repeated searches from stacking windows. */
+  const loginWindows = new Map<string, SearchPage>()
 
   /** Wrap a page so its dispose is idempotent and the call can find every page it opened. */
   const track = (state: RunState, page: SearchPage): SearchPage => {
@@ -527,7 +532,7 @@ export function createSearchService(options: SearchServiceOptions = {}): SearchS
     const keepAfter = input.pageDisposal === 'keep'
 
     let last: SearchResponse | null = null
-    let carried = null as SearchPage | null
+    let carried: SearchPage | null = null
     let retrySleepMs = 0
 
     // A solved captcha re-searches on the page that now holds the clearance. That pass must not be lost to
@@ -587,6 +592,12 @@ export function createSearchService(options: SearchServiceOptions = {}): SearchS
           // The user's window must stay alive.
           state.kept.add(page)
           disposeAfter = false
+          if (hitl.reason === 'login_required') {
+            // One sign-in window per provider: a newer wall replaces the one still waiting for the same person.
+            const previous = loginWindows.get(p.id)
+            loginWindows.set(p.id, page)
+            if (previous && previous !== page) await previous.dispose()
+          }
           if (!interaction) return shapeEngine(raw, shape)
 
           let answer: 'solved' | 'abort'
@@ -742,7 +753,11 @@ export function createSearchService(options: SearchServiceOptions = {}): SearchS
         const first = await Promise.race([work, budget.expired])
         if (first === 'expired') {
           state.aborted = true
+          const tookMs = deps.now() - started
           await disposeLeaked(state)
+          // Hold the concurrency slot until the abandoned work has actually stopped (its pages are gone, so it fails fast),
+          // bounded so a work item that never settles cannot hold the slot forever.
+          await Promise.race([work.then(() => undefined, () => undefined), deps.sleep(ABANDONED_WORK_GRACE_MS)])
           return {
             provider: p.id,
             query: isFetch ? query : fullQuery,
@@ -751,7 +766,7 @@ export function createSearchService(options: SearchServiceOptions = {}): SearchS
             results: [],
             outcome: 'timeout',
             error: `${p.id} did not answer within the ${timeoutMs}ms deadline`,
-            tookMs: deps.now() - started,
+            tookMs,
             attempts: state.attempts,
             strategy: isFetch ? 'fetch' : resolved.strategies.primary,
           } satisfies SearchOutput

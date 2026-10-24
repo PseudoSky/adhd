@@ -1,7 +1,9 @@
 /**
  * guards: the MCP host boots with the wrong transport, skips exit-hook or pid-registry wiring, or the stdin-EOF grace is wrong
  * tier: S
- * cites: ticket 8468f7b1 [search-hosts.12] [search-hosts.13] [search-hosts.14] [search-hosts.15] [search-hosts.16]
+ * cites: ticket 8468f7b1 [search-hosts.12] [search-hosts.13] [search-hosts.14] [search-hosts.15] [search-hosts.16] [resolve-findings.4]
+ * plan: resolve-findings
+ * teeth: red: npx vitest run test/unit/hosts/mcp-boot.spec.ts -> exit 1; with the default logLevel changed from undefined to debug the defaults test fails
  * The MCP host's boot: transport selection, exit-hook and manager wiring, the boot trace, the pid
  * registry, the stdin-EOF grace and the bin body (`mcpMain`), all through the exported host
  * factories with fakes at every process edge. Ticket 8468f7b1 · plan state search-hosts.
@@ -478,7 +480,7 @@ describe('the bin body (mcpMain) [search-hosts.9] [search-hosts.10] [search-host
 })
 
 describe('defaults the MCP host boots with [search-hosts.6]', () => {
-  it('stdio, 3100 on 127.0.0.1, idle shutdown 120000 ms and the MCP logger level info when no flag is passed', () => {
+  it('stdio, 3100 on 127.0.0.1, idle shutdown 120000 ms and no explicit log level (the MCP host then logs at info) when no flag is passed', () => {
     const s = defaultHostSettings()
     expect([s.transport, s.listenPort, s.listenHost, s.idleShutdownMs, s.logLevel]).toEqual(['stdio', 3100, '127.0.0.1', 120000, undefined])
   })

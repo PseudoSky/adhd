@@ -81,7 +81,10 @@ blocks the others.
 A fetch resolves the host once and connects to the address it validated. Redirect hops and the address
 Chrome actually connected to are checked against the same forbidden-address table (loopback, private,
 link-local, carrier-grade NAT, documentation, multicast, reserved and the IPv4-in-IPv6 forms of those), so a
-public name that redirects or resolves to an internal address is refused with `FETCH_URL_REFUSED`. A direct
+public name that redirects or resolves to an internal address is refused with `FETCH_URL_REFUSED`. The
+browser-side check runs on the connection Chrome reports: it detects a forbidden connection and ends the fetch
+before any page content is read, it does not prevent the connection itself, and a document response that reports
+no remote address (for example one served from cache) is not checked at that step. A direct
 PDF download is capped at 32 MiB and 30 s.
 
 ## Safe defaults and their opt-ins

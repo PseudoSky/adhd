@@ -234,12 +234,29 @@ function findContainers(node: DomNode, pattern: DomPattern): DomNode[] {
   return results
 }
 
-/** Unwrap tracking redirects (DuckDuckGo `uddg`, a Google `q=` redirect) and protocol-relative URLs. */
-function normalizeUrl(raw: string): string {
+/**
+ * `decodeURIComponent` that cannot throw on page-supplied text: valid `%XX` runs are decoded and a malformed run
+ * (a lone `%`, a truncated multi-byte sequence) keeps its undecodable bytes as written, so one bad link never fails a search.
+ */
+export function safeDecode(s: string): string {
+  return s.replace(/(?:%[0-9A-Fa-f]{2})+/g, (run) => {
+    try {
+      return decodeURIComponent(run)
+    } catch {
+      return run.replace(/%([0-7][0-9A-Fa-f])/g, (_m, hex: string) => String.fromCharCode(parseInt(hex, 16)))
+    }
+  })
+}
+
+/**
+ * Unwrap tracking redirects (DuckDuckGo `uddg`, Google's `/url?q=`) and protocol-relative URLs. Only the `/url` redirect
+ * path carries `q=` as a target: a site's own `/search?q=foo` link is returned unchanged.
+ */
+export function normalizeUrl(raw: string): string {
   const ddgMatch = raw.match(/[?&]uddg=([^&]+)/)
-  if (ddgMatch) return decodeURIComponent(ddgMatch[1])
-  const googleMatch = raw.match(/[?&]q=([^&]+)/)
-  if (googleMatch && !raw.startsWith('http')) return decodeURIComponent(googleMatch[1])
+  if (ddgMatch) return safeDecode(ddgMatch[1] as string)
+  const googleMatch = raw.match(/^(?:https?:\/\/[^/]+)?\/url\?(?:[^#]*&)?q=([^&#]+)/)
+  if (googleMatch) return safeDecode(googleMatch[1] as string)
   if (raw.startsWith('//')) return `https:${raw}`
   // Google's newer SERP encrypted redirect.
   if (raw.startsWith('/goto?url=')) return `https://www.google.com${raw}`
@@ -295,6 +312,11 @@ export async function extractGoogleSerp(domRoot: DomNode): Promise<SearchResult[
       if (method === 'DOM.getDocument') return { root: domRoot }
       if (method === 'DOM.querySelector') return { nodeId: params?.['nodeId'] === domRoot.nodeId ? probe : 0 }
       return {}
+    },
+    // The tree was fetched already: the load event the walker waits for has, by definition, happened.
+    on: (method: string, handler: () => void): (() => void) => {
+      if (method === 'Page.loadEventFired') queueMicrotask(handler)
+      return () => undefined
     },
   }
   const parsed = await capture.walkDomTree(replay as never, { navigateUrl: 'about:blank', waitFor: 'html', timeoutMs: 1_000 }, { structural: true })

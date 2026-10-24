@@ -97,7 +97,7 @@
       "executor": "@nx/eslint:lint"
     },
     "typecheck-spec": {
-      "//": "Type-checks the SPEC corpus (entrypoint/stealth-search/tsconfig.spec.json). Closes lane-reachability rule 6 / backlog 770c0919: a tsconfig.spec.json with no compiling target lets the spec corpus carry type errors no gate can see. The ratchet baselines the pre-existing spec errors in tools/nx-plugins/build/executors/typecheck-spec/stealth-search.baseline.json (baselined, NOT excluded) and fails on any per-file increase or on include narrowing. Wired into test.dependsOn so nx affected -t test runs it.",
+      "//": "Type-checks the SPEC corpus (entrypoint/stealth-search/tsconfig.spec.json). Closes lane-reachability rule 6 / backlog 770c0919: a tsconfig.spec.json with no compiling target lets the spec corpus carry type errors no gate can see. The ratchet compares against tools/nx-plugins/build/executors/typecheck-spec/stealth-search.baseline.json, which is empty (the package was scaffolded with a clean spec corpus), so it fails on any spec type error and on include narrowing. Wired into test.dependsOn so nx affected -t test runs it.",
       "executor": "nx:run-commands",
       "cache": true,
       "inputs": [

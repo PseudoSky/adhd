@@ -36,6 +36,7 @@ import { defaultHostSettings, renderCliHelpFlags, parseHostFlags, toSearchHostCo
 import type { HostSettings, ParsedHostArgs } from './host-flags.js'
 import { StealthSearchError, exitCodeFor, searchError } from './errors.js'
 import type { GateDecision, GatePromptInfo, InteractionPort, SolvedAnswer, SolvedPromptInfo } from './lib/config.js'
+import { getProvider } from './lib/providers.js'
 import { configureSearch } from './lib/search.js'
 import type { ConfigureSearchOptions } from './lib/search.js'
 import { FORCE_EXIT_MS, OPERATION_NAMES, buildStealthSearchPackage, resolveCoreEntry, stderrLine, stderrLogger } from './server.js'
@@ -88,11 +89,18 @@ function promptAborted(why: string, detail: Record<string, unknown>): StealthSea
   return searchError('HITL_ABORTED', `no answer was possible: ${why}`, { detail })
 }
 
+/** Why no answer can be read from `stdin` right now (not a TTY, or already closed); undefined when a line can be read. */
+function unanswerable(stdin: PromptInput, detail: Record<string, unknown>): StealthSearchError | undefined {
+  if (stdin.isTTY !== true) return promptAborted('stdin is not a TTY', detail)
+  if (stdin.readableEnded === true || stdin.destroyed === true) return promptAborted('stdin is closed', detail)
+  return undefined
+}
+
 /** Read one line from `stdin`; rejects with HITL_ABORTED when stdin is not interactive or ends first. */
 function readAnswer(deps: PrompterDeps, detail: Record<string, unknown>): Promise<string> {
   const { stdin } = deps
-  if (stdin.isTTY !== true) return Promise.reject(promptAborted('stdin is not a TTY', detail))
-  if (stdin.readableEnded === true || stdin.destroyed === true) return Promise.reject(promptAborted('stdin is closed', detail))
+  const refused = unanswerable(stdin, detail)
+  if (refused) return Promise.reject(refused)
   return new Promise<string>((resolve, reject) => {
     let buffer = ''
     const cleanup = (): void => {
@@ -130,8 +138,10 @@ function readAnswer(deps: PrompterDeps, detail: Record<string, unknown>): Promis
 export function createTtyPrompter(deps: PrompterDeps): InteractionPort {
   return {
     async promptTripwireGate(info: GatePromptInfo): Promise<GateDecision> {
-      const detail = { provider: info.provider, reason: info.reason, pageUrl: info.pageUrl }
-      if (deps.stdin.isTTY !== true || deps.stdin.readableEnded === true || deps.stdin.destroyed === true) await readAnswer(deps, detail)
+      const detail = { provider: info.provider, reason: info.reason, pageUrl: info.pageUrl, trippedAt: info.trippedAt }
+      // Nothing is written to the terminal when no answer can be read.
+      const refused = unanswerable(deps.stdin, detail)
+      if (refused) throw refused
       deps.ask(
         `${info.provider} is locked (${info.reason}, tripped ${info.trippedAt}, blocked ${info.blockedCount} time(s)). ` +
           `Solve it at ${info.pageUrl || 'the provider page'} and choose: [r]etry now, [c]lear the lock, [a]bort: `
@@ -142,8 +152,9 @@ export function createTtyPrompter(deps: PrompterDeps): InteractionPort {
       return 'abort'
     },
     async confirmSolved(info: SolvedPromptInfo): Promise<SolvedAnswer> {
-      const detail = { provider: info.provider, reason: info.reason, pageUrl: info.pageUrl }
-      if (deps.stdin.isTTY !== true || deps.stdin.readableEnded === true || deps.stdin.destroyed === true) await readAnswer(deps, detail)
+      const detail = { provider: info.provider, reason: info.reason, pageUrl: info.pageUrl, strategy: info.strategy }
+      const refused = unanswerable(deps.stdin, detail)
+      if (refused) throw refused
       deps.ask(`${info.provider} needs you (${info.reason}) at ${info.pageUrl}. Solve it in the browser window, then press Enter (or type a to abort): `)
       const answer = (await readAnswer(deps, detail)).toLowerCase()
       return answer.startsWith('a') ? 'abort' : 'solved'
@@ -503,10 +514,32 @@ function isHitlResult(v: unknown): boolean {
   return typeof v === 'object' && v !== null && (v as { outcome?: unknown }).outcome === 'hitl'
 }
 
-function hitlAbortDocument(e: StealthSearchError, operation: string, verbInput: Json | undefined): Json {
+const STRATEGIES = ['network', 'dom', 'fetch'] as const
+type Strategy = (typeof STRATEGIES)[number]
+const isStrategy = (v: unknown): v is Strategy => STRATEGIES.some((s) => s === v)
+
+/** The strategy a search that never ran would have used first: the prompt's own, the caller's concrete choice, else the provider's primary. */
+function abortedStrategy(detail: Json, verbInput: Json | undefined, provider: string): Strategy {
+  if (isStrategy(detail['strategy'])) return detail['strategy']
+  if (isStrategy(verbInput?.['strategy'])) return verbInput['strategy']
+  try {
+    const primary = getProvider(provider).strategies.primary
+    if (isStrategy(primary)) return primary
+  } catch {
+    // an unknown provider has no strategy; the abort document still has to be a whole SearchOutput
+  }
+  return 'network'
+}
+
+/**
+ * The stdout document of an aborted prompt: a whole `SearchOutput` (outcome `hitl`, no attempt made, no time spent).
+ * `trippedAt` is the tripwire's own when the gate prompt carried it, else the moment of the abort.
+ */
+function hitlAbortDocument(e: StealthSearchError, operation: string, verbInput: Json | undefined, now: () => Date = () => new Date()): Json {
   const d = (e.detail ?? {}) as Json
   const provider = String(d['provider'] ?? verbInput?.['provider'] ?? '')
   const query = String(verbInput?.['query'] ?? '')
+  const strategy = abortedStrategy(d, verbInput, provider)
   return {
     provider,
     query,
@@ -514,8 +547,17 @@ function hitlAbortDocument(e: StealthSearchError, operation: string, verbInput: 
     results: [],
     outcome: 'hitl',
     attempts: 0,
+    tookMs: 0,
+    strategy,
     error: e.message,
-    hitl: { reason: String(d['reason'] ?? 'unknown'), pageUrl: String(d['pageUrl'] ?? ''), provider, query },
+    hitl: {
+      reason: String(d['reason'] ?? 'unknown'),
+      pageUrl: String(d['pageUrl'] ?? ''),
+      provider,
+      query,
+      trippedAt: typeof d['trippedAt'] === 'string' && d['trippedAt'] !== '' ? d['trippedAt'] : now().toISOString(),
+      strategy,
+    },
     operation,
   }
 }
@@ -627,6 +669,11 @@ export async function runCli(argv: readonly string[], deps: CliDeps = {}): Promi
     const entry = surface.find((s) => s.operation === parsed.operation)
     if (!entry) throw flagInvalid(parsed.operation, `unknown operation (one of ${OPERATION_NAMES.join(', ')})`)
     const shape = inputShape(built, entry.operation)
+    if (parsed.help && !deps.parse) {
+      // Now that the operation's flags are known, a `-h` that is the value of one (`search --query -h`) is not a help request.
+      const valueFlags = new Set(shape.properties.filter((p) => p.type !== 'boolean').map((p) => `--${p.flag}`))
+      parsed = parseHostFlags(argv, 'cli', { valueFlags })
+    }
     if (parsed.help) return await finish({ stdout: renderOperationHelp(entry, shape), stderr: undefined, code: 0 })
     let verbInput: Json | undefined
     try {

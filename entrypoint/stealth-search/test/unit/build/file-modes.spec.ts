@@ -1,7 +1,9 @@
 /**
  * guards: the baked operations file ships 0600 (unreadable to other users of a shared install, with a silent slow fallback), the boot trace is written with default permissions, or an unreadable baked file falls back without a word
  * tier: S
- * cites: ticket 8468f7b1 [audit-fixes.1] [fix-search-build.1]
+ * cites: ticket 8468f7b1 [audit-fixes.1] [fix-search-build.1] [resolve-findings.4]
+ * plan: resolve-findings
+ * teeth: red: npx vitest run test/unit/build/file-modes.spec.ts -> exit 1; with the global fs stub answering 'declarations' for package.json the strict bake refuses the unreadable version
  * Pre-review P5 and P37 through the real `nodeHostFs` over a mocked `node:fs` (no disk): the baked artifact is
  * written 0644 and chmod'ed, the runtime state files (operations cache, boot trace) stay 0600 whether or not the
  * file already existed, and a baked file that exists but cannot be read reports a typed HOST_BOOT_FAILED.
@@ -25,9 +27,14 @@ import { BAKED_FILE_MODE, PRIVATE_FILE_MODE, bakeOperations, createBootTrace, no
 const op = { id: 'search', kind: 'action', path: [{ raw: 'search', words: ['search'] }] } as unknown as Operation
 const extractor = async (): Promise<Operation[]> => [op]
 
+/** The files the cache key reads: package.json files carry a version (the baker refuses an unreadable one), everything else is the declarations. */
+function readStub(path: unknown): string {
+  return String(path).endsWith('package.json') ? '{"version":"1.2.3"}' : 'declarations'
+}
+
 beforeEach(() => {
   for (const f of Object.values(fsm)) f.mockReset()
-  fsm.readFileSync.mockReturnValue('declarations')
+  fsm.readFileSync.mockImplementation(readStub)
 })
 
 describe('file modes of what the host writes [audit-fixes.1]', () => {
@@ -71,7 +78,7 @@ describe('an unreadable baked file is reported [audit-fixes.1]', () => {
   it('P5 unreadable: EACCES on the baked file raises a typed baked-cache-unreadable diagnostic and extraction runs', async () => {
     fsm.readFileSync.mockImplementation((path: string) => {
       if (String(path).endsWith('operations.baked.json')) throw Object.assign(new Error('EACCES'), { code: 'EACCES' })
-      return 'declarations'
+      return readStub(path)
     })
     const seen: unknown[] = []
     const ops = await resolveOperations({ apiSource: '/pkg/dist/api.d.ts', bakedFile: '/pkg/dist/operations.baked.json', extractor, onStale: (e) => void seen.push(e) })
@@ -83,7 +90,7 @@ describe('an unreadable baked file is reported [audit-fixes.1]', () => {
   it('P5 missing: a baked file that does not exist stays silent (a source checkout has none)', async () => {
     fsm.readFileSync.mockImplementation((path: string) => {
       if (String(path).endsWith('operations.baked.json')) throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' })
-      return 'declarations'
+      return readStub(path)
     })
     const seen: unknown[] = []
     await resolveOperations({ apiSource: '/pkg/dist/api.d.ts', bakedFile: '/pkg/dist/operations.baked.json', extractor, onStale: (e) => void seen.push(e) })

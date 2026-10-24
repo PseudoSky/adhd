@@ -14,7 +14,7 @@
  * Ticket 8468f7b1 · plan state search-verbs · [search-verbs.3]
  */
 
-/** Marker for a value that was removed. Never contains the removed text. */
+/** The property that carries a cookie's value; the one property redaction removes. */
 const VALUE_KEY = 'value'
 
 function isRecord(v: unknown): v is Record<string, unknown> {
@@ -26,24 +26,15 @@ function isCookie(v: unknown): v is Record<string, unknown> {
   return isRecord(v) && typeof v['name'] === 'string' && VALUE_KEY in v
 }
 
-function stripCookie(cookie: Record<string, unknown>): Record<string, unknown> {
-  const out: Record<string, unknown> = {}
-  for (const [k, v] of Object.entries(cookie)) if (k !== VALUE_KEY) out[k] = v
-  return out
-}
-
+/** Copy `node`, removing the `value` of every cookie-shaped object at any depth: the root, an array element, a property of any key. */
 function walk(node: unknown): unknown {
   if (Array.isArray(node)) return node.map(walk)
   if (!isRecord(node)) return node
+  const strip = isCookie(node)
   const out: Record<string, unknown> = {}
   for (const [k, v] of Object.entries(node)) {
-    if (k === 'cookies' && Array.isArray(v)) {
-      out[k] = v.map((c) => (isCookie(c) ? stripCookie(c) : walk(c)))
-    } else if (isCookie(v)) {
-      out[k] = stripCookie(v)
-    } else {
-      out[k] = walk(v)
-    }
+    if (strip && k === VALUE_KEY) continue
+    out[k] = walk(v)
   }
   return out
 }
@@ -51,8 +42,8 @@ function walk(node: unknown): unknown {
 /**
  * A copy of `value` with every cookie value removed. Cookie names, hosts, every other attribute
  * and every count (`cookieCount`, the length of a `cookies` array) are kept. A cookie is an
- * object with a string `name` and a `value`; one found under a `cookies` array or as a nested
- * object loses its `value`. The input is never modified.
+ * object with a string `name` and a `value`; one found anywhere (the root, an array element under any key,
+ * a nested property) loses its `value`. The input is never modified.
  */
 export function redactCookieValues<T>(value: T): T {
   return walk(value) as T

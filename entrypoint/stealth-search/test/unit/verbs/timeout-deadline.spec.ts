@@ -1,7 +1,9 @@
 /**
  * guards: a hung provider outlives timeoutMs, leaks its concurrency slot or page, or arms the cooldown
  * tier: S
- * cites: ticket 8468f7b1 [search-verbs.11]
+ * cites: ticket 8468f7b1 [search-verbs.11] [resolve-findings.4]
+ * plan: resolve-findings
+ * teeth: red: nx run stealth-search:test --skip-nx-cache -- test/unit/verbs/timeout-deadline.spec.ts -> exit 1 (1 failed) with the wait for the abandoned work removed from the deadline branch of search.ts; the result is delivered before the engine stopped.
  * A hung provider cannot outlive the deadline: one overall `timeoutMs` (default 30000, shared across attempts,
  * never the 90 s of the old tool) ends a search whose engine never settles with outcome `timeout`, the
  * concurrency slot is released, the page is disposed and the cooldown is not armed.
@@ -123,5 +125,44 @@ describe('861571da 224e7a44: a hung github engine resolves with outcome timeout 
     const pending = world.svc.search(input())
     await vi.advanceTimersByTimeAsync(45_000)
     expect(await pending).toMatchObject({ outcome: 'success', attempts: 2 })
+  })
+})
+
+describe('8468f7b1 [resolve-findings.4] F46: the slot is held until the abandoned work has stopped', () => {
+  it('a search whose engine stops once its page is disposed returns only after the engine has stopped; a hung engine is waited for at most the grace', async () => {
+    vi.useRealTimers()
+    const order: string[] = []
+    const core = makeFakeCore(order)
+    let release: () => void = () => undefined
+    const engine = scriptedEngine(async () => {
+      // An engine that keeps working until its page is closed, then needs a moment to wind down.
+      await new Promise<void>((resolve) => { release = resolve })
+      order.push('engine-stopped')
+      return response()
+    })
+    const sleeps: Array<() => void> = []
+    const world = makeWorld({
+      strategies: engine.strategies,
+      core,
+      config: { maxConcurrent: 1 },
+      // A controllable clock: the deadline sleep and the grace sleep are released by the test.
+      sleep: (ms) => new Promise<void>((resolve) => { sleeps.push(resolve); order.push(`sleep:${ms}`) }),
+    })
+    const pending = world.svc.search(input({ timeoutMs: 1 }))
+    // the deadline (Budget) uses real timers: wait for it, then let the engine stop.
+    await new Promise((r) => setTimeout(r, 20))
+    expect(order).toContain('dispose')
+    expect(order.some((e) => e.startsWith('sleep:2000'))).toBe(true)
+    let done = false
+    void pending.then(() => { done = true })
+    await new Promise((r) => setTimeout(r, 5))
+    expect(done).toBe(false) // still waiting for the abandoned engine
+    release()
+    const out = await pending
+    order.push('result')
+    expect(out.outcome).toBe('timeout')
+    expect(order.indexOf('dispose')).toBeLessThan(order.indexOf('engine-stopped'))
+    expect(order.indexOf('engine-stopped')).toBeLessThan(order.indexOf('result'))
+    for (const s of sleeps) s()
   })
 })

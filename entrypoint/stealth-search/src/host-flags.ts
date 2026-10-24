@@ -203,6 +203,12 @@ export function defaultHostSettings(): HostSettings {
   }
 }
 
+/** Optional knowledge the caller has of the operation's own flags. */
+export interface ParseHostFlagsOptions {
+  /** The operation flags (`--query`) that take a value: a `-h` or `--help` right after one is that value, not a help request. */
+  valueFlags?: ReadonlySet<string>
+}
+
 /** What `parseHostFlags` returns. */
 export interface ParsedHostArgs {
   settings: HostSettings
@@ -226,7 +232,7 @@ function optionKey(name: string): string {
  * without its value raises HOST_FLAG_INVALID before anything else runs. The host flags may stand
  * before or after the operation token; the operation's own flags are returned untouched.
  */
-export function parseHostFlags(argv: readonly string[], _host: HostKind): ParsedHostArgs {
+export function parseHostFlags(argv: readonly string[], _host: HostKind, options: ParseHostFlagsOptions = {}): ParsedHostArgs {
   const program = new Command()
   program
     .exitOverride()
@@ -265,8 +271,17 @@ export function parseHostFlags(argv: readonly string[], _host: HostKind): Parsed
     given.add(spec.key)
   }
   const tokens = [...program.args]
-  const help = tokens.includes('--help') || tokens.includes('-h')
-  const rest = tokens.filter((t) => t !== '--help' && t !== '-h')
+  const valueFlags = options.valueFlags ?? new Set<string>()
+  // A help token is a help request unless it is the VALUE of an operation flag (`search --query -h`) or follows a `--`.
+  const isHelp = (t: string, i: number): boolean => {
+    if (t !== '--help' && t !== '-h') return false
+    const dd = tokens.indexOf('--')
+    if (dd !== -1 && i > dd) return false
+    const prev = tokens[i - 1]
+    return !(prev !== undefined && valueFlags.has(prev))
+  }
+  const help = tokens.some(isHelp)
+  const rest = tokens.filter((t, i) => !isHelp(t, i))
   const first = rest[0]
   const operation = first !== undefined && !first.startsWith('-') ? first : undefined
   return { settings, given, operation, rest: operation === undefined ? rest : rest.slice(1), help }

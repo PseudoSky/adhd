@@ -1,7 +1,9 @@
 /**
  * guards: PDF text extraction fails or returns wrong text for fixture bytes
  * tier: S
- * cites: ticket 8468f7b1 [search-port-fetch.4] [search-port-fetch.1] [audit-fixes.4]
+ * cites: ticket 8468f7b1 [search-port-fetch.4] [search-port-fetch.1] [audit-fixes.4] [resolve-findings.4]
+ * plan: resolve-findings
+ * teeth: red: nx run stealth-search:test --skip-nx-cache -- test/unit/fetch/fetch-pdf.spec.ts -> exit 1 (1 failed) with the specifier allowlist removed from nativeImportViaFunction; the child_process case resolves instead of rejecting.
  * PDF text extraction through the real pdfjs on fixture bytes read in-process (inventory [I-30]).
  * Ticket 8468f7b1 · [search-port-fetch.4] [search-port-fetch.1]
  */
@@ -10,7 +12,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { isSearchError } from '../../../src/errors.js'
-import { createPdfjsLoader, extractPdfText, PDF_MAX_PAGES } from '../../../src/lib/fetch/pdf.js'
+import { createPdfjsLoader, extractPdfText, nativeImportViaFunction, PDF_MAX_PAGES } from '../../../src/lib/fetch/pdf.js'
 import { PDF_SENTENCE, readFixture } from '../../helpers/fetch/harness.js'
 
 describe('pdf text extraction', () => {
@@ -106,11 +108,27 @@ describe('[audit-fixes.4] P35 the pdfjs loader avoids code generation from strin
 
   it('the Function constructor appears only inside the lazily-called native import, never at module load', () => {
     const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'src', 'lib', 'fetch', 'pdf.ts'), 'utf8')
-    const code = src.split('\n').filter((l) => !l.trimStart().startsWith('*') && !l.trimStart().startsWith('//'))
-    const sites = code.map((l, i) => ({ l, i })).filter(({ l }) => l.includes('new Function('))
+    const code = src.split('\n').filter((l) => !l.trimStart().startsWith('*') && !l.trimStart().startsWith('//')).join('\n')
+    const sites = [...code.matchAll(/new Function\(/g)]
     expect(sites).toHaveLength(1)
-    const fnStart = code.findIndex((l) => l.includes('function nativeImportViaFunction'))
-    expect(sites[0]?.i).toBeGreaterThan(fnStart)
-    expect(sites[0]?.i).toBeLessThan(fnStart + 4)
+    // The site must sit inside the body of nativeImportViaFunction (found by brace matching, not by line distance).
+    const start = code.indexOf('function nativeImportViaFunction')
+    const open = code.indexOf('{', code.indexOf(')', start))
+    let depth = 0
+    let end = open
+    for (let i = open; i < code.length; i++) {
+      if (code[i] === '{') depth++
+      if (code[i] === '}' && --depth === 0) {
+        end = i
+        break
+      }
+    }
+    expect(start).toBeGreaterThan(-1)
+    expect(sites[0]?.index).toBeGreaterThan(open)
+    expect(sites[0]?.index).toBeLessThan(end)
+  })
+
+  it('the native import accepts only the pdfjs specifier, so no caller data can reach the generated function', async () => {
+    await expect(nativeImportViaFunction('node:child_process')).rejects.toMatchObject({ code: 'PDF_EXTRACT_FAILED' })
   })
 })

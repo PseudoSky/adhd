@@ -29,6 +29,15 @@ export const OPERATIONS_CACHE = join(tmpdir(), 'stealth-search-hosts-spec-operat
  * `pattern` and that the machine-readable `code` is in it: the whole text for an ApiError (`<code>: <message>`), or
  * the token right after the canonical code for a typed library error (`<canonical>: <CODE>: <message>`).
  */
+/** A schema rejection reaches an MCP client as a tool result: `isError`, `invalid_argument: ...` text and the code under `_meta['adhd/error']`. */
+export async function expectInvalidArgument(call: Promise<unknown>, pattern: RegExp): Promise<void> {
+  const res = (await call) as { isError?: boolean; content?: Array<{ text?: string }>; _meta?: Record<string, unknown> }
+  expect(res.isError).toBe(true)
+  expect(res.content?.[0]?.text).toMatch(/^invalid_argument: /)
+  expect(res.content?.[0]?.text).toMatch(pattern)
+  expect(res._meta?.['adhd/error']).toMatchObject({ code: 'invalid_argument' })
+}
+
 export async function expectMcpToolError(call: Promise<unknown>, pattern: RegExp, code: string): Promise<void> {
   const res = (await call) as { isError?: boolean; content?: Array<{ text?: string }>; _meta?: Record<string, unknown> }
   expect(res.isError).toBe(true)
@@ -41,7 +50,7 @@ export async function expectMcpToolError(call: Promise<unknown>, pattern: RegExp
 /** A generous bound for the first (extracting) build of a spec file. */
 export const BUILD_TIMEOUT_MS = 180_000
 
-/** A spy factory (`vi.fn` of the calling spec): the harness itself imports no test runner. */
+/** A spy factory (`vi.fn` of the calling spec): the harness takes its spies from the spec and imports only `expect` from the runner. */
 export type SpyFactory = (impl: (...args: never[]) => unknown) => (...args: never[]) => unknown
 
 export type FakeVerbs = { [K in (typeof OPERATION_NAMES)[number]]: (...args: never[]) => unknown } & Verbs

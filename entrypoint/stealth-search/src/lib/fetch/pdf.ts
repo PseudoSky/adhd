@@ -60,9 +60,14 @@ export interface PdfjsImports {
  * `ERR_REQUIRE_ASYNC_MODULE` (Node 22.5 to 22.11, where `require(esm)` is not available). On Node 22.12 or newer
  * and under vitest the plain import succeeds and no code is ever generated from a string, so a host running with
  * `--disallow-code-generation-from-strings` or a strict CSP is unaffected there.
+ * The generated body is a constant; the specifier is a PARAMETER of the generated function, never spliced into its
+ * source, and only the pdfjs specifier is accepted, so no data ever becomes code.
  * Evidence: docs/plan/stealth-browser/evidence/split/u-pdf.json (probe U-PDF, [search-port-fetch.1]).
  */
-function nativeImportViaFunction(specifier: string): Promise<unknown> {
+export function nativeImportViaFunction(specifier: string): Promise<unknown> {
+  if (specifier !== PDFJS_SPECIFIER) {
+    return Promise.reject(searchError('PDF_EXTRACT_FAILED', `the native import is reserved for ${PDFJS_SPECIFIER}, not ${JSON.stringify(specifier)}`, { detail: { specifier } }))
+  }
   const run = new Function('specifier', 'return import(specifier)') as (spec: string) => Promise<unknown>
   return run(specifier)
 }

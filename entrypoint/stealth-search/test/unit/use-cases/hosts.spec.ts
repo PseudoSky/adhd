@@ -1,7 +1,9 @@
 /**
  * guards: an agent driving the MCP host or the CLI gets a different surface, a spawned process, or an unredacted cookie value
  * tier: S
- * cites: ticket 8468f7b1 [search-usecases.1] [search-usecases.4] [search-usecases.5] [search-usecases.6] [search-mcp-iserror.1]
+ * cites: ticket 8468f7b1 [search-usecases.1] [search-usecases.4] [search-usecases.5] [search-usecases.6] [search-mcp-iserror.1] [resolve-findings.4]
+ * plan: resolve-findings
+ * teeth: red: npx vitest run test/unit/hosts/mcp-inprocess.spec.ts test/unit/use-cases/hosts.spec.ts -> exit 1; with the shared expectInvalidArgument checking another code both specs' schema-rejection tests fail
  * Use case: an agent drives stealth-search through the MCP host, a person through the CLI. The REAL
  * `startMcpHost` and `runCli` boot the REAL apigen package over an in-memory MCP transport pair and
  * fake process edges (stdout, exit, stdin, the exit-hook installer); the real search service runs over
@@ -39,19 +41,10 @@ import { defaultHostSettings } from '../../../src/host-flags.js'
 import { startMcpHost } from '../../../src/server.js'
 import type { McpHostDeps, McpHostHandle, Verbs } from '../../../src/server.js'
 import { input, makeFakeCore, makeWorld, response, scriptedEngine } from '../../helpers/verbs/harness.js'
-import { BUILD_TIMEOUT_MS, FakeStdin, cliHarness, expectMcpToolError, fakeVerbs, packageFor, trippedWorld, wire } from '../../helpers/hosts/host-harness.js'
+import { BUILD_TIMEOUT_MS, FakeStdin, cliHarness, expectInvalidArgument, expectMcpToolError, fakeVerbs, packageFor, trippedWorld, wire } from '../../helpers/hosts/host-harness.js'
 
 const TOOLS = ['search', 'listProviders', 'describeProvider', 'tripwireStatus', 'clearTripwire', 'getPageContext', 'chromeStatus', 'launchChrome', 'shutdownChrome', 'listPageTargets', 'checkChromeActivity'].map((n) => `stealth_${n}`)
 
-
-/** ADR-0018 D2: an `ApiError` is a tool result with `isError: true`, text `<code>: <message>` and `_meta['adhd/error'].code`. */
-async function expectInvalidArgument(call: Promise<unknown>, pattern: RegExp): Promise<void> {
-  const res = (await call) as { isError?: boolean; content?: Array<{ text?: string }>; _meta?: Record<string, unknown> }
-  expect(res.isError).toBe(true)
-  expect(res.content?.[0]?.text).toMatch(/^invalid_argument: /)
-  expect(res.content?.[0]?.text).toMatch(pattern)
-  expect(res._meta?.['adhd/error']).toMatchObject({ code: 'invalid_argument' })
-}
 
 const sessions: Array<{ handle: McpHostHandle; client: Client }> = []
 afterEach(async () => {

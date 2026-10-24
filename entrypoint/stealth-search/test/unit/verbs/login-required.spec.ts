@@ -1,7 +1,9 @@
 /**
  * guards: a login_required hitl writes a tripwire, arms a cooldown, or skips navigating to the sign-in URL before asking
  * tier: S
- * cites: ticket 8468f7b1 [search-verbs.13]
+ * cites: ticket 8468f7b1 [search-verbs.13] [resolve-findings.4]
+ * plan: resolve-findings
+ * teeth: red: nx run stealth-search:test --skip-nx-cache -- test/unit/verbs/login-required.spec.ts -> exit 1 (1 failed) with the per-provider sign-in window replacement removed from search.ts; three windows stay open.
  * The login interrupt flows through the verb without a lock (commit 591e1a7, delta report row 4):
  * a `login_required` hitl writes no tripwire and arms no cooldown, the revealed page is navigated to
  * the sign-in URL before the human is asked, a stored `login_required` lock never gates (and a success
@@ -57,6 +59,15 @@ describe('591e1a7: a login_required hitl writes no tripwire and arms no cooldown
     // the next search is not gated: login_required left no lock to fail fast on
     expect((await world.svc.search(input({ qualifier: 'type:code' }))).attempts).toBe(1)
     expect(world.core.opened).toHaveLength(2)
+  })
+
+  it('F143 repeated sign-in walls without an interaction port keep ONE sign-in window per provider, not one per search', async () => {
+    const order: string[] = []
+    const world = makeWorld({ core: makeFakeCore(order), strategies: scriptedEngine(hitlResponse('login_required', SIGN_IN)).strategies })
+    for (let i = 0; i < 3; i++) await world.svc.search(input({ qualifier: 'type:code' }))
+    expect(world.core.pages).toHaveLength(3)
+    expect(world.core.pages.map((p) => p.disposed)).toEqual([1, 1, 0])
+    expect(world.core.live).toBe(1)
   })
 
   it('confirmSolved that rejects on a closed stdin takes the abort path: the hitl response is returned, not thrown, and the window stays open', async () => {

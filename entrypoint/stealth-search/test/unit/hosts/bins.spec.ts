@@ -1,7 +1,9 @@
 /**
  * guards: a bin loads the host graph before the Node preflight, reaches telemetry outside './telemetry.js', or a host file reads the environment
  * tier: S
- * cites: ticket 8468f7b1 [audit-fixes.1] [search-hosts.9] [search-hosts.11] [search-hosts.15] [search-hosts.16] [search-hosts.19]
+ * cites: ticket 8468f7b1 [audit-fixes.1] [resolve-findings.4] [search-hosts.9] [search-hosts.11] [search-hosts.15] [search-hosts.16] [search-hosts.19]
+ * plan: resolve-findings
+ * teeth: red: npx vitest run test/unit/hosts/bins.spec.ts -> exit 1; with bin/mcp.ts exiting 1 instead of 79 on a rejected host the P31 rejection assertion fails
  * The two bins: the Node >= 22.5 preflight runs before the host graph is loaded, telemetry is
  * reached only through './telemetry.js', and no host file reads the environment. Ticket 8468f7b1 ·
  * plan state search-hosts.
@@ -44,7 +46,9 @@ for (const bin of ['bin/cli.ts', 'bin/mcp.ts']) {
     it('[audit-fixes.1] P31 the bin never discards the host promise: it applies the status and handles a rejection', () => {
       const code = codeOf(read(bin))
       expect(code).toMatch(/(?:runCli|mcpMain)\([\s\S]*?\)\.then\(/)
-      if (bin === 'bin/cli.ts') expect(code).toMatch(/process\.exitCode = code/)
+      expect(code).toMatch(/process\.exitCode = code/)
+      // F51/F87: a rejection ends with one typed HOST_BOOT_FAILED line and its exit status, not an unhandled rejection.
+      expect(code).toMatch(/\(e: unknown\) => \{[\s\S]*HOST_BOOT_FAILED: [\s\S]*process\.exitCode = 79/)
     })
 
     it('the comparison against 22.5 comes before any require of the host graph, and telemetry is reached through ./telemetry.js only', () => {

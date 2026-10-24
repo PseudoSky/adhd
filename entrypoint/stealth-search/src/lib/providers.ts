@@ -167,9 +167,10 @@ export const PROVIDERS = {
       extraWaitMs: 0,
     },
     dom: {
-      waitFor: '._9d3f0e0e',
+      // Structural, not the build-hashed CSS-module class: a result card is an anchor to /package/<name>.
+      waitFor: 'a[href^="/package/"]',
       extract: {
-        container: { tag: 'A', attrs: { class: /_9d3f0e0e/ } },
+        container: { tag: 'A', attrs: { href: /^\/package\// } },
         title: { tag: 'H3' },
         link: { tag: 'A', attrs: { href: /^\/package\// }, attr: 'href' },
         snippet: { tag: 'P' },
@@ -181,7 +182,7 @@ export const PROVIDERS = {
     retry: { maxAttempts: 3, baseDelayMs: 2000, onCaptcha: 'abort', onRateLimit: 'retry', onTimeout: 'retry', onBan: 'abort' },
   },
 
-  // ─── GitHub (JS-rendered SPA — DOM strategy with API fallback) ───────────
+  // ─── GitHub (REST API primary, embedded-JSON page fallback — no DOM strategy) ───
   github: {
     id: 'github',
     name: 'GitHub',
@@ -324,7 +325,7 @@ export const PROVIDERS = {
     retry: { maxAttempts: 2, baseDelayMs: 2000, onCaptcha: 'abort', onRateLimit: 'retry', onTimeout: 'retry', onBan: 'abort' },
   },
 
-  // ─── PyPI (public JSON API) ────────────────────────────────────────────────
+  // ─── PyPI (rendered search HTML: network capture primary, DOM fallback) ──────
   pypi: {
     id: 'pypi',
     name: 'PyPI',

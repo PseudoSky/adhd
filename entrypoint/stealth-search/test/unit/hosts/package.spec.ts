@@ -1,18 +1,20 @@
 /**
  * guards: the apigen package misses a verb, mis-inlines a $ref, or the operations cache is stale or rebuilt needlessly
  * tier: S
- * cites: ticket 8468f7b1 [audit-fixes.1] [search-hosts.4] [search-hosts.7] [search-hosts.8] [search-hosts.16]
+ * cites: ticket 8468f7b1 [audit-fixes.1] [search-hosts.4] [search-hosts.7] [search-hosts.8] [search-hosts.16] [resolve-findings.4]
  * The apigen package of the eleven verbs both hosts serve: extraction from `src/api.ts`, $ref
  * resolution inside each schema, naming, descriptions, the launchChrome hardening and the operations cache. Ticket
  * 8468f7b1 · plan state search-hosts.
  *
+ * plan: resolve-findings
+ * teeth: red: npx vitest run test/unit/hosts/package.spec.ts -t 'P1: the launchChrome input' -> exit 1; with the beforeAll build removed the later tests read an unassigned package (TypeError on undefined)
  * Criteria: [search-hosts.4] [search-hosts.7] [search-hosts.8] [search-hosts.16] · inventory row
  * I-35 ($ref inlining, package build, IR cache).
  */
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterAll, describe, expect, it, vi } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import * as api from '../../../src/api.js'
 import { OPERATION_DESCRIPTIONS, OPERATION_NAMES, buildStealthSearchPackage, keepVerbWhole } from '../../../src/server.js'
 import type { StealthSearchPackage, Verbs } from '../../../src/server.js'
@@ -23,10 +25,14 @@ afterAll(() => rmSync(scratch, { recursive: true, force: true }))
 
 describe('the package of the eleven verbs [search-hosts.4] [search-hosts.8]', () => {
   let built: StealthSearchPackage
+  // One build shared by the whole block, made before any test runs, so every test passes in isolation.
+  beforeAll(async () => {
+    built = await packageFor(fakeVerbs(vi.fn))
+  }, BUILD_TIMEOUT_MS)
+
   it(
     'extracts exactly the eleven verbs of src/api.ts, in help order, with whole-verb MCP names stealth_<verb> and the apigen CLI route `stealth <verb>` (the host takes the bare verb)',
     async () => {
-      built = await packageFor(fakeVerbs(vi.fn))
       expect(built.surface.map((s) => s.operation)).toEqual([...OPERATION_NAMES])
       expect(built.surface.map((s) => s.mcpTool)).toEqual(OPERATION_NAMES.map((n) => `stealth_${n}`))
       expect(built.surface.map((s) => s.cliPath.join(' '))).toEqual(OPERATION_NAMES.map((n) => `stealth ${n}`))

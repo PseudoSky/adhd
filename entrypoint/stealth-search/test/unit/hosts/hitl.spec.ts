@@ -1,7 +1,9 @@
 /**
  * guards: a closed stdin ends a search in silence, or a login wall or captcha exits 0 with empty stdout
  * tier: S
- * cites: ticket 8468f7b1 [search-hosts.22] [search-hosts.19] [search-hosts.16]
+ * plan: resolve-findings
+ * teeth: red: nx run stealth-search:test --skip-nx-cache -- test/unit/hosts/hitl.spec.ts -> exit 1 (1 failed) with tookMs and strategy removed from hitlAbortDocument; the whole-SearchOutput assertion of the closed-stdin case fails.
+ * cites: ticket 8468f7b1 [resolve-findings.4] [search-hosts.22] [search-hosts.19] [search-hosts.16]
  * A closed stdin never ends a search in silence: the real CLI runner, the real prompter and the
  * real search service over a scripted engine and a memory file system. Ticket 8468f7b1 · plan state
  * search-hosts.
@@ -39,6 +41,11 @@ describe('closed stdin on the tripwire gate prompt [search-hosts.22]', () => {
       expect(doc).toMatchObject({ outcome: 'hitl', attempts: 0, provider: 'github', query: 'vite' })
       expect(doc['hitl']).toMatchObject({ reason: 'captcha', provider: 'github', query: 'vite' })
       expect((doc['hitl'] as Record<string, unknown>)['pageUrl']).toEqual(expect.any(String))
+      // F88: the document is a whole SearchOutput / SearchHitl, not a partial one.
+      expect(doc).toMatchObject({ tookMs: 0, strategy: expect.stringMatching(/^(network|dom|fetch)$/) })
+      const hitl = doc['hitl'] as Record<string, unknown>
+      expect(Number.isNaN(Date.parse(String(hitl['trippedAt'])))).toBe(false)
+      expect(hitl['strategy']).toBe(doc['strategy'])
       expect(h.stderr).toEqual([])
       expect(engine.calls).toHaveLength(0)
       expect(world.core.opened).toHaveLength(openedBefore)

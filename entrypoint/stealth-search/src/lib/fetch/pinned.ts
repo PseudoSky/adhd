@@ -52,6 +52,8 @@ export function pinnedLookup(address: string): (host: string, options: { all?: b
 export const pinnedGet: DirectFetch = (url, address, opts) =>
   new Promise<DirectResponse>((resolve, reject) => {
     const u = new URL(url)
+    // WHATWG URLs keep the brackets of an IPv6 literal; net.isIP, TLS server names and the socket want the bare address.
+    const host = u.hostname.replace(/^\[|\]$/g, '')
     let settled = false
     const chunks: Buffer[] = []
     let total = 0
@@ -72,12 +74,12 @@ export const pinnedGet: DirectFetch = (url, address, opts) =>
     try {
       request = https.request(
         {
-          hostname: u.hostname,
+          hostname: host,
           port: u.port || undefined,
           path: `${u.pathname}${u.search}`,
           method: 'GET',
           headers: opts.headers,
-          ...(net.isIP(u.hostname) ? {} : { servername: u.hostname }),
+          ...(net.isIP(host) ? {} : { servername: host }),
           lookup: pinnedLookup(address) as never,
         },
         (res) => {
