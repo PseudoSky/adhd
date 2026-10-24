@@ -1,0 +1,127 @@
+{
+  "tree": "1b85fd0ee8b3493f881a18cb277d73514dc9953436e4eda5daeb3543cafaee1f",
+  "trees": {
+    "core": "19a567ae3945d706f4cce9fadb8774c379c09b7d08f00ae2aad91ad9f6e9c9d1",
+    "search": "f432792b368f52aec300f9b37085a337400fc5ad660d1ffa78f0e40967ee0952",
+    "tw": "35a8efa10ce6f1fead6b5f6537f37f4b40ed9a7d7fd6a3c135c9af38ed8037a0"
+  },
+  "tw_tree": "11ce31e4b1fb5a4dbce809e2605c1ed8e02ef243",
+  "head": "99a1ca97f6caf33a96c8a8b94c82c79df5bd6021",
+  "results": {
+    "core:lint": {
+      "cmd": "nx run stealth-core-browser:lint",
+      "exit": 0,
+      "seconds": 1.5,
+      "tail": "t\u001b[22m for project stealth-core-browser and \u001b[1m1\u001b[22m task it depends on\u001b[39m\n\n\u001b[2mNx read the output from the cache instead of running the command for 2 out of 2 tasks.\u001b[22m\n\n  Run duration:      17ms\n  Cache:             2/2 hit (100%)\n  Critical path:     <1ms (1 task)\n  Recoverable time:  <1ms\n"
+    },
+    "core:typecheck": {
+      "cmd": "nx run stealth-core-browser:typecheck",
+      "exit": 0,
+      "seconds": 1.5,
+      "tail": "ccessfully ran target \u001b[1mtypecheck\u001b[22m for project stealth-core-browser\u001b[39m\n\n\u001b[2mNx read the output from the cache instead of running the command for 1 out of 1 tasks.\u001b[22m\n\n  Run duration:      11ms\n  Cache:             1/1 hit (100%)\n  Critical path:     <1ms (1 task)\n  Recoverable time:  <1ms\n"
+    },
+    "core:typecheck-spec": {
+      "cmd": "nx run stealth-core-browser:typecheck-spec",
+      "exit": 0,
+      "seconds": 1.5,
+      "tail": "sfully ran target \u001b[1mtypecheck-spec\u001b[22m for project stealth-core-browser\u001b[39m\n\n\u001b[2mNx read the output from the cache instead of running the command for 1 out of 1 tasks.\u001b[22m\n\n  Run duration:      12ms\n  Cache:             1/1 hit (100%)\n  Critical path:     1ms (1 task)\n  Recoverable time:  <1ms\n"
+    },
+    "core:build": {
+      "cmd": "nx run stealth-core-browser:build",
+      "exit": 0,
+      "seconds": 1.5,
+      "tail": "d\u001b[22m for project stealth-core-browser and \u001b[1m1\u001b[22m task it depends on\u001b[39m\n\n\u001b[2mNx read the output from the cache instead of running the command for 2 out of 2 tasks.\u001b[22m\n\n  Run duration:      21ms\n  Cache:             2/2 hit (100%)\n  Critical path:     8ms (2 tasks)\n  Recoverable time:  <1ms\n"
+    },
+    "core:test": {
+      "cmd": "nx run stealth-core-browser:test",
+      "exit": 0,
+      "seconds": 1.5,
+      "tail": "\u001b[22m for project stealth-core-browser and \u001b[1m3\u001b[22m tasks it depends on\u001b[39m\n\n\u001b[2mNx read the output from the cache instead of running the command for 4 out of 4 tasks.\u001b[22m\n\n  Run duration:      25ms\n  Cache:             4/4 hit (100%)\n  Critical path:     1ms (3 tasks)\n  Recoverable time:  <1ms\n"
+    },
+    "core:verify-dist-load": {
+      "cmd": "nx run stealth-core-browser:verify-dist-load",
+      "exit": 0,
+      "seconds": 1.6,
+      "tail": "[22m for project stealth-core-browser and \u001b[1m4\u001b[22m tasks it depends on\u001b[39m\n\n\u001b[2mNx read the output from the cache instead of running the command for 5 out of 5 tasks.\u001b[22m\n\n  Run duration:      55ms\n  Cache:             5/5 hit (100%)\n  Critical path:     10ms (4 tasks)\n  Recoverable time:  <1ms\n"
+    },
+    "search:lint": {
+      "cmd": "nx run stealth-search:lint",
+      "exit": 0,
+      "seconds": 1.5,
+      "tail": "[1mlint\u001b[22m for project stealth-search and \u001b[1m1\u001b[22m task it depends on\u001b[39m\n\n\u001b[2mNx read the output from the cache instead of running the command for 2 out of 2 tasks.\u001b[22m\n\n  Run duration:      19ms\n  Cache:             2/2 hit (100%)\n  Critical path:     2ms (2 tasks)\n  Recoverable time:  <1ms\n"
+    },
+    "search:typecheck": {
+      "cmd": "nx run stealth-search:typecheck",
+      "exit": 0,
+      "seconds": 1.5,
+      "tail": "[32mSuccessfully ran target \u001b[1mtypecheck\u001b[22m for project stealth-search\u001b[39m\n\n\u001b[2mNx read the output from the cache instead of running the command for 1 out of 1 tasks.\u001b[22m\n\n  Run duration:      15ms\n  Cache:             1/1 hit (100%)\n  Critical path:     <1ms (1 task)\n  Recoverable time:  <1ms\n"
+    },
+    "search:typecheck-spec": {
+      "cmd": "nx run stealth-search:typecheck-spec",
+      "exit": 0,
+      "seconds": 1.5,
+      "tail": "Successfully ran target \u001b[1mtypecheck-spec\u001b[22m for project stealth-search\u001b[39m\n\n\u001b[2mNx read the output from the cache instead of running the command for 1 out of 1 tasks.\u001b[22m\n\n  Run duration:      12ms\n  Cache:             1/1 hit (100%)\n  Critical path:     1ms (1 task)\n  Recoverable time:  <1ms\n"
+    },
+    "search:build": {
+      "cmd": "nx run stealth-search:build",
+      "exit": 0,
+      "seconds": 1.6,
+      "tail": "ng the command for 22 out of 22 tasks.\u001b[22m\n\n\u001b[2mOutput of 20 successful tasks were not shown. Run with\u001b[22m --verbose \u001b[2mor\u001b[22m --output-style=static \u001b[2mto see it.\u001b[22m\n\n  Run duration:      66ms\n  Cache:             22/22 hit (100%)\n  Critical path:     33ms (7 tasks)\n  Recoverable time:  <1ms\n"
+    },
+    "search:build-bin": {
+      "cmd": "nx run stealth-search:build-bin",
+      "exit": 0,
+      "seconds": 7.5,
+      "tail": "ing the command for 22 out of 23 tasks.\u001b[22m\n\n\u001b[2mOutput of 20 successful tasks were not shown. Run with\u001b[22m --verbose \u001b[2mor\u001b[22m --output-style=static \u001b[2mto see it.\u001b[22m\n\n  Run duration:      6.0s\n  Cache:             22/23 hit (96%)\n  Critical path:     6.0s (8 tasks)\n  Recoverable time:  <1ms\n"
+    },
+    "search:test": {
+      "cmd": "nx run stealth-search:test",
+      "exit": 0,
+      "seconds": 7.5,
+      "tail": "ing the command for 26 out of 27 tasks.\u001b[22m\n\n\u001b[2mOutput of 20 successful tasks were not shown. Run with\u001b[22m --verbose \u001b[2mor\u001b[22m --output-style=static \u001b[2mto see it.\u001b[22m\n\n  Run duration:      6.0s\n  Cache:             26/27 hit (96%)\n  Critical path:     5.9s (8 tasks)\n  Recoverable time:  <1ms\n"
+    },
+    "search:verify-dist-load": {
+      "cmd": "nx run stealth-search:verify-dist-load",
+      "exit": 0,
+      "seconds": 7.5,
+      "tail": "ng the command for 25 out of 26 tasks.\u001b[22m\n\n\u001b[2mOutput of 20 successful tasks were not shown. Run with\u001b[22m --verbose \u001b[2mor\u001b[22m --output-style=static \u001b[2mto see it.\u001b[22m\n\n  Run duration:      6.0s\n  Cache:             25/26 hit (96%)\n  Critical path:     6.0s (10 tasks)\n  Recoverable time:  <1ms\n"
+    },
+    "tw:lint": {
+      "cmd": "nx run resilience-core-tripwire:lint",
+      "exit": 0,
+      "seconds": 1.5,
+      "tail": "2m for project resilience-core-tripwire and \u001b[1m1\u001b[22m task it depends on\u001b[39m\n\n\u001b[2mNx read the output from the cache instead of running the command for 2 out of 2 tasks.\u001b[22m\n\n  Run duration:      17ms\n  Cache:             2/2 hit (100%)\n  Critical path:     <1ms (1 task)\n  Recoverable time:  <1ms\n"
+    },
+    "tw:typecheck": {
+      "cmd": "nx run resilience-core-tripwire:typecheck",
+      "exit": 0,
+      "seconds": 1.5,
+      "tail": "ssfully ran target \u001b[1mtypecheck\u001b[22m for project resilience-core-tripwire\u001b[39m\n\n\u001b[2mNx read the output from the cache instead of running the command for 1 out of 1 tasks.\u001b[22m\n\n  Run duration:      13ms\n  Cache:             1/1 hit (100%)\n  Critical path:     1ms (1 task)\n  Recoverable time:  <1ms\n"
+    },
+    "tw:typecheck-spec": {
+      "cmd": "nx run resilience-core-tripwire:typecheck-spec",
+      "exit": 0,
+      "seconds": 1.5,
+      "tail": "ly ran target \u001b[1mtypecheck-spec\u001b[22m for project resilience-core-tripwire\u001b[39m\n\n\u001b[2mNx read the output from the cache instead of running the command for 1 out of 1 tasks.\u001b[22m\n\n  Run duration:      12ms\n  Cache:             1/1 hit (100%)\n  Critical path:     1ms (1 task)\n  Recoverable time:  <1ms\n"
+    },
+    "tw:test": {
+      "cmd": "nx run resilience-core-tripwire:test",
+      "exit": 0,
+      "seconds": 1.5,
+      "tail": "m for project resilience-core-tripwire and \u001b[1m3\u001b[22m tasks it depends on\u001b[39m\n\n\u001b[2mNx read the output from the cache instead of running the command for 4 out of 4 tasks.\u001b[22m\n\n  Run duration:      24ms\n  Cache:             4/4 hit (100%)\n  Critical path:     1ms (2 tasks)\n  Recoverable time:  <1ms\n"
+    },
+    "tw:build": {
+      "cmd": "nx run resilience-core-tripwire:build",
+      "exit": 0,
+      "seconds": 1.5,
+      "tail": "2m for project resilience-core-tripwire and \u001b[1m1\u001b[22m task it depends on\u001b[39m\n\n\u001b[2mNx read the output from the cache instead of running the command for 2 out of 2 tasks.\u001b[22m\n\n  Run duration:      15ms\n  Cache:             2/2 hit (100%)\n  Critical path:     2ms (2 tasks)\n  Recoverable time:  <1ms\n"
+    },
+    "tw:verify-dist-load": {
+      "cmd": "nx run resilience-core-tripwire:verify-dist-load",
+      "exit": 0,
+      "seconds": 1.5,
+      "tail": "m for project resilience-core-tripwire and \u001b[1m4\u001b[22m tasks it depends on\u001b[39m\n\n\u001b[2mNx read the output from the cache instead of running the command for 5 out of 5 tasks.\u001b[22m\n\n  Run duration:      50ms\n  Cache:             5/5 hit (100%)\n  Critical path:     3ms (3 tasks)\n  Recoverable time:  <1ms\n"
+    }
+  },
+  "all_green": true
+}
