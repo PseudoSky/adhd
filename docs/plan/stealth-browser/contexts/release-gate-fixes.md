@@ -21,6 +21,7 @@
 - [release-gate-fixes.2] check-test-wiring.mjs honours Nx-inferred `test` targets through the project graph (no longer only the literal project.json `targets.test`), keeps its exit 1 for a project with specs and no test target, names no project, and `node tools/nx-plugins/test/executors/wiring/check-test-wiring.mjs` exits 0 on the tree (agent-store-runtime and agent-store-prompts are no longer flagged).
 - [release-gate-fixes.3] package.json `release:dry` begins with `export ADHD_NX_VERSION_DRY_RUN=1 &&` so the build, version and publish run-many calls all inherit it, and tools/nx-plugins/test/executors/wiring/release-dry-clean.spec.mjs (header, cites 8468f7b1 and [release-gate-fixes.3], listed in `test:build-tools`) parses the script, asserts the export covers every nx invocation of the chain, passes `node --test`, and check-lane-reachability exits 0.
 - [release-gate-fixes.4] `pnpm release:dry` (ADHD_NX_VERSION_DRY_RUN NOT pre-set) exits 0 on the fixed tree, does real dry work (not the 'nothing to version/publish' no-op) and leaves `git status --porcelain` identical before and after (plan bookkeeping paths ignored); run only once the fixes exist, cached by code identity in evidence/release-gate-fixes.dry.json.
+- [release-gate-fixes.5] decompile-cli's validators/local/index.spec.ts builds fixturesDir from the current test/fixtures layout (not src/tests), entrypoint/decompile-cli/test/fixtures is populated, and `nx run decompile-cli:test --skip-nx-cache` exits 0.
 ---
 
 ## Reservations
