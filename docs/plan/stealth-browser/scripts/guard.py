@@ -165,10 +165,10 @@ def registry_published(name):
 
 
 def ensure_full_dist():
-    """Build both published dists completely (core: build, dist-manifest; search: build + build-bin + assets + dist-manifest) through verify-dist-load, whose dependsOn chain is the build graph. A bare `build` empties dist/ (vite emptyOutDir), so every dist inspection starts here and no check depends on which check ran before it."""
+    """Build both published dists completely (core: build, dist-manifest; search: build + build-bin + assets + dist-manifest) through verify-dist-load, whose dependsOn chain is the build graph. A bare `build` empties dist/ (vite emptyOutDir), so every dist inspection starts here and no check depends on which check ran before it. Runs uncached on purpose: an Nx cache hit on build-bin/dist-manifest restores the files without the executable bit that dist-manifest's chmod-bin step sets."""
     rc, out = 0, ""
     for proj in (CORE_PROJECT, SEARCH_PROJECT):
-        r, o = nx_run(proj, "verify-dist-load", timeout=2400)
+        r, o = nx_run(proj, "verify-dist-load", "--skip-nx-cache", timeout=2400)
         rc, out = max(rc, r), out + o[-300:]
     return rc, out
 
