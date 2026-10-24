@@ -52,6 +52,17 @@
     },
     "test": {
       "dependsOn": ["lint", "^build", "typecheck-spec"]
+    },
+    "e2e": {
+      "executor": "nx:run-commands",
+      "//": "Real-disk lane: runs test/e2e/*.e2e.ts through vitest.e2e.config.ts (the TripwireStorage contract on a real mkdtemp directory). Not in test.dependsOn, so the unit lane stays disk-free; the push and CI gate reaches it through `nx affected -t e2e`.",
+      "cache": true,
+      "inputs": ["default", "^production", { "externalDependencies": ["vitest"] }],
+      "outputs": ["{workspaceRoot}/coverage/packages/resilience/resilience-core-tripwire-e2e"],
+      "options": {
+        "cwd": "{projectRoot}",
+        "command": "vitest run --config vitest.e2e.config.ts"
+      }
     }
   }
 }
