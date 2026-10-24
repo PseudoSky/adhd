@@ -480,11 +480,11 @@
       "end_ref": "2f0016a082b0265e4d1f7d7133f2cf7f545276ae"
     },
     "fix-tripwire": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-10-23T22:57:26.391Z",
-      "done_at": null,
+      "done_at": "2026-10-24T00:16:27.651Z",
       "start_ref": "ded73131f104eb9e79fdcbd1f16bc17d752c3e4e",
-      "end_ref": null
+      "end_ref": "b0bca460d3672be55e510a8f0a6bdd6316022f67"
     },
     "fix-core-parsers": {
       "status": "complete",
@@ -1284,6 +1284,18 @@
       "audit_criteria_total": 5,
       "by": "pseudosky",
       "note": "orchestrator-verified; guard re-run"
+    },
+    {
+      "ts": "2026-10-24T00:16:27.651Z",
+      "from": "search-mcp-iserror",
+      "to": "fix-tripwire",
+      "start_ref": "ded73131f104eb9e79fdcbd1f16bc17d752c3e4e",
+      "end_ref": "b0bca460d3672be55e510a8f0a6bdd6316022f67",
+      "audit_exit": 0,
+      "audit_criteria_passed": 6,
+      "audit_criteria_total": 6,
+      "by": "pseudosky",
+      "note": "orchestrator-verified; guard 6/6 exit 0 standalone rerun"
     }
   ],
   "amendment_log": [
