@@ -22,6 +22,7 @@
 - [release-gate-fixes.3] package.json `release:dry` begins with `export ADHD_NX_VERSION_DRY_RUN=1 &&` so the build, version and publish run-many calls all inherit it, and tools/nx-plugins/test/executors/wiring/release-dry-clean.spec.mjs (header, cites 8468f7b1 and [release-gate-fixes.3], listed in `test:build-tools`) parses the script, asserts the export covers every nx invocation of the chain, passes `node --test`, and check-lane-reachability exits 0.
 - [release-gate-fixes.4] `pnpm release:dry` (ADHD_NX_VERSION_DRY_RUN NOT pre-set) exits 0 on the fixed tree, does real dry work (not the 'nothing to version/publish' no-op) and leaves `git status --porcelain` identical before and after (plan bookkeeping paths ignored); run only once the fixes exist, cached by code identity in evidence/release-gate-fixes.dry.json.
 - [release-gate-fixes.5] decompile-cli's validators/local/index.spec.ts builds fixturesDir from the current test/fixtures layout (not src/tests), entrypoint/decompile-cli/test/fixtures is populated, and `nx run decompile-cli:test --skip-nx-cache` exits 0.
+- [release-gate-fixes.6] The backlog c8-vocabulary failure is fixed at its root cause: evidence/release-gate-fixes.md has a `ROOT-CAUSE backlog: <mechanism>` line, `nx run backlog:test --skip-nx-cache` exits 0, and the end-to-end release:dry run (release-gate-fixes.4) is green for the current code.
 ---
 
 ## Reservations
