@@ -2,6 +2,9 @@
  * Scenario: read-only-profile-audit -- audit which of the open tabs the dedicated profile already knows,
  * read-only and without touching Chrome's files: the history of each open page,
  * bookmarks matching a topic and the profile's top sites.
+ *
+ * `BookmarkClient.searchBookmarks` is implemented (case-insensitive match on name or URL, `path` is the folder);
+ * test/unit/examples/examples.spec.ts asserts the matching bookmark comes back.
  */
 // eslint-disable-next-line @nx/enforce-module-boundaries -- examples import the package root exactly as a consumer does
 import { cdp, storage } from '@adhd/stealth-core-browser'
