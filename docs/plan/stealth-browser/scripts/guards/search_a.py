@@ -68,6 +68,17 @@ def _sa_gate(*targets):
     return True, "ok"
 
 
+def _sa_source(rel):
+    """Text of a search source file `rel` (relative to the scratch agent-browser tree) as the inventory recorded it: the inventory's `baseline_commit`
+    (deterministic, survives the cutover that deleted the files), falling back to the live scratch tree while the baseline blob is unreadable."""
+    base = (jread(SA_INV, {}) or {}).get("baseline_commit")
+    if base:
+        r = sh(["git", "show", f"{base}:agent-browser/{rel}"], cwd=SCRATCH)
+        if r[0] == 0:
+            return r[1]
+    return read(f"{SA_SRC}/{rel}")
+
+
 def _sa_rows():
     d = jread(SA_INV, {}) or {}
     rows = d.get("rows") if isinstance(d, dict) else None
@@ -98,9 +109,20 @@ def _sa_hygiene(slug):
 
 
 def _sa_tests_cite(slug, minimum=2):
+    """Every spec in the state's spec directory cites ticket 8468f7b1 and a valid criterion id of the state itself or of a descendant state (fix-* states
+    add specs to the directories the port states created and cite their own ids); at least `minimum` of the specs cite the state itself."""
     specs = _sa_specs(slug)
-    ok, detail = cites(specs, slug)
-    return ok and len(specs) >= minimum, f"{detail}; need at least {minimum} spec files"
+    ids = criteria_ids()
+    owners = {slug} | dag_descendants(slug)
+    bad, own = [], 0
+    for f in specs:
+        txt = read(f)
+        found = {i for i in re.findall(r"\[([a-z0-9-]+\.\d+)\]", txt) if i in ids}
+        if TICKET not in txt or not any(i.rsplit(".", 1)[0] in owners for i in found):
+            bad.append(f)
+        elif any(i.startswith(slug + ".") for i in found):
+            own += 1
+    return bool(specs) and not bad and own >= minimum, f"uncited or no files: {bad[:5]} (files={len(specs)}, citing {slug}={own}); need at least {minimum} spec files"
 
 
 def _sa_probe(key):
@@ -211,13 +233,12 @@ def _si1():
 
 @check("search-inventory", 2)
 def _si2():
-    """Every row's `source.file` exists under /Users/nix/dev/ai/scratch/agent-browser (until the cutover) or is recorded with `source.baseline_blob`, its `line` is within the file, and the `anchor` text occurs within 3 lines of that line, so each citation is verified rather than copied."""
+    """Every row's `source.file` exists in the source repo at the inventory's `baseline_commit` (read from git, so it survives the cutover that retired /Users/nix/dev/ai/scratch/agent-browser) or is recorded with `source.baseline_blob`, its `line` is within the file, and the `anchor` text occurs within 3 lines of that line, so each citation is verified rather than copied."""
     rows = _sa_rows()
     bad = []
     for r in rows:
         s = r.get("source") or {}
-        path = f"{SA_SRC}/{s.get('file','')}"
-        txt = read(path)
+        txt = _sa_source(s.get("file", ""))
         if not txt:
             if not s.get("baseline_blob"):
                 bad.append(f"{r.get('id')}: file missing")
@@ -238,7 +259,7 @@ def _si3():
     rx = re.compile(r"^export\s+(?:default\s+)?(?:declare\s+)?(?:async\s+)?(?:function\*?|class|const|let|var|enum)\s+([A-Za-z0-9_$]+)", re.M)
     names, scanned = set(), 0
     for f in SA_SOURCE_FILES:
-        t = read(f"{SA_SRC}/{f}")
+        t = _sa_source(f)
         if t:
             scanned += 1
             names |= set(rx.findall(t))

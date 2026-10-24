@@ -105,12 +105,15 @@ def _cs5():
 @check("core-scaffold", 6)
 def _cs6():
     """Exactly the approved project.json files were added since main: the core package's and the tripwire package's (plus the stealth-search entrypoint's once search-scaffold has run); the legacy entrypoint/stealth-browser/project.json is not among them, and no other project or workspace group was edited (nx.json and eslint.config.mjs are unchanged since the state start; the generator-created packages/stealth/stealth-core-browser typecheck-spec baseline is committed)."""
-    base = git("merge-base", "HEAD", "main")
-    added = [f for f in git("diff", "--name-only", "--diff-filter=A", f"{base}..HEAD").splitlines() if f.endswith("project.json")]
+    base = plan_base_ref()
+    # Recorded at completion: the project.json set and the nx.json / eslint.config.mjs drift are measured up to core-scaffold's end_ref (later states and the
+    # main merge legitimately edit nx.json and add projects).
+    end = completion_ref("core-scaffold")
+    added = [f for f in git("diff", "--name-only", "--diff-filter=A", f"{base}..{end}").splitlines() if f.endswith("project.json")]
     want = {f"{CORE_DIR}/project.json", f"{TW}/project.json"}
     allowed = want | {f"{SEARCH_DIR}/project.json"}
     start = _start_ref("core-scaffold")
-    drift = git("diff", "--name-only", start, "HEAD", "--", "nx.json", "eslint.config.mjs") if start else "(no start_ref)"
+    drift = git("diff", "--name-only", start, end, "--", "nx.json", "eslint.config.mjs") if start else "(no start_ref)"
     return want <= set(added) and set(added) <= allowed and f"{LEGACY_DIR}/project.json" not in added and not drift and exists(CORE_BASELINE) and bool(git("ls-files", "--", CORE_BASELINE)), f"added={added} drift={drift!r} baseline={exists(CORE_BASELINE)}"
 
 

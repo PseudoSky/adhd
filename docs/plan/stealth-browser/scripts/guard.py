@@ -414,6 +414,14 @@ def completion_ref(slug):
     return "HEAD"
 
 
+def plan_base_ref():
+    """The commit the plan branched from: the first state's recorded start_ref (the live `git merge-base HEAD main` moves forward once main is merged into the branch)."""
+    st = (state().get("states") or {})
+    first = next(iter((dag() or {}).get("nodes", {})), None)
+    ref = (st.get(first) or {}).get("start_ref") if first else None
+    return ref or git("merge-base", "HEAD", "main")
+
+
 def ownership_ok(slug):
     owned = ownership().get(slug)
     if owned is None:
@@ -490,9 +498,20 @@ def assertion_lines(text):
     return keep
 
 
+def path_history(path):
+    """Every location `path` has had: the current path, its pre-split legacy location (entrypoint/stealth-browser -> packages/stealth/stealth-core-browser)
+    and the pre-layout-move test location (`<pkg>/src/test/...` -> `<pkg>/test/...`, docs/standards/testing.md), in that order, without duplicates."""
+    out = [path, legacy_path(path)]
+    for base in (CORE_DIR, LEGACY_DIR, SEARCH_DIR):
+        for cur in list(out):
+            if cur.startswith(base + "/test/"):
+                out.append(f"{base}/src/test/{cur[len(base) + len('/test/'):]}")
+    return list(dict.fromkeys(out))
+
+
 def blob_at(ref, path):
-    """Content of `path` at `ref`, rename-aware: tries the path, then its pre-split legacy location; None when neither exists at that ref."""
-    for cand in dict.fromkeys((path, legacy_path(path))):
+    """Content of `path` at `ref`, rename-aware: tries the path, then its pre-split legacy location and its pre-layout-move test location; None when none exists at that ref."""
+    for cand in path_history(path):
         r = sh(["git", "show", f"{ref}:{cand}"])
         if r[0] == 0:
             return r[1]
@@ -505,7 +524,7 @@ def migration_snapshot(slug, path):
     Rename-aware: the history of both the current path and its pre-split legacy path is consulted, so the core-scaffold move does not hide the migration's commit."""
     if not slug:
         return None
-    paths = list(dict.fromkeys((path, legacy_path(path))))
+    paths = path_history(path)
     log = sh(["git", "log", "--format=%H%x1f%B%x1e", "--"] + paths)[1]
     recs = [r.strip().split("\x1f", 1) for r in log.split("\x1e") if "\x1f" in r]
     if not recs or f"[psm:{slug}]" in recs[0][1]:
@@ -3824,13 +3843,28 @@ def _spl1():
 
 @check("sp-link", 2)
 def _spl2():
-    """The unreleased 0.6.0 resolves from a recorded dev tarball (or the registry once published): root package.json `pnpm.overrides["@adhd/sox-service-proxy"]` is `file:/Users/nix/.cache/adhd-dev-tarballs/adhd-sox-service-proxy-0.6.0-<sha8>[-prerelease].tgz`, that file exists and smoke/sp-link.md records `TARBALL_SHA256:` equal to its real sha256, `TARBALL_VERSION: 0.6.0` equal to the version inside the tarball, and `TARBALL_BUILD: pnpm pack` (never `npm pack`, which would leave a literal `workspace:^`); if 0.6.0 is already published the evidence records `REGISTRY: published`, the override is absent and the sp-switch state is verification-only."""
+    """The unreleased 0.6.0 resolves from a recorded dev tarball (or the registry once published): root package.json `pnpm.overrides["@adhd/sox-service-proxy"]` is `file:/Users/nix/.cache/adhd-dev-tarballs/adhd-sox-service-proxy-0.6.0-<sha8>[-prerelease].tgz`, that file exists and smoke/sp-link.md records `TARBALL_SHA256:` equal to its real sha256, `TARBALL_VERSION: 0.6.0` equal to the version inside the tarball, and `TARBALL_BUILD: pnpm pack` (never `npm pack`, which would leave a literal `workspace:^`); if 0.6.0 is already published the evidence records `REGISTRY: published`, the override is absent and the sp-switch state is verification-only. Recorded at completion: the override is read from the tree sp-link completed with (state.json end_ref); once sp-switch has removed it, smoke/switch.md must record the publication (`PUBLISHED: ... exit=0`) that superseded it."""
     t = read(SPL)
     if re.search(r"^REGISTRY:\s*published\s*$", t, re.M):
         return PROXY_PKG not in root_overrides() and sh(["npm", "view", f"{PROXY_PKG}@{SP_VERSION}", "version"], timeout=60)[0] == 0, "registry path"
-    ov = root_overrides().get(PROXY_PKG, "")
+    # Recorded-at-completion: the override is a one-shot that the next state (sp-switch) removes once 0.6.0 is published, so it is read from the tree
+    # sp-link completed with (state.json end_ref), not from the live root package.json; the live tree must show the supersession (smoke/switch.md).
+    end = completion_ref("sp-link")
+    if end != "HEAD":
+        rp = blob_at(end, "package.json")
+        ov = ((((json.loads(rp) if rp else {}).get("pnpm") or {}).get("overrides")) or {}).get(PROXY_PKG, "")
+        cp = blob_at(end, f"{CORE_DIR}/package.json") or blob_at(end, f"{LEGACY_DIR}/package.json")
+        dep_then = (((json.loads(cp) if cp else {}).get("dependencies")) or {}).get(PROXY_PKG, "")
+        if not ov and PROXY_PKG not in root_overrides():
+            switched = re.search(r"^PUBLISHED:.*exit=0\s*$", read(SPS), re.M) is not None
+        else:
+            switched = True
+        if not switched:
+            return False, "override absent now but smoke/switch.md does not record the publication that superseded it"
+    else:
+        ov, dep_then = root_overrides().get(PROXY_PKG, ""), sp_dep()
     fb = re.search(r"^FALLBACK:\s*dependency-value\s*$", t, re.M) is not None
-    m = SP_TGZ_RE.match(sp_dep() if fb else ov)
+    m = SP_TGZ_RE.match(dep_then if fb else ov)
     if not m or not exists(m.group(1)):
         return False, f"override/dependency {ov!r} is not an existing dev tarball"
     sha = sha256_file(m.group(1))
@@ -4018,11 +4052,18 @@ def tw_purity():
     return bool(tw_lib_files()) and not bad and not net, f"banned access in {bad}; network/process imports in {net}; lib files={len(tw_lib_files())}"
 
 
+def tw_citation_slugs():
+    """State slugs whose criterion ids a tripwire spec may cite: the tripwire-* states that built the package plus every later state that owns the whole tripwire package (fix-tripwire, conform-tripwire add specs under their own ids)."""
+    later = sorted(k for k, v in ownership().items() if f"{TW}/" in v and not k.startswith("tripwire-"))
+    return ["tripwire-[a-z-]+"] + [re.escape(k) for k in later]
+
+
 def tw_citations():
-    """TW35: every spec under src/test cites ticket 8468f7b1 and a tripwire criterion id [tripwire-<state>.N] or a TW id."""
+    """TW35: every spec under test/ cites ticket 8468f7b1 and a criterion id of a state that owns the tripwire package: [tripwire-<state>.N], or [fix-tripwire.N] / [conform-tripwire.N] for the specs those later states added."""
     specs = [f for f in walk(f"{TW}/test", (".ts",)) if f.endswith(".spec.ts")]
     ids = criteria_ids()
-    bad = [os.path.relpath(f, TW) for f in specs if TICKET not in read(f) or not (set(re.findall(r"\[((?:tripwire-[a-z-]+)\.\d+)\]", read(f))) & ids)]
+    rx = r"\[((?:" + "|".join(tw_citation_slugs()) + r")\.\d+)\]"
+    bad = [os.path.relpath(f, TW) for f in specs if TICKET not in read(f) or not (set(re.findall(rx, read(f))) & ids)]
     return bool(specs) and not bad, f"uncited specs {bad[:6]}"
 
 

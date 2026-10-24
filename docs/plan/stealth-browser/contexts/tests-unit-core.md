@@ -32,7 +32,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 
 - [tests-unit-core.1] A spec file exists for every ported source module (index barrels and pure type files excluded).
 - [tests-unit-core.2] Every spec cites ticket 8468f7b1 and at least one valid slug.N acceptance-criterion id.
-- [tests-unit-core.3] Unit purity: specs touching process-spawning or network modules mock child_process/WebSocket/fetch (vi.mock or vi.stubGlobal); no spec reads the real Chrome profile.
+- [tests-unit-core.3] Unit purity: specs touching process-spawning or network modules mock child_process/WebSocket/fetch (vi.mock or vi.stubGlobal); no spec reads the real Chrome profile (a profile path literal is allowed only when the spec fakes both node:fs and node:os).
 - [tests-unit-core.4] Assertions have teeth: each spec has at least as many expect() calls as test cases and at least one negative/error-path case.
 - [tests-unit-core.5] `nx run stealth-browser:test -- <own specs>` exits 0 and only owned paths changed by [psm:tests-unit-core] commits.
 - [tests-unit-core.6] [inv:no-features-removed] every failsafe-inventory row owned by tests-unit-core is pinned: its pin file exists under src/test, cites the row id `[fs-NNN]` and contains the named test; the feature is kept (no row may be removed or narrowed).

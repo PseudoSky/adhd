@@ -31,7 +31,7 @@
     "anchor": "gateBlocked(p.id)"
    },
    "pin": {
-    "file": "src/test/unit/verbs/search-gate.spec.ts",
+    "file": "test/unit/verbs/search-gate.spec.ts",
     "test": "tripwire lock fails fast with attempts 0"
    }
   },
@@ -49,7 +49,7 @@
     "anchor": "export async function listProviders"
    },
    "pin": {
-    "file": "src/test/unit/verbs/list-providers.spec.ts",
+    "file": "test/unit/verbs/list-providers.spec.ts",
     "test": "lists the 12 providers"
    }
   },
@@ -65,7 +65,7 @@
     "anchor": "Resolve the provider before any gate"
    },
    "pin": {
-    "file": "src/test/unit/verbs/search-unknown.spec.ts",
+    "file": "test/unit/verbs/search-unknown.spec.ts",
     "test": "unknown provider raises UNKNOWN_PROVIDER"
    }
   },
@@ -81,7 +81,7 @@
     "anchor": "gateBlocked(p.id)"
    },
    "pin": {
-    "file": "src/test/unit/verbs/search-gate.spec.ts",
+    "file": "test/unit/verbs/search-gate.spec.ts",
     "test": "gate counts blocked calls"
    }
   },
@@ -97,7 +97,7 @@
     "anchor": "outcome: 'rate_limited'"
    },
    "pin": {
-    "file": "src/test/unit/verbs/search-cooldown.spec.ts",
+    "file": "test/unit/verbs/search-cooldown.spec.ts",
     "test": "cooldown returns rate_limited without window"
    }
   },
@@ -113,7 +113,7 @@
     "anchor": "return withSearchConcurrency(async"
    },
    "pin": {
-    "file": "src/test/unit/verbs/search-concurrency.spec.ts",
+    "file": "test/unit/verbs/search-concurrency.spec.ts",
     "test": "bounded FIFO concurrency"
    }
   },
@@ -159,7 +159,7 @@
     "anchor": "fetch"
    },
    "pin": {
-    "file": "src/test/unit/fetch/fetch-route.spec.ts",
+    "file": "test/unit/fetch/fetch-route.spec.ts",
     "test": "fetch provider skips the strategy loop"
    }
   },
@@ -177,7 +177,7 @@
     "anchor": "export function stripTypeCode"
    },
    "pin": {
-    "file": "src/test/unit/providers/utils.spec.ts",
+    "file": "test/unit/providers/utils.spec.ts",
     "test": "type:code resolves to code search"
    }
   },
@@ -196,7 +196,7 @@
     "anchor": "export function fallbackView"
    },
    "pin": {
-    "file": "src/test/unit/providers/utils.spec.ts",
+    "file": "test/unit/providers/utils.spec.ts",
     "test": "fallbackView swaps the capture and resolveProvider overrides github code"
    }
   },
@@ -212,7 +212,7 @@
     "anchor": "createIsolatedPageTarget"
    },
    "pin": {
-    "file": "src/test/unit/engine/strategy-select.spec.ts",
+    "file": "test/unit/engine/strategy-select.spec.ts",
     "test": "strategy select"
    }
   },
@@ -228,7 +228,7 @@
     "anchor": "has no DOM strategy config"
    },
    "pin": {
-    "file": "src/test/unit/engine/strategy-select.spec.ts",
+    "file": "test/unit/engine/strategy-select.spec.ts",
     "test": "dom strategy without config errors"
    }
   },
@@ -246,7 +246,7 @@
     "anchor": "export async function waitForChallengeClear"
    },
    "pin": {
-    "file": "src/test/unit/engine/challenge.spec.ts",
+    "file": "test/unit/engine/challenge.spec.ts",
     "test": "challenge recovery retries once"
    }
   },
@@ -262,7 +262,7 @@
     "anchor": "Hostile outcomes arm"
    },
    "pin": {
-    "file": "src/test/unit/verbs/search-hitl.spec.ts",
+    "file": "test/unit/verbs/search-hitl.spec.ts",
     "test": "hostile outcomes arm cooldown"
    }
   },
@@ -294,7 +294,7 @@
     "anchor": "login_required"
    },
    "pin": {
-    "file": "src/test/unit/guards/login-required.spec.ts",
+    "file": "test/unit/guards/login-required.spec.ts",
     "test": "login_required writes no tripwire"
    }
   },
@@ -310,7 +310,7 @@
     "anchor": "finally"
    },
    "pin": {
-    "file": "src/test/unit/verbs/search-cleanup.spec.ts",
+    "file": "test/unit/verbs/search-cleanup.spec.ts",
     "test": "isolated page cleanup on every path"
    }
   },
@@ -329,7 +329,7 @@
     "anchor": "export async function tripwireStatus"
    },
    "pin": {
-    "file": "src/test/unit/guards/tripwire-status.spec.ts",
+    "file": "test/unit/guards/tripwire-status.spec.ts",
     "test": "clear returns false when not tripped"
    }
   },
@@ -348,7 +348,7 @@
     "anchor": "export async function chromeStatus"
    },
    "pin": {
-    "file": "src/test/unit/verbs/chrome-status.spec.ts",
+    "file": "test/unit/verbs/chrome-status.spec.ts",
     "test": "chromeStatus reports managed"
    }
   },
@@ -366,7 +366,7 @@
     "anchor": "export async function shutdownSearchChrome"
    },
    "pin": {
-    "file": "src/test/unit/verbs/shutdown.spec.ts",
+    "file": "test/unit/verbs/shutdown.spec.ts",
     "test": "soft shutdown"
    }
   },
@@ -384,7 +384,7 @@
     "anchor": "export function providerUsage"
    },
    "pin": {
-    "file": "src/test/unit/verbs/describe-provider.spec.ts",
+    "file": "test/unit/verbs/describe-provider.spec.ts",
     "test": "qualifier examples"
    }
   },
@@ -407,7 +407,7 @@
     "anchor": "export function setProviderCooldown"
    },
    "pin": {
-    "file": "src/test/unit/guards/cooldown.spec.ts",
+    "file": "test/unit/guards/cooldown.spec.ts",
     "test": "cooldown arms and disarms atomically"
    }
   },
@@ -426,7 +426,7 @@
     "anchor": "export async function withSearchConcurrency"
    },
    "pin": {
-    "file": "src/test/unit/guards/concurrency.spec.ts",
+    "file": "test/unit/guards/concurrency.spec.ts",
     "test": "FIFO queue honours the limit"
    }
   },
@@ -457,7 +457,7 @@
     "anchor": "export function readTripwire"
    },
    "pin": {
-    "file": "src/test/unit/guards/tripwire-record.spec.ts",
+    "file": "test/unit/guards/tripwire-record.spec.ts",
     "test": "tripwire lock lifecycle"
    }
   },
@@ -477,7 +477,7 @@
     "anchor": "export const PROVIDERS"
    },
    "pin": {
-    "file": "src/test/unit/providers/providers.spec.ts",
+    "file": "test/unit/providers/providers.spec.ts",
     "test": "twelve providers"
    }
   },
@@ -493,7 +493,7 @@
     "anchor": "fallbackNetwork"
    },
    "pin": {
-    "file": "src/test/unit/providers/github.spec.ts",
+    "file": "test/unit/providers/github.spec.ts",
     "test": "github API primary with embedded-json fallback"
    }
   },
@@ -509,7 +509,7 @@
     "anchor": "sharedProfile"
    },
    "pin": {
-    "file": "src/test/unit/providers/types.spec.ts",
+    "file": "test/unit/providers/types.spec.ts",
     "test": "outcome and HitlInfo shapes"
    }
   },
@@ -527,7 +527,7 @@
     "anchor": "export async function networkSearch"
    },
    "pin": {
-    "file": "src/test/unit/engine/network.spec.ts",
+    "file": "test/unit/engine/network.spec.ts",
     "test": "network search and missing config error"
    }
   },
@@ -545,7 +545,7 @@
     "anchor": "export function noCaptureOutcome"
    },
    "pin": {
-    "file": "src/test/unit/engine/no-capture.spec.ts",
+    "file": "test/unit/engine/no-capture.spec.ts",
     "test": "no-body capture is timeout or error"
    }
   },
@@ -563,7 +563,7 @@
     "anchor": "export function loginWallResponse"
    },
    "pin": {
-    "file": "src/test/unit/engine/login-wall.spec.ts",
+    "file": "test/unit/engine/login-wall.spec.ts",
     "test": "login wall returns hitl login_required"
    }
   },
@@ -582,7 +582,7 @@
     "anchor": "export async function domSearch"
    },
    "pin": {
-    "file": "src/test/unit/engine/dom.spec.ts",
+    "file": "test/unit/engine/dom.spec.ts",
     "test": "dom extraction and selector wait"
    }
   },
@@ -598,7 +598,7 @@
     "anchor": "export async function walkDomTree"
    },
    "pin": {
-    "file": "src/test/unit/engine/dom.spec.ts",
+    "file": "test/unit/engine/dom.spec.ts",
     "test": "google serp walker extracts results"
    }
   },
@@ -632,7 +632,7 @@
     "anchor": "export async function fetchPage"
    },
    "pin": {
-    "file": "src/test/unit/fetch/fetch-page.spec.ts",
+    "file": "test/unit/fetch/fetch-page.spec.ts",
     "test": "cookieless render to markdown"
    }
   },
@@ -652,7 +652,7 @@
     "anchor": "export const MAX_URL_LENGTH"
    },
    "pin": {
-    "file": "src/test/unit/fetch/fetch-policy.spec.ts",
+    "file": "test/unit/fetch/fetch-policy.spec.ts",
     "test": "SSRF targets are blocked"
    }
   },
@@ -670,7 +670,7 @@
     "anchor": "export async function htmlToMarkdown"
    },
    "pin": {
-    "file": "src/test/unit/fetch/fetch-markdown.spec.ts",
+    "file": "test/unit/fetch/fetch-markdown.spec.ts",
     "test": "input cap and truncation marker"
    }
   },
@@ -688,7 +688,7 @@
     "anchor": "export async function extractPdfText"
    },
    "pin": {
-    "file": "src/test/unit/fetch/fetch-pdf.spec.ts",
+    "file": "test/unit/fetch/fetch-pdf.spec.ts",
     "test": "pdf text extraction"
    }
   },
@@ -706,7 +706,7 @@
     "anchor": "export function getLastSearchFromHistory"
    },
    "pin": {
-    "file": "src/test/unit/providers/last-search.spec.ts",
+    "file": "test/unit/providers/last-search.spec.ts",
     "test": "recovers keywords from history"
    }
   },
