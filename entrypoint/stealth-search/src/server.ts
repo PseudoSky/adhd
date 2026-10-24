@@ -118,6 +118,12 @@ export interface BuildPackageOptions {
   cacheFile?: string
   /** File access (specs). Default: the real file system. */
   fs?: HostFs
+  /** The operations baked into dist at build time. Default: `operations.baked.json` next to the shipped `api.d.ts`. */
+  bakedFile?: string
+  /** The extractor (specs). Default: apigen's `extract`. */
+  extractor?: OperationsExtractor
+  /** Told why a baked cache was rejected (a typed HOST_BOOT_FAILED, reason `baked-cache-stale`). Default: stderr. */
+  onStale?: (e: HostBootFailedError) => void
   /** The file the operations are extracted from. Default: the built `dist/api.d.ts` next to this module. */
   apiSource?: string
   /** The live functions. Default: `./api.js`. */
@@ -165,8 +171,8 @@ function packageVersionOf(name: string): string {
 }
 
 /** What an extraction depends on: the declarations, the extractor and the core the types are re-exported from. */
-function operationsCacheKey(apiSource: string): string {
-  const parts = [String(OPERATIONS_CACHE_VERSION), readFileSync(apiSource, 'utf8'), packageVersionOf('@adhd/apigen-core-client'), packageVersionOf('@adhd/stealth-core-browser')]
+function operationsCacheKey(apiSource: string, fs: HostFs): string {
+  const parts = [String(OPERATIONS_CACHE_VERSION), fs.readFile(apiSource), packageVersionOf('@adhd/apigen-core-client'), packageVersionOf('@adhd/stealth-core-browser')]
   try {
     // The declarations of the core carry the types api.d.ts re-exports: key on their content, never on a timestamp
     // (a rebuild or a cache restore changes mtimes without changing a type).
@@ -179,33 +185,101 @@ function operationsCacheKey(apiSource: string): string {
   return createHash('sha256').update(parts.join('\u0000')).digest('hex')
 }
 
-/**
- * Extract the operations of `apiSource`. With a `cacheFile` the result is kept on disk under a key
- * of everything the extraction depends on (a TypeScript program costs seconds; a CLI run must not
- * pay it every time). A missing, unreadable or stale cache is a miss; a write failure is ignored.
- */
-async function extractOperations(apiSource: string, cacheFile: string | undefined, fs: HostFs): Promise<Operation[]> {
-  const key = cacheFile ? operationsCacheKey(apiSource) : ''
-  if (cacheFile) {
-    try {
-      const hit = JSON.parse(fs.readFile(cacheFile)) as { key?: unknown; operations?: unknown }
-      if (hit.key === key && Array.isArray(hit.operations) && hit.operations.length > 0) return hit.operations as Operation[]
-    } catch {
-      // miss
-    }
+/** The extractor seam: apigen's `extract` by default, a counter in specs. */
+export type OperationsExtractor = (args: { sourceFile: string; namespace: string; dropFileSegment: boolean }) => Promise<Operation[]>
+
+/** The file name of the operations baked into dist at build time (I-35). */
+export const BAKED_OPERATIONS_FILE = 'operations.baked.json'
+
+/** Read a cache file; a missing, unreadable, key-mismatched or empty file is a miss (undefined). */
+function readOperationsCache(file: string, key: string, fs: HostFs): Operation[] | undefined {
+  try {
+    const hit = JSON.parse(fs.readFile(file)) as { key?: unknown; operations?: unknown }
+    if (hit.key === key && Array.isArray(hit.operations) && hit.operations.length > 0) return hit.operations as Operation[]
+  } catch {
+    // miss
   }
-  const operations = await extract({ sourceFile: apiSource, namespace: STEALTH_NAMESPACE, dropFileSegment: true })
+  return undefined
+}
+
+/** Write a cache file atomically when the file system can rename, else in place. */
+function writeOperationsCache(file: string, key: string, operations: Operation[], fs: HostFs): void {
+  fs.mkdirp(dirname(file))
+  const body = JSON.stringify({ key, operations })
+  if (fs.rename) {
+    const tmp = `${file}.${process.pid}.tmp`
+    fs.writeFile(tmp, body)
+    fs.rename(tmp, file)
+  } else {
+    fs.writeFile(file, body)
+  }
+}
+
+const defaultExtractor: OperationsExtractor = (args) => extract(args)
+
+export interface ResolveOperationsOptions {
+  apiSource: string
+  bakedFile?: string
+  cacheFile?: string
+  fs?: HostFs
+  extractor?: OperationsExtractor
+  onStale?: (e: HostBootFailedError) => void
+}
+
+/**
+ * The operations of `apiSource`, cheapest source first: the cache baked into dist at build time (I-35: a
+ * cold start must not pay the ~13 s TypeScript program), then the runtime cache, then an extraction (which
+ * refreshes the runtime cache). A baked file that exists but does not match the key of the declarations is
+ * stale: `onStale` receives a typed HOST_BOOT_FAILED (reason `baked-cache-stale`) and extraction runs.
+ * A missing, unreadable or stale cache is a miss; a runtime-cache write failure is ignored.
+ */
+export async function resolveOperations(options: ResolveOperationsOptions): Promise<Operation[]> {
+  const fs = options.fs ?? nodeHostFs
+  const { apiSource, bakedFile, cacheFile } = options
+  const key = bakedFile || cacheFile ? operationsCacheKey(apiSource, fs) : ''
+  if (bakedFile) {
+    const baked = readOperationsCache(bakedFile, key, fs)
+    if (baked) return baked
+    let present = true
+    try {
+      fs.readFile(bakedFile)
+    } catch {
+      present = false
+    }
+    if (present) options.onStale?.(bootFailed(`the baked operations cache ${bakedFile} is stale (it does not match ${apiSource}); re-extracting`, undefined, { reason: 'baked-cache-stale', bakedFile, apiSource }))
+  }
+  if (cacheFile) {
+    const cached = readOperationsCache(cacheFile, key, fs)
+    if (cached) return cached
+  }
+  const operations = await (options.extractor ?? defaultExtractor)({ sourceFile: apiSource, namespace: STEALTH_NAMESPACE, dropFileSegment: true })
   if (cacheFile) {
     try {
-      fs.mkdirp(dirname(cacheFile))
-      const tmp = `${cacheFile}.${process.pid}.tmp`
-      fs.writeFile(tmp, JSON.stringify({ key, operations }))
-      renameSync(tmp, cacheFile)
+      writeOperationsCache(cacheFile, key, operations, fs)
     } catch {
       // best effort
     }
   }
   return operations
+}
+
+/**
+ * Extract the operations of `apiSource` and write them to `outFile` under the key of everything the
+ * extraction depends on. Run by the build (`scripts/bake-operations.mjs`) once the declarations exist;
+ * any failure is a typed HOST_BOOT_FAILED, never a half-written file.
+ */
+export async function bakeOperations(options: { apiSource: string; outFile: string; fs?: HostFs; extractor?: OperationsExtractor }): Promise<{ file: string; key: string; count: number }> {
+  const fs = options.fs ?? nodeHostFs
+  try {
+    const key = operationsCacheKey(options.apiSource, fs)
+    const operations = await (options.extractor ?? defaultExtractor)({ sourceFile: options.apiSource, namespace: STEALTH_NAMESPACE, dropFileSegment: true })
+    if (operations.length === 0) throw bootFailed(`the extraction of ${options.apiSource} produced no operations`, undefined, { reason: 'bake-empty', apiSource: options.apiSource })
+    writeOperationsCache(options.outFile, key, operations, fs)
+    return { file: options.outFile, key, count: operations.length }
+  } catch (e) {
+    if (e instanceof HostBootFailedError) throw e
+    throw bootFailed(`could not bake the operations of ${options.apiSource} into ${options.outFile}`, e, { reason: 'bake-failed', apiSource: options.apiSource, outFile: options.outFile })
+  }
 }
 
 /** Make `data.input` required in the composed schema of an operation (a flat or empty call is then rejected). */
@@ -230,7 +304,14 @@ export async function buildStealthSearchPackage(options: BuildPackageOptions = {
   const apiSource = options.apiSource ?? join(packageRoot(), 'api.d.ts')
   let extracted: Operation[]
   try {
-    extracted = await extractOperations(apiSource, options.cacheFile, options.fs ?? nodeHostFs)
+    extracted = await resolveOperations({
+      apiSource,
+      bakedFile: options.bakedFile ?? join(packageRoot(), BAKED_OPERATIONS_FILE),
+      ...(options.cacheFile ? { cacheFile: options.cacheFile } : {}),
+      ...(options.fs ? { fs: options.fs } : {}),
+      ...(options.extractor ? { extractor: options.extractor } : {}),
+      onStale: options.onStale ?? ((e) => stderrLine(`[stealth-search] ${e.message}`)),
+    })
   } catch (e) {
     throw bootFailed(`could not extract the operations from ${apiSource} (build the package first)`, e, { apiSource })
   }
@@ -276,6 +357,8 @@ export interface HostFs {
   readFile(path: string): string
   writeFile(path: string, data: string): void
   mkdirp(path: string): void
+  /** Atomic replace (write a temp file, then rename). Absent: the target is written in place. */
+  rename?(from: string, to: string): void
 }
 
 export const nodeHostFs: HostFs = {
@@ -285,6 +368,7 @@ export const nodeHostFs: HostFs = {
   mkdirp: (p) => {
     mkdirSync(p, { recursive: true, mode: 0o700 })
   },
+  rename: (from, to) => renameSync(from, to),
 }
 
 /** Write one line to stderr (never stdout). */
