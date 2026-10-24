@@ -1,7 +1,7 @@
 /**
  * guards: a typed StealthSearchError or an ApiError raised by a verb reaches an MCP client in a form other than the one apigen ADR-0018 defines, or src/errors.ts claims a form that does not exist
  * tier: S
- * cites: ticket 8468f7b1 [search-mcp-iserror.2] backlog 4909102e
+ * cites: ticket 8468f7b1 [search-mcp-iserror.2] [search-hosts.16] backlog 4909102e
  * The MCP host driven in-process (REAL `startMcpHost`, REAL `mcpPlugin.run`, a real MCP client over the SDK's
  * in-memory transport pair; nothing is spawned). A verb that throws is the real use case: an agent calls a tool and
  * the verb fails. Criteria: [search-mcp-iserror.2] · backlog 4909102e (missing isError channel).

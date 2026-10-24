@@ -1,7 +1,7 @@
 /**
  * guards: a rejected flag leaves no span because telemetry starts after flag validation, or --help writes a span
  * tier: S
- * cites: ticket 8468f7b1 [search-tracing-fixes.2] backlog 5152786d
+ * cites: ticket 8468f7b1 [search-tracing-fixes.2] [search-hosts.16] backlog 5152786d
  * The REAL `runCli` over the real package, an injected telemetry initializer that starts a real sox-telemetry file
  * sink in a temp dir, and a process-spawn fake (no Chrome, no socket, no subprocess). Criteria: [search-tracing-fixes.2].
  */
@@ -54,6 +54,11 @@ async function records(): Promise<Rec[]> {
     .map((l) => JSON.parse(l) as Rec)
 }
 
+/** The span records of one operation (the shared plugin also writes its documented `adhd.op.error` twin). */
+function ofOp(recs: Rec[], id: string): Rec[] {
+  return recs.filter((r) => r.event.startsWith(`adhd.${id}.`))
+}
+
 describe('telemetry starts before flag validation [search-tracing-fixes.2]', () => {
   it(
     'rejected flag span before flag validation: --cdp-port abc still writes the start and error span of the operation',
@@ -70,9 +75,10 @@ describe('telemetry starts before flag validation [search-tracing-fixes.2]', () 
       expect(h.stderr.join('\n')).toContain('--cdp-port')
       expect(calls).toEqual([{ role: 'cli', logDir: dir }])
       const recs = await records()
-      expect(recs.map((r) => r.event)).toEqual([`adhd.${id}.start`, `adhd.${id}.error`])
-      expect(recs[1]?.['error_code']).toBe('HOST_FLAG_INVALID')
-      expect(recs[1]?.['adhd.transport']).toBe('cli')
+      const span = ofOp(recs, id)
+      expect(span.map((r) => r.event)).toEqual([`adhd.${id}.start`, `adhd.${id}.error`])
+      expect(String(span[1]?.['error'])).toContain('--cdp-port')
+      expect(span[1]?.['adhd.transport']).toBe('cli')
       expect(spawned).toEqual([])
     },
     BUILD_TIMEOUT_MS
@@ -90,7 +96,7 @@ describe('telemetry starts before flag validation [search-tracing-fixes.2]', () 
       const code = await runCli(['chromeStatus', '--no-such-flag', '1', '--log-dir', dir], h.deps)
       expect(code).toBe(exitCodeFor('HOST_FLAG_INVALID'))
       const recs = await records()
-      expect(recs.map((r) => r.event)).toEqual([`adhd.${id}.start`, `adhd.${id}.error`])
+      expect(ofOp(recs, id).map((r) => r.event)).toEqual([`adhd.${id}.start`, `adhd.${id}.error`])
     },
     BUILD_TIMEOUT_MS
   )

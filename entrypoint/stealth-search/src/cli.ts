@@ -27,7 +27,8 @@
  */
 import { join } from 'node:path'
 import { cliPlugin } from '@adhd/apigen-plugin-cli-output'
-import type { Plugin, RunInput } from '@adhd/apigen-core-client'
+import type { Call, Plugin, Result, RunInput } from '@adhd/apigen-core-client'
+import { otelReady } from '@adhd/sox-telemetry'
 import { createLogger } from '@adhd/apigen-engine-runtime'
 import { lifecycle, shutdownChrome } from '@adhd/stealth-core-browser'
 import { HostBootFailedError, asHostError, bootFailed, flagInvalid, nodeTooOldError, renderHostError } from './host-errors.js'
@@ -39,7 +40,7 @@ import { configureSearch } from './lib/search.js'
 import type { ConfigureSearchOptions } from './lib/search.js'
 import { FORCE_EXIT_MS, OPERATION_NAMES, buildStealthSearchPackage, resolveCoreEntry, stderrLine, stderrLogger } from './server.js'
 import type { BuildPackageOptions, OperationName, StealthSearchPackage, SurfaceEntry } from './server.js'
-import { traceRejection, tracingPlugin } from './tracing.js'
+import { tracingPlugin } from './tracing.js'
 
 // ─── Node preflight ───────────────────────────────────────────────────────────
 
@@ -391,6 +392,20 @@ export interface CliDeps {
   parse?: (argv: readonly string[]) => ParsedHostArgs
 }
 
+/**
+ * Record a call the host refused before it could dispatch (a rejected flag) through the plugin's own layer: the
+ * same `adhd.<opId>` start and error pair a failing dispatch writes, from the one mounted plugin, not a second
+ * emitter. The error is swallowed here; the caller re-throws its own copy.
+ */
+async function traceRejection(opId: string, err: unknown): Promise<void> {
+  const layer = tracingPlugin.capabilities.layer?.layer as unknown as ((call: Call, next: () => Promise<Result>) => Promise<Result>) | undefined
+  if (layer === undefined) return
+  // OTel brings itself up asynchronously after initTelemetry; a span opened before then would be dropped silently.
+  await otelReady()
+  const call = { operation: { id: opId }, data: {}, envelope: {}, ctx: new Map(), transport: 'cli', signal: new AbortController().signal } as unknown as Call
+  await Promise.resolve(layer(call, () => Promise.reject(err))).catch(() => undefined)
+}
+
 /** The `--log-dir` value of an argument list (`--log-dir x` or `--log-dir=x`), read before the flags are validated. */
 function scanLogDir(argv: readonly string[]): string | undefined {
   for (let i = 0; i < argv.length; i++) {
@@ -414,7 +429,7 @@ async function traceRejectedFlag(argv: readonly string[], err: unknown, build: (
   try {
     const built = await build({ cacheFile: join(defaultHostSettings().dataDir, 'cache', 'operations.json') })
     const entry = built.surface.find((s) => s.operation === named)
-    if (entry) await traceRejection(entry.id, 'cli', err)
+    if (entry) await traceRejection(entry.id, err)
   } catch {
     // tracing a rejection is best effort: the typed flag error is what the caller reports
   }
@@ -616,7 +631,7 @@ export async function runCli(argv: readonly string[], deps: CliDeps = {}): Promi
     try {
       verbInput = buildVerbInput(shape, parsed.rest, parsed.settings, parsed.given as ReadonlySet<string>)
     } catch (e) {
-      await traceRejection(entry.id, 'cli', e)
+      await traceRejection(entry.id, e)
       throw e
     }
 

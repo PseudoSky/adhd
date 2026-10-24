@@ -1,10 +1,11 @@
 /**
- * guards: a failing call writes a second error event, adhd.op.error, whose op id is the literal `op`
+ * guards: a failing call writes more than one adhd.<op>.error for its real op id, or more than the single documented upstream twin adhd.op.error (op id `op`)
  * tier: S
- * cites: ticket 8468f7b1 [search-tracing-fixes.3] backlog 5152786d
+ * cites: ticket 8468f7b1 [search-tracing-fixes.3] [search-hosts.16] backlog 5152786d
  * The REAL `runCli` over the real package with a failing verb, and the MCP-side layer driven in process, each over
  * a real sox-telemetry file sink in a temp dir and a process-spawn fake (no Chrome, no socket, no subprocess).
- * Criteria: [search-tracing-fixes.3].
+ * The shared apigen tracing plugin writes a documented upstream twin `adhd.op.error` (op id `op`) next to every
+ * `adhd.<op>.error`; it is kept as is. Criteria: [search-tracing-fixes.3].
  */
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -50,9 +51,12 @@ async function records(): Promise<Rec[]> {
     .map((l) => JSON.parse(l) as Rec)
 }
 
+/** The one tolerated record carrying the literal op id `op`: the plugin's documented upstream twin. */
+const TWIN = 'adhd.op.error'
+
 describe('one error event per failing call [search-tracing-fixes.3]', () => {
   it(
-    'duplicate adhd.op.error: a failing CLI verb writes exactly one adhd.<op>.error and never an adhd.op.error with the op id op',
+    'duplicate adhd.op.error: a failing CLI verb writes exactly one adhd.<op>.error and the only op id op record is the single adhd.op.error twin',
     async () => {
       startSink('cli')
       const verbs = fakeVerbs(vi.fn, {
@@ -65,17 +69,19 @@ describe('one error event per failing call [search-tracing-fixes.3]', () => {
       const h = cliHarness(verbs, { build: async () => built })
       await runCli(['chromeStatus'], h.deps)
       const recs = await records()
-      const errors = recs.filter((r) => r.event.endsWith('.error'))
-      expect(errors.map((r) => r.event)).toEqual([`adhd.${id}.error`])
-      expect(recs.some((r) => r.event === 'adhd.op.error')).toBe(false)
-      expect(recs.map((r) => r.event)).toEqual([`adhd.${id}.start`, `adhd.${id}.error`])
-      expect(errors[0]?.['error_code']).toBe('SEARCH_FAILED')
+      const own = recs.filter((r) => r.event.startsWith(`adhd.${id}.`))
+      expect(own.map((r) => r.event)).toEqual([`adhd.${id}.start`, `adhd.${id}.error`])
+      expect(String(own[1]?.['error'])).toContain('forced failure')
+      expect(recs.filter((r) => r.event === TWIN)).toHaveLength(1)
+      expect(recs.filter((r) => r.event.endsWith('.error'))).toHaveLength(2)
+      expect(recs.every((r) => r['adhd.op'] === id)).toBe(true)
     },
     BUILD_TIMEOUT_MS
   )
 
-  it('duplicate adhd.op.error op id: the layer both hosts mount writes one error record for a failing call and no record carries the op id op', async () => {
+  it('duplicate adhd.op.error op id: the layer both hosts mount writes one error record for a failing call and a single adhd.op.error twin, no other record has the op id op', async () => {
     startSink('live-service')
+    await handle?.otelReady()
     const layer = tracingPlugin.capabilities.layer?.layer as unknown as (call: Call, next: () => Promise<Result>) => Promise<Result>
     const call = {
       operation: { id: 'stealth/probe' },
@@ -87,10 +93,9 @@ describe('one error event per failing call [search-tracing-fixes.3]', () => {
     } as unknown as Call
     await expect(layer(call, async () => Promise.reject(searchError('UNKNOWN_PROVIDER', 'nope')))).rejects.toMatchObject({ code: 'UNKNOWN_PROVIDER' })
     const recs = await records()
-    expect(recs.map((r) => r.event)).toEqual(['adhd.stealth/probe.start', 'adhd.stealth/probe.error'])
-    for (const r of recs) {
-      expect(r['adhd.op']).toBe('stealth/probe')
-      expect(r.event).not.toBe('adhd.op.error')
-    }
+    expect(recs.filter((r) => r.event === 'adhd.stealth/probe.error')).toHaveLength(1)
+    expect(recs.filter((r) => r.event === TWIN)).toHaveLength(1)
+    expect(recs.map((r) => r.event).sort()).toEqual(['adhd.op.error', 'adhd.stealth/probe.error', 'adhd.stealth/probe.start'])
+    for (const r of recs) expect(r['adhd.op']).toBe('stealth/probe')
   })
 })

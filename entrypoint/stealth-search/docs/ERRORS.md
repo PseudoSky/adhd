@@ -44,7 +44,7 @@ $ echo $?
 70
 ```
 
-MCP: a `StealthSearchError` extends the core's error class, not apigen's `ApiError`, so the MCP plugin re-throws it and the client's call rejects with a JSON-RPC error response whose message is the error message (the code is not a separate field). Only an `ApiError` becomes a tool result with `isError: true`, text `<code>: <message>` and the code under `_meta['adhd/error']` (apigen ADR-0018): a request the host schema rejects, such as an unregistered provider id or `extraArgs` on `launchChrome`, answers that way with `invalid_argument`.
+MCP: a `StealthSearchError` extends the core's error class, not apigen's `ApiError`, so the MCP plugin re-throws it and the client's call rejects with a JSON-RPC error response whose message is the error message (the code is not a separate field). Only an `ApiError` becomes a tool result with `isError: true`, text `<code>: <message>` and the code under `_meta['adhd/error']` (apigen ADR-0018): a request the host schema rejects, such as `extraArgs` on `launchChrome`, answers that way with `invalid_argument`. An unregistered provider id is not rejected by the schema (the `provider` input has no enum): the verb itself raises `UNKNOWN_PROVIDER`, so over MCP that call rejects with a JSON-RPC error whose message is the verb's message, and over the CLI it exits 70.
 
 ```json
 { "isError": true, "content": [{ "type": "text", "text": "invalid_argument: ..." }], "_meta": { "adhd/error": { "code": "invalid_argument" } } }

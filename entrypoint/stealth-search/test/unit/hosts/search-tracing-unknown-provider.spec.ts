@@ -1,7 +1,7 @@
 /**
- * guards: UNKNOWN_PROVIDER is unreachable from the CLI or the MCP host (an enum rejects the provider first), or its span does not record the code
+ * guards: UNKNOWN_PROVIDER is unreachable from the CLI or the MCP host (an enum rejects the provider first), or its span does not record the failure of the verb
  * tier: S
- * cites: ticket 8468f7b1 [search-tracing-fixes.1] backlog 5152786d
+ * cites: ticket 8468f7b1 [search-tracing-fixes.1] [search-hosts.16] backlog 5152786d
  * The REAL `runCli` and the REAL `startMcpHost` (in-memory MCP client) over the real package, with the REAL
  * `describeProvider` verb bound to it, an unknown provider id, a real sox-telemetry file sink in a temp dir and a
  * process-spawn fake (no Chrome, no socket, no subprocess). Criteria: [search-tracing-fixes.1].
@@ -76,9 +76,14 @@ function spawnFake(): { spawned: string[]; restartBrowser: () => Promise<void> }
   return { spawned, restartBrowser: async () => void spawned.push('restartBrowser') }
 }
 
+/** The span records of one operation (the shared plugin also writes its documented `adhd.op.error` twin, asserted in search-tracing-single-error.spec.ts). */
+function ofOp(recs: Rec[], id: string): Rec[] {
+  return recs.filter((r) => r.event.startsWith(`adhd.${id}.`))
+}
+
 describe('UNKNOWN_PROVIDER reaches the verb and is recorded on the span [search-tracing-fixes.1]', () => {
   it(
-    'UNKNOWN_PROVIDER cli span: an unknown provider passes the flag check, the verb throws UNKNOWN_PROVIDER, exit status follows it and the adhd span records the code',
+    'UNKNOWN_PROVIDER cli span: an unknown provider passes the flag check, the verb throws UNKNOWN_PROVIDER, exit status follows it and the adhd span records the message of the verb',
     async () => {
       startSink('cli')
       const verbs = fakeVerbs(vi.fn, { describeProvider: describeProvider as never })
@@ -92,9 +97,11 @@ describe('UNKNOWN_PROVIDER reaches the verb and is recorded on the span [search-
       expect(code).toBe(exitCodeFor('UNKNOWN_PROVIDER'))
       expect(h.stdout).toHaveLength(0)
       const recs = await records()
-      expect(recs.map((r) => r.event)).toEqual([`adhd.${id}.start`, `adhd.${id}.error`])
-      const err = recs[1] as Rec
-      expect(err['error_code']).toBe('UNKNOWN_PROVIDER')
+      const span = ofOp(recs, id)
+      expect(span.map((r) => r.event)).toEqual([`adhd.${id}.start`, `adhd.${id}.error`])
+      const err = span[1] as Rec
+      // The shared plugin records the message of the failure, not its typed code (the code is the exit status).
+      expect(String(err['error'])).toContain('Unknown provider "not-a-provider"')
       expect(err['adhd.transport']).toBe('cli')
       expect(spawn.spawned).toEqual([])
     },
@@ -102,7 +109,7 @@ describe('UNKNOWN_PROVIDER reaches the verb and is recorded on the span [search-
   )
 
   it(
-    'UNKNOWN_PROVIDER mcp span: the provider input has no enum, the tool call reaches the verb, rejects with UNKNOWN_PROVIDER and the adhd span records the code',
+    'UNKNOWN_PROVIDER mcp span: the provider input has no enum, the tool call reaches the verb, rejects with the UNKNOWN_PROVIDER message of the verb and the adhd span records it',
     async () => {
       startSink('live-service')
       const verbs = fakeVerbs(vi.fn, { describeProvider: describeProvider as never })
@@ -136,9 +143,10 @@ describe('UNKNOWN_PROVIDER reaches the verb and is recorded on the span [search-
       expect(outcome).toHaveProperty('err')
       expect(String((outcome as { err: Error }).err.message)).toMatch(/not-a-provider/)
       const recs = await records()
-      expect(recs.map((r) => r.event)).toEqual([`adhd.${id}.start`, `adhd.${id}.error`])
-      const err = recs[1] as Rec
-      expect(err['error_code']).toBe('UNKNOWN_PROVIDER')
+      const span = ofOp(recs, id)
+      expect(span.map((r) => r.event)).toEqual([`adhd.${id}.start`, `adhd.${id}.error`])
+      const err = span[1] as Rec
+      expect(String(err['error'])).toContain('Unknown provider "not-a-provider"')
       expect(err['adhd.transport']).toBe('mcp')
     },
     BUILD_TIMEOUT_MS
