@@ -543,11 +543,11 @@
       "end_ref": "f62af06f62226b3776abb24720e61c33a7cb4c3d"
     },
     "search-tracing-fixes": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-10-24T01:07:44.921Z",
-      "done_at": null,
+      "done_at": "2026-10-24T02:09:15.185Z",
       "start_ref": "efad20bcbad8e7df8211bb503ed8649b6e49ddab",
-      "end_ref": null
+      "end_ref": "46ef39369e5fa2b58282a74ff90fde02773327dc"
     },
     "plan-notes": {
       "status": "complete",
@@ -1332,6 +1332,18 @@
       "audit_criteria_total": 3,
       "by": "pseudosky",
       "note": "commit 67046467a; guard 3/3 rc=0"
+    },
+    {
+      "ts": "2026-10-24T02:09:15.185Z",
+      "from": "plan-notes",
+      "to": "search-tracing-fixes",
+      "start_ref": "efad20bcbad8e7df8211bb503ed8649b6e49ddab",
+      "end_ref": "46ef39369e5fa2b58282a74ff90fde02773327dc",
+      "audit_exit": 0,
+      "audit_criteria_passed": 6,
+      "audit_criteria_total": 6,
+      "by": "pseudosky",
+      "note": "commit aecee72a6 (+eb44935ea); guards search-tracing-fixes/search-tracing/search-hosts/search-mcp-iserror rc=0"
     }
   ],
   "amendment_log": [
@@ -2109,7 +2121,7 @@
     "version": "0.8.35",
     "hash": "0b6bc1f3d70e"
   },
-  "current_state": "plan-notes",
+  "current_state": "tracing-log-validation",
   "dod_provenance": {
     "confirmed_at": "2026-10-12T23:49:38.410Z",
     "by": "pseudosky",
