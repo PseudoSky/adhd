@@ -1812,7 +1812,7 @@ def _af8():
 @check("audit-final", 10)
 def _af10():
     """Every spec file cites ticket 8468f7b1 and a valid criterion id (final re-run of the citation rule)."""
-    files = [f for d in (CORE_DIR, SEARCH_DIR) for f in walk(f"{d}/test", (".ts",))]
+    files = [f for d in (CORE_DIR, SEARCH_DIR) for f in walk(f"{d}/test", (".ts",)) if f.endswith(".spec.ts")]
     ids = criteria_ids()
     bad = [f for f in files if TICKET not in read(f) or not (set(re.findall(r"\[([a-z0-9-]+\.\d+)\]", read(f))) & ids)]
     return not bad and bool(files) and exists(SEARCH_DIR), f"uncited {bad[:5]}"
