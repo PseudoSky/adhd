@@ -564,10 +564,10 @@
       "end_ref": null
     },
     "release-gate-fixes": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-10-24T04:12:24.860Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "d707776de68abd98d5c16b97a40e9294e6b60df0",
       "end_ref": null
     }
   },
@@ -2152,7 +2152,7 @@
     "version": "0.8.35",
     "hash": "0b6bc1f3d70e"
   },
-  "current_state": "release-readiness",
+  "current_state": "release-gate-fixes",
   "dod_provenance": {
     "confirmed_at": "2026-10-12T23:49:38.410Z",
     "by": "pseudosky",
