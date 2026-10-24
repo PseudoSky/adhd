@@ -491,7 +491,7 @@ export async function fetchPage(provider: FetchProviderConfig, url: string, opti
     // Detection is SPARSITY-GATED: a real bot wall renders almost no content, while legitimate pages
     // routinely contain ban words in prose, so a ban marker is only trusted when the text is sparse.
     const detectChallenge = (): string | null =>
-      md.markdown.trim().length < CHALLENGE_SPARSE_CHARS ? deps.checkBans(provider.bans, { url: target, status: 200, body: outerHTML }) : null
+      md.markdown.trim().length < CHALLENGE_SPARSE_CHARS ? deps.checkBans(provider.bans, { url: target, status: mainStatus ?? 200, body: outerHTML }) : null
     let ban = detectChallenge()
     if (ban && challengeWaitMs > 0) {
       // TWO-PHASE wait. The window starts OFF-SCREEN, so:
@@ -546,6 +546,16 @@ export async function fetchPage(provider: FetchProviderConfig, url: string, opti
         ...(extra.error ? { error: extra.error } : {}),
         ...(win ? { content: win.content, ...(win.nextOffset !== undefined ? { nextOffset: win.nextOffset } : {}) } : {}),
       }
+    }
+
+    // ── 4b. Error statuses: the page that survived challenge handling still answered an HTTP error ──
+    // 429 is a rate limit; every other 4xx/5xx (401, 403, 5xx) is an error. The rendered body stays in the result
+    // so the caller can read what the site said, but the outcome is never `success`. 404 and 410 ended above.
+    if (mainStatus !== undefined && mainStatus >= 400) {
+      const rateLimited = mainStatus === 429
+      return finish(md.markdown, rateLimited ? 'rate_limited' : 'error', htmlTitle(outerHTML) ?? finalUrl, {
+        error: `SEARCH_FAILED: HTTP ${mainStatus} for ${target}`,
+      })
     }
 
     // ── 5. PDF branch: parse bytes, not the (empty) DOM ──

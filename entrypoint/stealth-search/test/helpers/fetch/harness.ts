@@ -95,7 +95,10 @@ export function makeWorld(script: PageScript, extra: Partial<FetchDeps> = {}): W
       return { signal: script.settled === false ? 'deadline' : 'networkIdle', settled: script.settled !== false, tookMs: 50 }
     },
     checkBans: (rules, ctx) => {
-      for (const r of rules) if (r.checkBody?.test(ctx.body)) return r.signal
+      for (const r of rules) {
+        if (r.checkStatus?.includes(ctx.status)) return r.signal
+        if (r.checkBody?.test(ctx.body)) return r.signal
+      }
       return null
     },
     toMarkdown: (html) => htmlToMarkdown(html),

@@ -10,8 +10,15 @@ Every failure a user can hit in `@adhd/stealth-search` is a `StealthSearchError`
 
 A search or fetch result carries an `outcome` of `success|empty|error|timeout|hitl|captcha|rate_limited|banned`.
 Outcomes are returned as data and never thrown. An error is thrown only for a failure the call could not
-turn into a result (an unknown provider, a refused URL, a bad flag). A fetch whose URL is refused is
-reported as an outcome `error` whose message carries `FETCH_URL_REFUSED`.
+turn into a result (an unknown provider, a bad flag, an empty query). A refused fetch URL is never thrown by a
+search or fetch call: it is returned as an outcome `error` whose message starts with `FETCH_URL_REFUSED:`. The
+policy function `validateFetchUrl` returns the verdict and does not throw.
+
+A fetched page that answers an HTTP error status is never a `success`: 404 and 410 are `error` with no content,
+429 is `rate_limited`, and every other 4xx or 5xx status is `error`. All of them carry
+`SEARCH_FAILED: HTTP <status> for <url>` in `error`; a 401, 403, 429 or 5xx page keeps the rendered body in
+`content` so the caller can read what the site said. A challenge wall that answers 403 or 429 is first given the
+challenge wait, and only a page that is still an error afterwards is reported as one.
 
 ## Codes
 
