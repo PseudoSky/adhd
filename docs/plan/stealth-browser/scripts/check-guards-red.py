@@ -47,6 +47,8 @@ SKIPPED = sorted(k for k in set(FOLDED) | set(STATES) if k not in PENDING)
 FOLDED = {k: v for k, v in FOLDED.items() if k in PENDING or k not in _st}
 STATES = [k for k in STATES if k in PENDING or k not in _st]
 print("skipped (not pending in state.json): " + ", ".join(SKIPPED))
+# Inventory-fully-pinned criteria guard a standing invariant ([inv:no-features-removed]): they are green once the inventories are pinned, which the guard sweep did ahead of the audit states.
+REGRESSION_GUARDS = {"audit-fixes.6", "review-prep.5", "audit-final.4", "audit-final.12"}
 problems, n = [], 0
 for slug, ids in FOLDED.items():
     for i in ids:
@@ -60,6 +62,8 @@ for slug, ids in FOLDED.items():
         out = r.stdout + r.stderr
         if "check crashed" in out:
             problems.append(f"{cid}: guard crashed: {out.strip()[-160:]}")
+        elif r.returncode == 0 and cid in REGRESSION_GUARDS:
+            print(f"green {cid} (regression guard: the failsafe inventories are fully pinned since the guard-sweep fix; the criterion stays binding)")
         elif r.returncode == 0:
             problems.append(f"{cid}: GREEN before any work (exit 0)")
         else:
