@@ -151,11 +151,11 @@
       "end_ref": "68ddca92cafe9728678b79d39e2b6cffd4dab876"
     },
     "docs-marketing-run": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-10-24T18:23:54.270Z",
-      "done_at": null,
+      "done_at": "2026-10-24T19:19:54.159Z",
       "start_ref": "4ee78a454793e30be16771de5c03fa6c0c027af1",
-      "end_ref": null
+      "end_ref": "7c2f2eae35a7de9e8e4543c1e24b0dd46d0124cd"
     },
     "readme-rewrite": {
       "status": "pending",
@@ -1483,6 +1483,18 @@
       "audit_criteria_total": 7,
       "by": "pseudosky",
       "note": "post-fix gates green: 7/7 gates-rerun criteria, evidence gates-rerun.json all_green at a8581af33"
+    },
+    {
+      "ts": "2026-10-24T19:19:54.159Z",
+      "from": "docs-marketing-run",
+      "to": "docs-marketing-run",
+      "start_ref": "4ee78a454793e30be16771de5c03fa6c0c027af1",
+      "end_ref": "7c2f2eae35a7de9e8e4543c1e24b0dd46d0124cd",
+      "audit_exit": 0,
+      "audit_criteria_passed": 12,
+      "audit_criteria_total": 12,
+      "by": "pseudosky",
+      "note": "doc-steward run for core (0.0.1) and search (0.1.0): catalogs reviewed PASS, 12/12 criteria green"
     }
   ],
   "amendment_log": [
@@ -2260,7 +2272,7 @@
     "version": "0.8.35",
     "hash": "0b6bc1f3d70e"
   },
-  "current_state": "docs-marketing-run",
+  "current_state": "readme-rewrite",
   "dod_provenance": {
     "confirmed_at": "2026-10-12T23:49:38.410Z",
     "by": "pseudosky",
