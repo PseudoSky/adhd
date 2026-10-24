@@ -84,9 +84,11 @@ export interface LaunchChromeResult {
   port: number
 }
 
-/** Result of shutdownChrome: whether Chrome is still answering after the soft shutdown. */
+/** Result of shutdownChrome: whether the soft shutdown ran, and whether Chrome is still answering afterwards. */
 export interface ShutdownChromeResult {
+  /** True when the soft shutdown completed; false when it failed (the call still resolves, and `running` says what is left). */
   ok: boolean
+  /** Whether Chrome still answers on the endpoint after the soft shutdown. A deliberate deferral to an active session leaves it true with `ok` true. */
   running: boolean
 }
 
@@ -192,17 +194,20 @@ export async function launchChrome(input?: LaunchChromeInput): Promise<LaunchChr
 
 /**
  * Soft-shutdown the managed Chrome: close it only when it is genuinely idle,
- * deferring to other sessions and to any open web page. Reports whether Chrome
+ * deferring to other sessions and to any open web page. Never throws: `ok` is
+ * false when the shutdown itself failed, and `running` reports whether Chrome
  * is still running afterwards.
  */
 export async function shutdownChrome(input?: ChromeEndpointInput): Promise<ShutdownChromeResult> {
   const { host, port, cdpHost } = resolveEndpoint(input)
+  let ok = true
   try {
     await shutdownIdleAt(host, port)
   } catch {
-    // best effort: a soft shutdown never throws; `running` below tells the caller what happened
+    // A soft shutdown never throws; `ok: false` records that it failed and `running` tells what is left.
+    ok = false
   }
-  return { ok: true, running: await isChromeReachable(cdpHost) }
+  return { ok, running: await isChromeReachable(cdpHost) }
 }
 
 /**

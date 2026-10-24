@@ -6,7 +6,7 @@
  * Library touch points are mocked; no process, socket or Chrome is involved.
  * guards: [fs-187] chromeStatus reports a stopped Chrome
  * tier: S
- * cites: 8468f7b1 [tests-unit-surface.6]
+ * cites: 8468f7b1 [tests-unit-surface.6] [audit-fixes.5]
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -75,8 +75,8 @@ describe('verb failsafes', () => {
   it('[fs-191] shutdownChrome is soft and never throws', async () => {
     lib.shutdownIdleAt.mockRejectedValue(new Error('kill refused'))
     lib.isChromeReachable.mockResolvedValue(true)
-    // the soft shutdown deferred or failed: still ok, and `running` tells the caller what happened
-    expect(await shutdownChrome()).toEqual({ ok: true, running: true })
+    // [audit-fixes.5] P36 the soft shutdown failed: it still resolves, but `ok` is false so the flag carries information
+    expect(await shutdownChrome()).toEqual({ ok: false, running: true })
     lib.shutdownIdleAt.mockResolvedValue(undefined)
     lib.isChromeReachable.mockResolvedValue(false)
     expect(await shutdownChrome()).toEqual({ ok: true, running: false })
