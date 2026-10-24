@@ -131,7 +131,7 @@ export function commandLineCarriesProfile(commandLine: string, profileDir: strin
   for (;;) {
     const at = commandLine.indexOf(want, from)
     if (at === -1) return false
-    const before = at === 0 ? ' ' : commandLine[at - 1]!
+    const before = at === 0 ? ' ' : commandLine.charAt(at - 1)
     const rest = commandLine.slice(at + want.length).replace(/^[\\/]+(?=\s|$)/, '')
     if (/\s/.test(before) && (rest === '' || rest.startsWith(' --'))) return true
     from = at + 1
@@ -479,7 +479,8 @@ export async function killChrome(port = DEFAULT_CDP_PORT, opts: KillChromeOption
           : `killChrome: skipped pid ${pid} on port ${port}: its command line does not carry --user-data-dir=${profileDir}`,
       )
   }
-  if (pids.length === 0) return
+  const [firstPid] = pids
+  if (firstPid === undefined) return
   for (const pid of pids) {
     // Kill the listener's process GROUP so Chrome's detached Helpers go too.
     killGroup(probe.groupOf(pid) ?? pid, 'SIGTERM')
@@ -487,10 +488,10 @@ export async function killChrome(port = DEFAULT_CDP_PORT, opts: KillChromeOption
   // Wait for the first PID to die, then SIGKILL its group for lingering Helpers.
   for (let i = 0; i < 25; i++) {
     try {
-      process.kill(pids[0]!, 0)
+      process.kill(firstPid, 0)
       await new Promise((r) => setTimeout(r, 200))
     } catch {
-      try { process.kill(-pids[0]!, 'SIGKILL') } catch { /* no group left */ }
+      try { process.kill(-firstPid, 'SIGKILL') } catch { /* no group left */ }
       return
     }
   }

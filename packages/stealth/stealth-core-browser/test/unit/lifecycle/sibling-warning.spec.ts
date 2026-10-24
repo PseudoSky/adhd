@@ -21,6 +21,7 @@ vi.mock('@adhd/sox-service-proxy', async (orig) => (await import('../../helpers/
 import { killChrome, killProcessGroup } from '../../../src/lib/cdp/browser.js'
 import { openPage, resetSp, resetWorld, world } from '../../helpers/lifecycle/manager-world.js'
 import { client, makeHub } from '../../helpers/lifecycle/manager-clients.js'
+import { must } from '../../helpers/must.js'
 
 beforeEach(() => {
   vi.useFakeTimers()
@@ -40,10 +41,10 @@ describe('8468f7b1 [chrome-lifecycle.18] status().siblingWarning', () => {
     const hub = makeHub()
     const cs = [11, 22, 33].map((pid) => client(hub, pid))
     for (const c of cs) await c.manager.ready()
-    expect((await cs[0]!.manager.status()).siblingWarning).toBe(false)
+    expect((await must(cs[0]).manager.status()).siblingWarning).toBe(false)
     const fourth = client(hub, 44)
     await fourth.manager.ready()
-    const s = await cs[0]!.manager.status()
+    const s = await must(cs[0]).manager.status()
     expect(s).toMatchObject({ siblingWarning: true, processes: 4, reaper: true, ready: true })
     expect((await fourth.manager.status()).siblingWarning).toBe(true)
   })

@@ -157,7 +157,7 @@ function realSource(): ReaperEntrySource {
   }
 }
 
-function isOk(r: RpcResponse | undefined): boolean {
+function isOk(r: RpcResponse | undefined): r is RpcResponse {
   return r !== undefined && r.error === undefined
 }
 
@@ -281,7 +281,7 @@ export function createProxyReaperLink(cfg: ProxyReaperLinkConfig): ReaperLink {
     },
     async reapIfIdle(): Promise<ReapOutcome | null> {
       const r = await request('reapIfIdle')
-      return isOk(r) ? (r!.result as ReapOutcome) : null
+      return isOk(r) ? (r.result as ReapOutcome) : null
     },
     async release(): Promise<void> {
       const conn = current
@@ -296,7 +296,7 @@ export function createProxyReaperLink(cfg: ProxyReaperLinkConfig): ReaperLink {
     },
     async status(): Promise<ReaperStatus | null> {
       const r = await request('status')
-      return isOk(r) ? (r!.result as ReaperStatus) : null
+      return isOk(r) ? (r.result as ReaperStatus) : null
     },
     isUp: () => current !== null,
     lastError: () => lastError,

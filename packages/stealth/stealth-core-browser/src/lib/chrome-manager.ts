@@ -178,11 +178,13 @@ export class ChromeManager {
   // ── Wiring (lazy: the constructor touches nothing) ─────────────────────────
 
   /** Resolve the private state dir once; an unsafe dir means degraded mode, never a throw. */
-  private wire(): void {
-    if (this.state) return
-    this.state = resolveStateDir(this.port, this.stateDirOpt === undefined ? {} : { stateDir: this.stateDirOpt })
-    const dir = this.state.ok ? this.state.dir : undefined
-    this.breaker = createLaunchBreaker({ port: this.port, ...(dir ? { stateDir: dir } : {}), logger: this.log })
+  private wire(): { state: StateDirResult; breaker: LaunchBreaker } {
+    if (this.state && this.breaker) return { state: this.state, breaker: this.breaker }
+    const state = resolveStateDir(this.port, this.stateDirOpt === undefined ? {} : { stateDir: this.stateDirOpt })
+    this.state = state
+    const dir = state.ok ? state.dir : undefined
+    const breaker = createLaunchBreaker({ port: this.port, ...(dir ? { stateDir: dir } : {}), logger: this.log })
+    this.breaker = breaker
     if (dir) this.ownership = createOwnershipStore({ stateDir: dir, port: this.port, logger: this.log })
     if (this.injectedLink) this.link = this.injectedLink
     else if (dir) {
@@ -201,6 +203,7 @@ export class ChromeManager {
         logger: this.log,
       })
     }
+    return { state, breaker }
   }
 
   /** One warning for the whole degraded session. */
@@ -212,9 +215,8 @@ export class ChromeManager {
 
   /** Ensure the reaper and hold the link. Never throws; false = degraded. */
   private async ensureLink(): Promise<boolean> {
-    this.wire()
-    if (!this.state!.ok || !this.link) {
-      const st = this.state!
+    const st = this.wire().state
+    if (!st.ok || !this.link) {
       this.ensureFailed = true
       this.warnDegraded(lifecycleErrors.reaperUnavailable(this.port, st.ok ? lifecycleError('REAPER_UNAVAILABLE', 'no reaper link') : st.error, st.dir))
       return false
@@ -266,19 +268,20 @@ export class ChromeManager {
       this.owned = false
     }
 
-    this.breaker!.assertClosed()
+    const { breaker } = this.wire()
+    breaker.assertClosed()
     let launched: { pid: number | null; profileDir: string }
     try {
       launched = await ensureChromeRunning({ port: this.port, ...(this.userDataDir === undefined ? {} : { profileDir: this.userDataDir }) })
     } catch (err) {
       // A refusal to attach to somebody else's Chrome is not a failed launch: it must not feed the breaker, and its detail survives.
       if (isLifecycleError(err, 'LAUNCH_FAILED') && err.detail?.['reason'] === 'foreign-profile') throw err
-      this.breaker!.recordFailure()
+      breaker.recordFailure()
       const msg = errorMessage(err)
       this.log(`Failed to ensure Chrome running: ${msg}`)
       throw isStartTimeout(err) ? lifecycleErrors.unreachableAfterLaunch(this.port, err) : lifecycleErrors.launchFailed(this.port, err)
     }
-    this.breaker!.recordSuccess()
+    breaker.recordSuccess()
 
     if (launched.pid !== null) {
       // This process spawned Chrome: record it (pid + start token) for the reaper.
@@ -382,8 +385,7 @@ export class ChromeManager {
   }
 
   async status(): Promise<ChromeStatus> {
-    this.wire()
-    const breaker = this.breaker!.state()
+    const breaker = this.wire().breaker.state()
     let host = null
     try {
       host = this.link?.isUp() ? await this.link.status() : null

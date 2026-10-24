@@ -51,10 +51,10 @@ export class CdpSession {
    *        promise rejects.
    */
   async connect(wsUrl: string, timeoutMs?: number): Promise<void> {
-    this._ws = new WebSocket(wsUrl)
+    const ws = new WebSocket(wsUrl)
+    this._ws = ws
 
     await new Promise<void>((resolve, reject) => {
-      const ws = this._ws!
       let timer: ReturnType<typeof setTimeout> | undefined
       let settled = false
       const settle = (err?: StealthCoreBrowserError): void => {

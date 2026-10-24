@@ -27,6 +27,7 @@ import { ownerRecordPath } from '../../../src/lib/lifecycle/ownership.js'
 import type { ReaperLink } from '../../../src/lib/lifecycle/reaper-link.js'
 import { client, makeHub } from '../../helpers/lifecycle/manager-clients.js'
 import { HOST, IDLE, openPage, PORT, resetSp, resetWorld, STATE_DIR, world } from '../../helpers/lifecycle/manager-world.js'
+import { must } from '../../helpers/must.js'
 
 beforeEach(() => {
   vi.useFakeTimers()
@@ -65,7 +66,7 @@ describe('8468f7b1 AC2 [tests-unit-core.1] ChromeManager.ready', () => {
     expect(hideAllWindows).toHaveBeenCalledWith(HOST)
     expect(c.manager.isReady).toBe(true)
     expect(JSON.parse(world.fs.readFileSync(ownerRecordPath(STATE_DIR, PORT)))).toMatchObject({ pid: world.nextPid - 1, port: PORT, profileDir: '/profile' })
-    expect(hub.host!.clients()).toMatchObject([{ pid: 11, checkHistory: true }])
+    expect(must(hub.host).clients()).toMatchObject([{ pid: 11, checkHistory: true }])
   })
 
   it('[audit-fixes.5] P34 the port of a bracketed IPv6 cdpHost is the number after the last colon, not the second colon-separated field', async () => {
@@ -305,9 +306,9 @@ describe('8468f7b1 AC2 [tests-unit-core.1] shutdown and shutdownIfIdle', () => {
     const c = client(hub, 11)
     await c.manager.ready()
     await c.manager.release()
-    expect(hub.host!.clients()).toEqual([])
+    expect(must(hub.host).clients()).toEqual([])
     expect(c.manager.isReady).toBe(true)
     await c.manager.ready()
-    expect(hub.host!.clients().map((x) => x.pid)).toEqual([11])
+    expect(must(hub.host).clients().map((x) => x.pid)).toEqual([11])
   })
 })

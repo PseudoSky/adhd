@@ -10,6 +10,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { CdpSession } from '../../../src/lib/cdp/session.js'
 import { StealthCoreBrowserError } from '../../../src/errors.js'
+import { must } from '../../helpers/must.js'
 
 type Listener = (ev: { data?: unknown }) => void
 
@@ -49,7 +50,7 @@ class FakeWebSocket {
   }
 }
 
-const lastSocket = (): FakeWebSocket => FakeWebSocket.instances[FakeWebSocket.instances.length - 1]!
+const lastSocket = (): FakeWebSocket => must(FakeWebSocket.instances[FakeWebSocket.instances.length - 1])
 
 async function connected(): Promise<{ session: CdpSession; ws: FakeWebSocket }> {
   const session = new CdpSession()

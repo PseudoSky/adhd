@@ -26,7 +26,7 @@ const seam = vi.hoisted(() => ({
 }))
 vi.mock('../../../src/lib/lifecycle/reaper-link.js', async (orig) => ({
   ...(await orig<Record<string, unknown>>()),
-  createProxyReaperLink: (cfg: Record<string, unknown>) => seam.make!(cfg),
+  createProxyReaperLink: (cfg: Record<string, unknown>) => must(seam.make)(cfg),
 }))
 
 import type { ChromeManagerOptions } from '../../../src/lib/chrome-manager.js'
@@ -37,6 +37,7 @@ import { FakeReaperLink } from '../../helpers/lifecycle/fake-reaper-link.js'
 import { makeHub } from '../../helpers/lifecycle/manager-clients.js'
 import { ensureChromeRunning } from '../../../src/lib/cdp/browser.js'
 import { resetSp, resetWorld, world } from '../../helpers/lifecycle/manager-world.js'
+import { must } from '../../helpers/must.js'
 
 interface Made {
   cfg: Record<string, unknown>
@@ -48,7 +49,7 @@ let made: Made[]
 let nextPort = 18000
 
 const portFor = (): number => nextPort++
-const linkOf = (cfg: Record<string, unknown>): FakeReaperLink => made.find((m) => m.cfg['port'] === cfg['port'])!.link
+const linkOf = (cfg: Record<string, unknown>): FakeReaperLink => must(made.find((m) => m.cfg['port'] === cfg['port'])).link
 void linkOf
 
 beforeEach(() => {
@@ -70,7 +71,8 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-const madeFor = (port: number): Made => made.find((m) => m.cfg['port'] === port)!
+const madeOrNone = (port: number): Made | undefined => made.find((m) => m.cfg['port'] === port)
+const madeFor = (port: number): Made => must(madeOrNone(port), `the reaper link made for port ${port}`)
 
 describe('8468f7b1 [core-seam.1] managerFor: one cached manager per Chrome', () => {
   it('returns the same manager for the same host and port and another for another port', () => {
@@ -151,7 +153,7 @@ describe('8468f7b1 [core-seam.1] [core-seam.2] keepAlive: true never arms the id
     const port = portFor()
     const m = managerFor('127.0.0.1', port)
     m.bump()
-    expect(madeFor(port)).toBeUndefined() // before ready() nothing is wired and nothing is sent
+    expect(madeOrNone(port)).toBeUndefined() // before ready() nothing is wired and nothing is sent
     await m.ready()
     const before = madeFor(port).link.activityCalls
     m.bump()
@@ -215,7 +217,7 @@ describe('8468f7b1 [core-seam.1] [core-seam.2] chromeExitTarget reaches every li
     await live.ready()
     const soft = vi.spyOn(live, 'shutdownIfIdle')
     const uninstall = installProcessExitHooks(chromeExitTarget, { proc, exit, logger: (m) => logs.push(m) })
-    handlers.get('SIGTERM')!()
+    must(handlers.get('SIGTERM'))()
     await vi.advanceTimersByTimeAsync(10)
     expect(madeFor(port).link.releaseCalls).toBeGreaterThanOrEqual(1)
     expect(soft).toHaveBeenCalledTimes(1)

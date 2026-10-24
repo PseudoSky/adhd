@@ -29,6 +29,7 @@ import { ChromeManager, RECONNECT_MIN_INTERVAL_MS } from '../../../src/lib/chrom
 import { FakeBackend } from '../../helpers/lifecycle/fake-backend.js'
 import { client, makeHub, worldHost } from '../../helpers/lifecycle/manager-clients.js'
 import { chromeGone, HOST, IDLE, resetSp, resetWorld, sp, STATE_DIR, world } from '../../helpers/lifecycle/manager-world.js'
+import { must } from '../../helpers/must.js'
 
 /** The reaper retires this long after Chrome is gone (the option every client passes to it). */
 const orphanWindowMs = 2_000
@@ -85,34 +86,34 @@ describe('8468f7b1 [chrome-lifecycle.29] a retired reaper with idle clients is n
 describe('8468f7b1 [chrome-lifecycle.29] the only re-ensure triggers', () => {
   it('ready() re-ensures (and relaunches Chrome)', async () => {
     const { hub, cs, ensures } = await retiredWithIdleClients(2)
-    await cs[0]!.manager.ready()
+    await must(cs[0]).manager.ready()
     expect(ensures[0]).toHaveBeenCalledTimes(1)
     expect(ensures[1]).toHaveBeenCalledTimes(0)
     expect(hub.spawns).toBe(2)
-    expect(cs[0]!.link.isUp()).toBe(true)
+    expect(must(cs[0]).link.isUp()).toBe(true)
   })
 
   it('a bump() settle while the link is down AND Chrome is reachable re-ensures once per 2 s', async () => {
     const { hub, cs, ensures } = await retiredWithIdleClients(1)
     world.chromeUp = true // someone else relaunched Chrome
-    const c = cs[0]!
+    const c = must(cs[0])
     c.manager.bump()
     c.manager.bump() // rate-limited: same 2 s window
     await vi.advanceTimersByTimeAsync(1)
     expect(ensures[0]).toHaveBeenCalledTimes(1)
     expect(c.link.isUp()).toBe(true)
     // The reconnect reports this activity to the new host.
-    expect(hub.host!.clients()[0]!.lastActivityAt).toBe(Date.now() - 1)
+    expect(must(must(hub.host).clients()[0]).lastActivityAt).toBe(Date.now() - 1)
   })
 
   it('a withBrowser settle while the link is down and Chrome is reachable re-ensures', async () => {
     const { cs, ensures } = await retiredWithIdleClients(1)
     world.chromeUp = true
-    await cs[0]!.manager.withBrowser(async () => 'ok')
+    await must(cs[0]).manager.withBrowser(async () => 'ok')
     await vi.advanceTimersByTimeAsync(1)
     // ready() inside withBrowser is itself a trigger; the settle bump finds the link up and does not ensure again.
     expect(ensures[0]).toHaveBeenCalledTimes(1)
-    expect(cs[0]!.link.isUp()).toBe(true)
+    expect(must(cs[0]).link.isUp()).toBe(true)
   })
 
   it('a previously FAILED ensure is retried exactly once at idle fire', async () => {

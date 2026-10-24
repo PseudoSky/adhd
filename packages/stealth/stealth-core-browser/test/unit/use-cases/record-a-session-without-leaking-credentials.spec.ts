@@ -12,6 +12,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { capture, cdp, recording } from '../../../src/index.js'
 import { articleListHtml, pageTraceFor, SITE_URL } from '../../helpers/page-fixtures.js'
 import { ChromeWorld } from '../../helpers/use-cases/scenario-kit.js'
+import { must } from '../../helpers/must.js'
 
 const world = new ChromeWorld(9406)
 const SECRETS = { Cookie: 'sid=opaque-session-token', Authorization: 'Bearer opaque-bearer' }
@@ -25,7 +26,7 @@ afterEach(() => world.dispose())
 
 async function wsUrl(): Promise<string> {
   const [tab] = await cdp.listPageTargetsOnly(`127.0.0.1:${world.port}`)
-  return tab!.webSocketDebuggerUrl!
+  return must(must(tab).webSocketDebuggerUrl)
 }
 
 describe('Scenario: record a logged-in page load for debugging without leaking credentials', () => {
@@ -35,9 +36,9 @@ describe('Scenario: record a logged-in page load for debugging without leaking c
     await capture.captureNetworkResponse(await wsUrl(), { urlPattern: /./, navigateUrl: SITE_URL, sink, redact: recording.redactHeaders() })
     const [record] = sink.records()
     expect(sink.isClosed).toBe(true)
-    expect(record!.exchange.request.headers['Cookie']).toBe(recording.REDACTED)
-    expect(record!.exchange.request.headers['Authorization']).toBe(recording.REDACTED)
-    expect(record!.exchange.request.headers['Accept']).toBe('*/*')
+    expect(must(record).exchange.request.headers['Cookie']).toBe(recording.REDACTED)
+    expect(must(record).exchange.request.headers['Authorization']).toBe(recording.REDACTED)
+    expect(must(record).exchange.request.headers['Accept']).toBe('*/*')
     const stored = JSON.stringify(sink.records())
     for (const secret of ['opaque-session-token', 'opaque-bearer']) expect(stored).not.toContain(secret)
     expect(stored).toContain('Release notes')

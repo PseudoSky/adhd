@@ -13,6 +13,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { StealthCoreBrowserError, cdp } from '../../../src/index.js'
 import type { FakeCdpServer } from '../../helpers/fake-cdp.js'
 import { ChromeWorld, refuseWebSocketOpen, installSilentWebSocket } from '../../helpers/use-cases/scenario-kit.js'
+import { must } from '../../helpers/must.js'
 
 const world = new ChromeWorld(9404)
 
@@ -39,7 +40,7 @@ describe('Scenario: drive a Chrome over raw CDP and survive every failure of the
     expect((await cdp.getChromeInfo(`127.0.0.1:${world.port}`)).browserVersion).toBe('Chrome/150.0.1')
     const [tab] = await cdp.listPageTargetsOnly(`127.0.0.1:${world.port}`)
     const session = new cdp.CdpSession()
-    await session.connect(tab!.webSocketDebuggerUrl!)
+    await session.connect(must(must(tab).webSocketDebuggerUrl))
     expect(session.connected).toBe(true)
     const events: string[] = []
     session.on('Page.loadEventFired', (p) => events.push(String(p['timestamp'])))

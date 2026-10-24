@@ -22,6 +22,7 @@ vi.mock('@adhd/sox-service-proxy', async (orig) => (await import('../../helpers/
 
 import { IDLE, openPage, PORT, resetSp, resetWorld, world } from '../../helpers/lifecycle/manager-world.js'
 import { client, makeHub } from '../../helpers/lifecycle/manager-clients.js'
+import { must } from '../../helpers/must.js'
 
 beforeEach(() => {
   vi.useFakeTimers()
@@ -41,7 +42,7 @@ describe('8468f7b1 [chrome-lifecycle.4] the idle window', () => {
     const c = client(hub, 11)
     await vi.advanceTimersByTimeAsync(5_000) // time passing before first use does not count
     await c.manager.ready()
-    expect(hub.host!.clients()[0]!.lastActivityAt).toBe(Date.now())
+    expect(must(must(hub.host).clients()[0]).lastActivityAt).toBe(Date.now())
     await vi.advanceTimersByTimeAsync(IDLE - 1)
     expect(c.link.reapCalls).toBe(0)
     await vi.advanceTimersByTimeAsync(1)
@@ -68,7 +69,7 @@ describe('8468f7b1 [chrome-lifecycle.4] the idle window', () => {
     await c.manager.ready()
     await vi.advanceTimersByTimeAsync(IDLE - 10)
     c.manager.bump()
-    expect(hub.host!.clients()[0]!.lastActivityAt).toBe(Date.now())
+    expect(must(must(hub.host).clients()[0]).lastActivityAt).toBe(Date.now())
     await vi.advanceTimersByTimeAsync(IDLE - 1)
     expect(c.link.reapCalls).toBe(0)
     await vi.advanceTimersByTimeAsync(1)
@@ -92,11 +93,11 @@ describe('8468f7b1 [chrome-lifecycle.7] tier 2: open pages', () => {
     const c = client(hub, 11)
     await c.manager.ready()
     openPage('https://captcha.example/challenge')
-    const stamp = hub.host!.clients()[0]!.lastActivityAt
+    const stamp = must(must(hub.host).clients()[0]).lastActivityAt
     await vi.advanceTimersByTimeAsync(IDLE * 3)
     expect(c.link.reapCalls).toBe(3)
     expect(world.chromeUp).toBe(true)
-    expect(hub.host!.clients()[0]!.lastActivityAt).toBe(stamp)
+    expect(must(must(hub.host).clients()[0]).lastActivityAt).toBe(stamp)
   })
 
   it('browser-internal targets never pin Chrome', async () => {
@@ -126,11 +127,11 @@ describe('8468f7b1 [chrome-lifecycle.8] tier 3: history recency', () => {
     const c = client(hub, 11)
     await c.manager.ready()
     world.history = true
-    const stamp = hub.host!.clients()[0]!.lastActivityAt
+    const stamp = must(must(hub.host).clients()[0]).lastActivityAt
     await vi.advanceTimersByTimeAsync(IDLE)
     expect(world.chromeUp).toBe(true)
     expect(c.logs).toContain('Chrome in use (history) — deferring')
-    expect(hub.host!.clients()[0]!.lastActivityAt).toBe(stamp)
+    expect(must(must(hub.host).clients()[0]).lastActivityAt).toBe(stamp)
   })
 
   it('checkHistory defaults on and false skips the tier', async () => {

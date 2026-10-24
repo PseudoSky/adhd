@@ -35,6 +35,7 @@ import { GRACE, IDLE, makeHost, PORT, resultOf } from '../../helpers/lifecycle/h
 import { FakeBackend } from '../../helpers/lifecycle/fake-backend.js'
 import { client, makeHub, worldHost } from '../../helpers/lifecycle/manager-clients.js'
 import { GRACE as WORLD_GRACE, PORT as WORLD_PORT, resetSp, resetWorld, sp, STATE_DIR, world } from '../../helpers/lifecycle/manager-world.js'
+import { must } from '../../helpers/must.js'
 
 beforeEach(() => {
   vi.useFakeTimers()
@@ -53,9 +54,10 @@ describe('8468f7b1 [chrome-lifecycle.15] the out-of-process reaper', () => {
     // [fs-204] a CLI run used Chrome, then exited. The reaper process (runChromeReaper), not the CLI, closes the
     // now-idle Chrome once the delay (shutdownGraceMs after the last client left) has passed — never before.
     world.chromeUp = true
-    let served: { handler: (r: unknown, c: { connectionId: string }) => Promise<unknown>; onClientConnect: (id: string) => void } | null = null
+    type Served = { handler: (r: unknown, c: { connectionId: string }) => Promise<unknown>; onClientConnect: (id: string) => void }
+    let served = null as Served | null
     sp.serveBackend = vi.fn(async (o: Record<string, unknown>) => {
-      served = o as unknown as typeof served
+      served = o as unknown as Served
       return { socketPath: `${STATE_DIR}/r.sock`, close: async () => undefined }
     })
     const idleDelay = 20_000
@@ -64,10 +66,10 @@ describe('8468f7b1 [chrome-lifecycle.15] the out-of-process reaper', () => {
       { logger: () => undefined },
     )
     // The CLI: connect, hello, a search (activity), then exit (release).
-    served!.onClientConnect('cli')
-    await served!.handler({ jsonrpc: '2.0', id: 1, method: 'hello', params: { pid: 31337 } }, { connectionId: 'cli' })
-    await served!.handler({ jsonrpc: '2.0', method: 'activity' }, { connectionId: 'cli' })
-    await served!.handler({ jsonrpc: '2.0', id: 2, method: 'release' }, { connectionId: 'cli' })
+    must(served).onClientConnect('cli')
+    await must(served).handler({ jsonrpc: '2.0', id: 1, method: 'hello', params: { pid: 31337 } }, { connectionId: 'cli' })
+    await must(served).handler({ jsonrpc: '2.0', method: 'activity' }, { connectionId: 'cli' })
+    await must(served).handler({ jsonrpc: '2.0', id: 2, method: 'release' }, { connectionId: 'cli' })
     await vi.advanceTimersByTimeAsync(idleDelay - 1)
     expect(world.chromeUp).toBe(true)
     await vi.advanceTimersByTimeAsync(5_001) // the next 5 s tick after the delay
@@ -109,7 +111,7 @@ describe('8468f7b1 [chrome-lifecycle.15] the out-of-process reaper', () => {
       entryPath: '/pkg/dist/index.js',
     })
     expect(await link.ensureAndHello()).toBe(true)
-    const opts = vi.mocked(sp.ensureBackend).mock.calls[0]![0] as Record<string, unknown>
+    const opts = must(vi.mocked(sp.ensureBackend).mock.calls[0])[0] as Record<string, unknown>
     expect(opts['command']).toBe(process.execPath)
     expect((opts['args'] as string[]).slice(0, 2)).toEqual(['-e', REAPER_ENTRY_SCRIPT])
     expect(opts['stderrLogPath']).toBe(`${STATE_DIR}/reaper-${WORLD_PORT}.log`)
@@ -121,9 +123,9 @@ describe('8468f7b1 [chrome-lifecycle.15] the out-of-process reaper', () => {
     const methods = backend.dials.flatMap((d) => d.sent.map((r) => r.method))
     expect(methods).toEqual(['hello', 'release'])
     expect(backend.host).not.toBeNull()
-    expect(await backend.host!.tick()).toMatchObject({ action: 'wait', pinnedBy: 'grace' })
+    expect(await must(backend.host).tick()).toMatchObject({ action: 'wait', pinnedBy: 'grace' })
     await vi.advanceTimersByTimeAsync(WORLD_GRACE)
-    expect(await backend.host!.tick()).toMatchObject({ action: 'reap', reaped: true })
+    expect(await must(backend.host).tick()).toMatchObject({ action: 'reap', reaped: true })
   })
 })
 

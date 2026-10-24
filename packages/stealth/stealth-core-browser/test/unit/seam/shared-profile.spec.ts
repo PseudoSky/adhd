@@ -32,6 +32,7 @@ const cdp = vi.hoisted(() => {
 vi.mock('../../../src/lib/cdp/session.js', () => ({ CdpSession: cdp.CdpSession }))
 
 import { createIsolatedPageTarget } from '../../../src/lib/cdp/targets.js'
+import { must } from '../../helpers/must.js'
 
 const HOST = '127.0.0.1:9333'
 const VERSION = { webSocketDebuggerUrl: 'ws://127.0.0.1/devtools/browser/b1', Browser: 'Chrome/150.0', 'Protocol-Version': '1.3', 'User-Agent': 'Mozilla/5.0 Fake' }
@@ -63,7 +64,7 @@ describe('8468f7b1 [core-seam.7] sharedProfile pages (commit 591e1a7)', () => {
   it('sharedProfile sends no Target.createBrowserContext and Target.createTarget carries no browserContextId (591e1a7)', async () => {
     const r = await createIsolatedPageTarget(HOST, { sharedProfile: true })
     expect(methods()).not.toContain('Target.createBrowserContext')
-    const create = cdp.state.sent.find((s) => s.method === 'Target.createTarget')!
+    const create = must(cdp.state.sent.find((s) => s.method === 'Target.createTarget'))
     expect(create.params).not.toHaveProperty('browserContextId')
     expect(r).toMatchObject({ targetId: 'T9', pageWsUrl: 'ws://127.0.0.1/page/T9' })
     expect(r.browserContextId).toBeUndefined()
@@ -74,19 +75,19 @@ describe('8468f7b1 [core-seam.7] sharedProfile pages (commit 591e1a7)', () => {
     cdp.state.sent.length = 0
     await r.dispose()
     expect(methods()).toEqual(['Target.closeTarget'])
-    expect(cdp.state.sent[0]!.params).toEqual({ targetId: 'T9' })
+    expect(must(cdp.state.sent[0]).params).toEqual({ targetId: 'T9' })
     expect(methods()).not.toContain('Target.disposeBrowserContext')
   })
 
   it('without sharedProfile the isolated path still creates its Target.createBrowserContext, passes the browserContextId and disposes it (591e1a7)', async () => {
     const r = await createIsolatedPageTarget(HOST)
     expect(methods()[0]).toBe('Target.createBrowserContext')
-    expect(cdp.state.sent.find((s) => s.method === 'Target.createTarget')!.params).toMatchObject({ browserContextId: 'CTX1' })
+    expect(must(cdp.state.sent.find((s) => s.method === 'Target.createTarget')).params).toMatchObject({ browserContextId: 'CTX1' })
     expect(r.browserContextId).toBe('CTX1')
     cdp.state.sent.length = 0
     await r.dispose()
     expect(methods()).toEqual(['Target.disposeBrowserContext'])
-    expect(cdp.state.sent[0]!.params).toEqual({ browserContextId: 'CTX1' })
+    expect(must(cdp.state.sent[0]).params).toEqual({ browserContextId: 'CTX1' })
     expect(methods()).not.toContain('Target.closeTarget')
   })
 

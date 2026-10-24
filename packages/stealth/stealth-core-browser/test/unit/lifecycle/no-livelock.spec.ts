@@ -22,6 +22,7 @@ vi.mock('@adhd/sox-service-proxy', async (orig) => (await import('../../helpers/
 
 import { GRACE, IDLE, openPage, resetSp, resetWorld, world } from '../../helpers/lifecycle/manager-world.js'
 import { client, makeHub } from '../../helpers/lifecycle/manager-clients.js'
+import { must } from '../../helpers/must.js'
 
 beforeEach(() => {
   vi.useFakeTimers()
@@ -44,14 +45,14 @@ describe('8468f7b1 [chrome-lifecycle.6] deferral never writes activity', () => {
     a.manager.bump()
     b.manager.bump()
     openPage('https://captcha.example/') // every evaluation defers on the page tier
-    const stamps = () => hub.host!.clients().map((c) => [c.id, c.lastActivityAt])
+    const stamps = () => must(hub.host).clients().map((c) => [c.id, c.lastActivityAt])
     const before = stamps()
     const sentA = a.link.activityCalls
     const sentB = b.link.activityCalls
 
     for (let i = 0; i < 4; i++) {
       await vi.advanceTimersByTimeAsync(IDLE) // both idle timers fire and defer
-      await hub.host!.tick()
+      await must(hub.host).tick()
     }
     await a.manager.shutdownIfIdle()
     await b.manager.shutdownIfIdle()
@@ -69,10 +70,10 @@ describe('8468f7b1 [chrome-lifecycle.6] deferral never writes activity', () => {
     const hub = makeHub()
     const a = client(hub, 11)
     await a.manager.ready()
-    const t0 = hub.host!.clients()[0]!.lastActivityAt!
+    const t0 = must(must(must(hub.host).clients()[0]).lastActivityAt)
     await vi.advanceTimersByTimeAsync(400)
     a.manager.bump()
-    expect(hub.host!.clients()[0]!.lastActivityAt).toBe(t0 + 400)
+    expect(must(must(hub.host).clients()[0]).lastActivityAt).toBe(t0 + 400)
   })
 })
 

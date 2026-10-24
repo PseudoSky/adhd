@@ -8,6 +8,9 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type { ChromeVisit } from './types.js'
 
+/** The single read-only (`mode=ro&immutable=1`) Chrome database opener lives in storage/helpers.ts; re-exported here under the same name. */
+export { openDb } from './storage/helpers.js'
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Transition helpers
 // ═══════════════════════════════════════════════════════════════════════════════

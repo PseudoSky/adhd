@@ -7,7 +7,7 @@
  * tier: S
  * cites: 8468f7b1 [tests-unit-core.1] [tests-unit-core.2] [tests-unit-core.3] [tests-unit-core.4]
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 const sqlite = vi.hoisted(() => {
   const state = {
@@ -39,10 +39,12 @@ import {
   defaultChromeDir,
   hydrateVisit,
   notYet,
+  openDb as helpersOpenDb,
   toUnixTimeSql,
   transitionName,
 } from '../../../src/lib/helpers.js'
 import type { VisitRow } from '../../../src/lib/helpers.js'
+import { openDb as storageOpenDb } from '../../../src/lib/storage/helpers.js'
 
 describe('8468f7b1 AC2 [tests-unit-core.1] transitionName', () => {
   it('maps every documented Chrome transition code to its name', () => {
@@ -148,5 +150,13 @@ describe('8468f7b1 AC2 [tests-unit-core.1] hydrateVisit', () => {
     const v = hydrateVisit({ ...row, visit_duration: 1_499, transition: 77 })
     expect(v.visitDurationMs).toBe(1)
     expect(v.transitionType).toBe('UNKNOWN(77)')
+  })
+})
+
+describe('8468f7b1 AC2 [tests-unit-core.1] openDb re-export', () => {
+  it('re-exports the one read-only immutable opener from storage/helpers under the same name', () => {
+    expect(helpersOpenDb).toBe(storageOpenDb)
+    helpersOpenDb('/tmp/fixture/History')
+    expect(sqlite.state.uris[sqlite.state.uris.length - 1]).toBe('file:/tmp/fixture/History?mode=ro&immutable=1')
   })
 })

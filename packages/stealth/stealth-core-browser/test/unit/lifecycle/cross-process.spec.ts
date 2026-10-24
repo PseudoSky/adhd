@@ -23,6 +23,7 @@ vi.mock('@adhd/sox-service-proxy', async (orig) => (await import('../../helpers/
 import { GRACE, IDLE, makeHost, resultOf } from '../../helpers/lifecycle/host-fixture.js'
 import { IDLE as CLIENT_IDLE, openPage, resetSp, resetWorld, world } from '../../helpers/lifecycle/manager-world.js'
 import { client, makeHub } from '../../helpers/lifecycle/manager-clients.js'
+import { must } from '../../helpers/must.js'
 
 beforeEach(() => {
   resetWorld()
@@ -131,8 +132,8 @@ describe('8468f7b1 [chrome-lifecycle.6] livelock protection on the host tick', (
       else h.advance(5_000)
     }
     expect(reapedAt).not.toBeNull()
-    expect(reapedAt! - start).toBeLessThanOrEqual(IDLE + GRACE + 5_000)
-    expect(reapedAt! - start).toBeGreaterThanOrEqual(IDLE)
+    expect(must(reapedAt) - start).toBeLessThanOrEqual(IDLE + GRACE + 5_000)
+    expect(must(reapedAt) - start).toBeGreaterThanOrEqual(IDLE)
   })
 })
 
@@ -174,12 +175,12 @@ describe('8468f7b1 [chrome-lifecycle.21] coordination is best effort on the clie
     await b.manager.ready()
     openPage('https://captcha.example/')
     const sent = a.link.activityCalls
-    const stamp = hub.host!.clients().find((x) => x.pid === 11)!.lastActivityAt
+    const stamp = must(must(hub.host).clients().find((x) => x.pid === 11)).lastActivityAt
     await vi.advanceTimersByTimeAsync(CLIENT_IDLE * 5)
     expect(a.link.reapCalls).toBe(5)
     expect(a.link.activityCalls).toBe(sent)
-    expect(hub.host!.clients().find((x) => x.pid === 11)!.lastActivityAt).toBe(stamp)
+    expect(must(must(hub.host).clients().find((x) => x.pid === 11)).lastActivityAt).toBe(stamp)
     // B, equally idle, is not kept alive by A's deferrals either: its stamp never moved.
-    expect(hub.host!.clients().find((x) => x.pid === 22)!.lastActivityAt).toBe(stamp)
+    expect(must(must(hub.host).clients().find((x) => x.pid === 22)).lastActivityAt).toBe(stamp)
   })
 })

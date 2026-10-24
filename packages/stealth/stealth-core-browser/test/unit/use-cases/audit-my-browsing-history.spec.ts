@@ -11,6 +11,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { storage } from '../../../src/index.js'
 import { ProfileBuilder, REDIRECT_CHAINS, openReadOnly, type BuiltProfile } from '../../helpers/profile-fixtures.js'
+import { must } from '../../helpers/must.js'
 
 const NOW = Date.UTC(2026, 5, 1, 12, 0, 0) / 1000
 let profile: BuiltProfile
@@ -45,7 +46,7 @@ describe('Scenario: audit my browsing history without disturbing the running Chr
 
   it('[tests-use-cases.2] follows a short link back through every redirect hop', () => {
     const history = new storage.HistoryClient(profile.root)
-    const chain = history.getRedirectChain(profile.chainLandingVisitIds[0]!)
+    const chain = history.getRedirectChain(must(profile.chainLandingVisitIds[0]))
     expect(chain.map((h) => h.url)).toEqual(['https://target.test/article/42', 'https://short.test/x1', 'http://short.test/x1'])
     expect(chain.map((h) => h.depth)).toEqual([0, 1, 2])
   })

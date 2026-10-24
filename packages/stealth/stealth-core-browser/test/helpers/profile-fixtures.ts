@@ -12,6 +12,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { storage } from '../../src/index.js'
+import { must } from './must.js'
 
 /** Unix seconds to Chrome microseconds since 1601-01-01. */
 export const chromeMicros = (unixSeconds: number): number => (unixSeconds + 11644473600) * 1_000_000
@@ -63,7 +64,7 @@ export function ordinaryBrowsing(): HistorySite[] {
   const sites: HistorySite[] = []
   const hosts = ['docs.test', 'news.test', 'mail.test', 'shop.test', 'video.test', 'wiki.test']
   for (let i = 0; i < 24; i++) {
-    const host = hosts[i % hosts.length]!
+    const host = must(hosts[i % hosts.length])
     sites.push({
       url: `https://${host}/page/${i}`,
       title: `${host} page ${i}`,
@@ -200,7 +201,7 @@ export class ProfileBuilder {
       const persistent = c.expiresInSeconds !== undefined
       ins.run(
         chromeMicros(created), c.host, c.name, c.value, c.path ?? '/',
-        persistent ? chromeMicros(this.now + c.expiresInSeconds!) : 0,
+        persistent ? chromeMicros(this.now + must(c.expiresInSeconds)) : 0,
         c.secure ? 1 : 0, c.httpOnly ? 1 : 0, chromeMicros(this.now - (c.secondsAgo ?? 60) - i),
         persistent ? 1 : 0, persistent ? 1 : 0, 1,
       )

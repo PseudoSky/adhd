@@ -28,6 +28,7 @@ import { createProxyReaperLink, LINK_GIVE_UP_MS, REAPER_ENTRY_SCRIPT, reaperSing
 import { FakeBackend } from '../../helpers/lifecycle/fake-backend.js'
 import { worldHost } from '../../helpers/lifecycle/manager-clients.js'
 import { PORT, resetSp, resetWorld, sp, STATE_DIR, world } from '../../helpers/lifecycle/manager-world.js'
+import { must } from '../../helpers/must.js'
 
 let backend: FakeBackend
 let logs: string[]
@@ -79,12 +80,12 @@ describe('8468f7b1 [chrome-lifecycle.15] ensure dispositions', () => {
       expect(l.isUp()).toBe(true)
       expect(l.lastError()).toBeNull()
       expect(sp.dialBackend).toHaveBeenCalledTimes(1)
-      const conn = backend.dials[0]!
+      const conn = must(backend.dials[0])
       expect(conn.opts.socketPath).toMatch(new RegExp(`^${STATE_DIR}/`))
       expect(conn.opts.backoff).toEqual({ giveUpAfterMs: LINK_GIVE_UP_MS })
       expect(conn.sent[0]).toMatchObject({ method: 'hello', params: { pid: 4321, checkHistory: false } })
       // The host registered this client under its connection, history flag included; hello is not activity.
-      expect(backend.host!.clients()).toEqual([{ id: conn.connectionId, pid: 4321, checkHistory: false, lastActivityAt: null }])
+      expect(must(backend.host).clients()).toEqual([{ id: conn.connectionId, pid: 4321, checkHistory: false, lastActivityAt: null }])
     })
   }
 
@@ -101,7 +102,7 @@ describe('8468f7b1 [chrome-lifecycle.15] ensure dispositions', () => {
     disposition('failed', { errorCode: 'E_UDS_DIR_UNSAFE', detail: 'socket dir is group-writable' })
     const l = link()
     expect(await l.ensureAndHello()).toBe(false)
-    const err = l.lastError()!
+    const err = must(l.lastError())
     expect(err.code).toBe('REAPER_UNAVAILABLE')
     expect((err.cause as { code?: string }).code).toBe('E_UDS_DIR_UNSAFE')
     expect(err.detail).toMatchObject({ port: PORT, path: STATE_DIR })
@@ -122,7 +123,7 @@ describe('8468f7b1 [chrome-lifecycle.15] ensure dispositions', () => {
     const l = link()
     expect(await l.ensureAndHello()).toBe(false)
     expect(backend.dials).toHaveLength(1)
-    expect(backend.dials[0]!.closed).toBe(true)
+    expect(must(backend.dials[0]).closed).toBe(true)
     expect(l.isUp()).toBe(false)
     expect(l.lastError()?.message).toMatch(/did not accept a connection within 2000 ms/)
   })
@@ -130,21 +131,21 @@ describe('8468f7b1 [chrome-lifecycle.15] ensure dispositions', () => {
   it('the spawn form is the one pinned by sp-reaper-load-proof', async () => {
     const l = link()
     await l.ensureAndHello()
-    const opts = vi.mocked(sp.ensureBackend).mock.calls[0]![0] as Record<string, unknown>
+    const opts = must(vi.mocked(sp.ensureBackend).mock.calls[0])[0] as Record<string, unknown>
     expect(opts['singletonKey']).toBe(reaperSingletonKey(PORT))
     expect(opts['command']).toBe('/usr/local/bin/node')
     const args = opts['args'] as string[]
     expect(args.slice(0, 3)).toEqual(['-e', REAPER_ENTRY_SCRIPT, '/pkg/dist/index.js'])
     expect(REAPER_ENTRY_SCRIPT).toBe('require(process.argv[1]).lifecycle.runChromeReaper(JSON.parse(process.argv[2]))')
-    expect(JSON.parse(args[3]!)).toMatchObject({ port: PORT, stateDir: STATE_DIR, idleTimeoutMs: 120_000, shutdownGraceMs: 30_000, orphanWindowMs: 30_000, scope: 'port-occupant' })
+    expect(JSON.parse(must(args[3]))).toMatchObject({ port: PORT, stateDir: STATE_DIR, idleTimeoutMs: 120_000, shutdownGraceMs: 30_000, orphanWindowMs: 30_000, scope: 'port-occupant' })
   })
 
   it('with no entryPath the link resolves the entry itself: an absolute path, or a typed REAPER_UNAVAILABLE (never a null entry)', async () => {
     const l = link({ entryPath: undefined })
     const up = await l.ensureAndHello()
     if (up) {
-      const args = (vi.mocked(sp.ensureBackend).mock.calls[0]![0] as { args: string[] }).args
-      expect(isAbsolute(args[2]!)).toBe(true)
+      const args = (must(vi.mocked(sp.ensureBackend).mock.calls[0])[0] as { args: string[] }).args
+      expect(isAbsolute(must(args[2]))).toBe(true)
     } else {
       expect(sp.ensureBackend).not.toHaveBeenCalled()
       expect(l.lastError()?.code).toBe('REAPER_UNAVAILABLE')
@@ -165,7 +166,7 @@ describe('8468f7b1 [chrome-lifecycle.15] the held connection', () => {
     const l = link()
     await l.ensureAndHello()
     expect(l.activity()).toBeUndefined()
-    expect(backend.dials[0]!.notified).toEqual([{ jsonrpc: '2.0', method: 'activity' }])
+    expect(must(backend.dials[0]).notified).toEqual([{ jsonrpc: '2.0', method: 'activity' }])
     backend.notifyThrows = true
     expect(() => l.activity()).not.toThrow()
     expect(logs.some((m) => m.startsWith('activity not sent'))).toBe(true)
@@ -191,9 +192,9 @@ describe('8468f7b1 [chrome-lifecycle.15] the held connection', () => {
     const l = link()
     await l.ensureAndHello()
     await l.release()
-    expect(backend.dials[0]!.sent.map((r) => r.method)).toEqual(['hello', 'release'])
-    expect(backend.dials[0]!.closed).toBe(true)
-    expect(backend.host!.clients()).toEqual([])
+    expect(must(backend.dials[0]).sent.map((r) => r.method)).toEqual(['hello', 'release'])
+    expect(must(backend.dials[0]).closed).toBe(true)
+    expect(must(backend.host).clients()).toEqual([])
     expect(l.isUp()).toBe(false)
     await expect(l.release()).resolves.toBeUndefined() // idempotent
   })
@@ -201,10 +202,10 @@ describe('8468f7b1 [chrome-lifecycle.15] the held connection', () => {
   it('a killed client (kill -9) is dropped by the host at once: its connection closes, no release is sent', async () => {
     const l = link()
     await l.ensureAndHello()
-    const conn = backend.dials[0]!
+    const conn = must(backend.dials[0])
     conn.close() // the kernel closed the dead process's socket
     expect(conn.sent.map((r) => r.method)).toEqual(['hello'])
-    expect(backend.host!.clients()).toEqual([])
+    expect(must(backend.host).clients()).toEqual([])
   })
 
   it('a backend that drops the connection is never re-dialed or re-ensured on disconnect', async () => {
@@ -212,7 +213,7 @@ describe('8468f7b1 [chrome-lifecycle.15] the held connection', () => {
     await l.ensureAndHello()
     backend.retire()
     expect(l.isUp()).toBe(false)
-    expect(backend.dials[0]!.closed).toBe(true) // the link closed the dropped dial itself
+    expect(must(backend.dials[0]).closed).toBe(true) // the link closed the dropped dial itself
     await vi.advanceTimersByTimeAsync(60_000)
     expect(sp.ensureBackend).toHaveBeenCalledTimes(1)
     expect(sp.dialBackend).toHaveBeenCalledTimes(1)

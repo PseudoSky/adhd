@@ -178,7 +178,9 @@ function extractStructuralFromDom(domRoot: DomNode): ParseResult[] {
   ]
 
   while (stack.length > 0) {
-    const { node, parentChain } = stack.pop()!
+    const top = stack.pop()
+    if (top === undefined) break
+    const { node, parentChain } = top
 
     // Collect a[jsname] elements that match the > div > div pattern.
     // This filters out non-result links (header/footer/sidebar)

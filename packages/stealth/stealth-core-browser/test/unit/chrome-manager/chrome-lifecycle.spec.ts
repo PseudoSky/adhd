@@ -35,6 +35,7 @@ import { ensureChromeRunning } from '../../../src/lib/cdp/browser.js'
 import { isChromeReachable } from '../../../src/lib/cdp/targets.js'
 import { client, makeHub } from '../../helpers/lifecycle/manager-clients.js'
 import { HOST, IDLE, PORT, resetSp, resetWorld, STATE_DIR, world } from '../../helpers/lifecycle/manager-world.js'
+import { must } from '../../helpers/must.js'
 
 beforeEach(() => {
   vi.useFakeTimers()
@@ -55,7 +56,7 @@ async function pair() {
   const sibling = client(hub, 22)
   await me.manager.ready()
   await sibling.manager.ready()
-  const stampOf = (pid: number) => hub.host!.clients().find((c) => c.pid === pid)?.lastActivityAt ?? null
+  const stampOf = (pid: number) => must(hub.host).clients().find((c) => c.pid === pid)?.lastActivityAt ?? null
   return { hub, me, sibling, stampOf }
 }
 
@@ -106,7 +107,7 @@ describe('8468f7b1 [port-fixes.5] [chrome-lifecycle.6] ChromeManager idle-shutdo
     const { hub, me, sibling } = await pair()
     sibling.manager.bump() // fresh activity...
     sibling.link.kill9() // ...then the sibling process is killed: its connection closes, no release
-    expect(hub.host!.clients().map((c) => c.pid)).toEqual([11])
+    expect(must(hub.host).clients().map((c) => c.pid)).toEqual([11])
     await me.manager.shutdownIfIdle()
     expect(world.chromeUp).toBe(false)
   })

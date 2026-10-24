@@ -22,6 +22,7 @@ vi.mock('node:child_process', async (orig) => {
 import { cdp } from '../../../src/index.js'
 import { FakeProc } from '../../helpers/fake-proc.js'
 import { ChromeWorld, makeLaunchRig, tempDir, type LaunchRig } from '../../helpers/use-cases/scenario-kit.js'
+import { must } from '../../helpers/must.js'
 
 const world = new ChromeWorld(9407)
 let rig: LaunchRig
@@ -59,15 +60,15 @@ describe('Scenario: recover a crashed Chrome without touching anyone else’s br
     const a = await first
     expect(a).toMatchObject({ alreadyRunning: false, port: world.port, profileDir })
 
-    rig.proc.die(a.pid!)
+    rig.proc.die(must(a.pid))
     world.up = false
     const second = launch()
     await vi.advanceTimersByTimeAsync(300)
     const b = await second
     expect(b.pid).not.toBe(a.pid)
     const [, relaunched] = rig.launched()
-    expect(relaunched!.args).toEqual(expect.arrayContaining([`--remote-debugging-port=${world.port}`, `--user-data-dir=${profileDir}`, '--no-first-run']))
-    expect(relaunched!.args).not.toContain('--enable-automation')
+    expect(must(relaunched).args).toEqual(expect.arrayContaining([`--remote-debugging-port=${world.port}`, `--user-data-dir=${profileDir}`, '--no-first-run']))
+    expect(must(relaunched).args).not.toContain('--enable-automation')
     expect(rig.proc.spawnLog.every((s) => s.opts['detached'] === true)).toBe(true)
   })
 
@@ -119,13 +120,13 @@ describe('Scenario: recover a crashed Chrome without touching anyone else’s br
     const first = launch()
     await vi.advanceTimersByTimeAsync(300)
     const a = await first
-    const helper = rig.proc.addProcess({ pid: 7500, pgid: a.pid! })
-    rig.proc.die(a.pid!)
+    const helper = rig.proc.addProcess({ pid: 7500, pgid: must(a.pid) })
+    rig.proc.die(must(a.pid))
 
     const killing = cdp.killChrome(world.port, { profileDir, probe: rig.probe, logger: () => undefined })
     await vi.advanceTimersByTimeAsync(1_000)
     await killing
-    expect(rig.proc.killLog[0]).toEqual({ target: -a.pid!, signal: 'SIGTERM' })
+    expect(rig.proc.killLog[0]).toEqual({ target: -must(a.pid), signal: 'SIGTERM' })
     expect(rig.proc.pidAlive(helper.pid)).toBe(false)
   })
 

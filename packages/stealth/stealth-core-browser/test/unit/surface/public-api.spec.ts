@@ -26,6 +26,7 @@ vi.stubGlobal('fetch', () => {
 })
 
 import * as root from '../../../src/index.js'
+import { must } from '../../helpers/must.js'
 
 const ERRORS_GROUP = ['ERROR_CODES', 'StealthCoreBrowserError', 'exitCodeFor', 'recording'] as const
 
@@ -167,7 +168,7 @@ describe('public API snapshot', () => {
   })
 
   it.each(Object.keys(MEMBERS))('the %s namespace exposes exactly its documented members', (ns) => {
-    expect(sorted((root as unknown as Record<string, object>)[ns]!)).toEqual(MEMBERS[ns])
+    expect(sorted(must((root as unknown as Record<string, object>)[ns]))).toEqual(MEMBERS[ns])
   })
 
   it('treats the errors group as all-or-none', () => {

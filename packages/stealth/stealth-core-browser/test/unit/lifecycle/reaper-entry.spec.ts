@@ -40,6 +40,7 @@ vi.mock('../../../src/lib/storage/history.js', async () => {
 import { REAPER_TICK_MS, runChromeReaper, type ChromeReaperConfig } from '../../../src/lib/lifecycle/reaper-entry.js'
 import type { RpcRequest, RpcResponse } from '../../../src/lib/lifecycle/reaper-host.js'
 import { chromeGone, openPage, PORT, resetSp, resetWorld, sp, STATE_DIR, world } from '../../helpers/lifecycle/manager-world.js'
+import { must } from '../../helpers/must.js'
 
 interface Served {
   socketPath: string
@@ -116,21 +117,21 @@ describe('8468f7b1 [chrome-lifecycle.15] runChromeReaper serves the host', () =>
     world.chromeUp = true
     const r = await start()
     expect(sp.serveBackend).toHaveBeenCalledTimes(1)
-    expect(served!.socketPath).toBe(CFG.socketPath)
-    served!.onClientConnect('c1')
-    await served!.handler({ jsonrpc: '2.0', id: 1, method: 'hello', params: { pid: 77, checkHistory: true } }, { connectionId: 'c1' })
+    expect(must(served).socketPath).toBe(CFG.socketPath)
+    must(served).onClientConnect('c1')
+    await must(served).handler({ jsonrpc: '2.0', id: 1, method: 'hello', params: { pid: 77, checkHistory: true } }, { connectionId: 'c1' })
     expect(r.host.clients()).toEqual([{ id: 'c1', pid: 77, checkHistory: true, lastActivityAt: null }])
-    expect(await served!.handler({ jsonrpc: '2.0', id: 2, method: 'ping' }, { connectionId: 'c1' })).toEqual({ jsonrpc: '2.0', id: 2, result: 'pong' })
+    expect(await must(served).handler({ jsonrpc: '2.0', id: 2, method: 'ping' }, { connectionId: 'c1' })).toEqual({ jsonrpc: '2.0', id: 2, result: 'pong' })
     await r.close()
   })
 
   it('a killed client (kill -9) is dropped at once through onClientDisconnect', async () => {
     world.chromeUp = true
     const r = await start()
-    served!.onClientConnect('c1')
-    await served!.handler({ jsonrpc: '2.0', id: 1, method: 'hello', params: { pid: 77 } }, { connectionId: 'c1' })
-    await served!.handler({ jsonrpc: '2.0', method: 'activity' }, { connectionId: 'c1' })
-    served!.onClientDisconnect('c1', 'end')
+    must(served).onClientConnect('c1')
+    await must(served).handler({ jsonrpc: '2.0', id: 1, method: 'hello', params: { pid: 77 } }, { connectionId: 'c1' })
+    await must(served).handler({ jsonrpc: '2.0', method: 'activity' }, { connectionId: 'c1' })
+    must(served).onClientDisconnect('c1', 'end')
     expect(r.host.clients()).toEqual([])
     await r.close()
   })
@@ -189,9 +190,9 @@ describe('8468f7b1 [chrome-lifecycle.15] createIdleRetirer over orphanWindowMs',
     world.chromeUp = false
     const r = await start()
     const f = retiredFlag(r.retired)
-    served!.onClientConnect('c1') // presence never pins the host (ADR-0022)
+    must(served).onClientConnect('c1') // presence never pins the host (ADR-0022)
     await vi.advanceTimersByTimeAsync(orphanWindowMs / 2)
-    await served!.handler({ jsonrpc: '2.0', method: 'activity' }, { connectionId: 'c1' })
+    await must(served).handler({ jsonrpc: '2.0', method: 'activity' }, { connectionId: 'c1' })
     await vi.advanceTimersByTimeAsync(orphanWindowMs / 2 + 1)
     expect(f.done).toBe(false)
     await vi.advanceTimersByTimeAsync(orphanWindowMs / 2)

@@ -26,6 +26,7 @@ import { isLifecycleError, type LifecycleError } from '../../../src/lib/lifecycl
 import { breakerPath, createLaunchBreaker, FileBreakerStore, LAUNCH_COOLDOWN_MS } from '../../../src/lib/lifecycle/launch-breaker.js'
 import { PORT, resetSp, resetWorld, STATE_DIR, world } from '../../helpers/lifecycle/manager-world.js'
 import { client, makeHub } from '../../helpers/lifecycle/manager-clients.js'
+import { must } from '../../helpers/must.js'
 
 beforeEach(() => {
   vi.useFakeTimers()
@@ -127,8 +128,8 @@ describe('8468f7b1 [chrome-lifecycle.17] FileBreakerStore', () => {
     store.save({ consecutive: 1, recent: [5], openedAt: null, probeStartedAt: null })
     expect(store.path).toBe(`${STATE_DIR}/breaker-${PORT}.json`)
     expect(renames).toHaveLength(1)
-    expect(renames[0]![0]).toMatch(/breaker-9333\.json\.\d+\.tmp$/)
-    expect(renames[0]![1]).toBe(store.path)
+    expect(must(renames[0])[0]).toMatch(/breaker-9333\.json\.\d+\.tmp$/)
+    expect(must(renames[0])[1]).toBe(store.path)
     expect(store.load()).toEqual({ consecutive: 1, recent: [5], openedAt: null, probeStartedAt: null })
   })
 

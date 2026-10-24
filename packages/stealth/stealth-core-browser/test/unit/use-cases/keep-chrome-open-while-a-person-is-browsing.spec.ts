@@ -39,6 +39,7 @@ import { chromeManager, checkChromeActivity, chromeStatus, launchChrome, lifecyc
 import { FakeProc } from '../../helpers/fake-proc.js'
 import { ProfileBuilder, type BuiltProfile } from '../../helpers/profile-fixtures.js'
 import { ChromeWorld, PolicyReaperLink, makeLaunchRig, tempDir, useProfileHome } from '../../helpers/use-cases/scenario-kit.js'
+import { must } from '../../helpers/must.js'
 
 const world = new ChromeWorld(9408)
 let state: ReturnType<typeof tempDir>
@@ -123,7 +124,7 @@ describe('Scenario: keep a shared Chrome open while a person is browsing and clo
   it('[tests-use-cases.2] the manager status reports pages, the reaper link and a closed launch breaker', async () => {
     await launchChrome({ port: world.port, userDataDir: home.profileDir })
     world.tabs = [world.tab('T1', 'https://docs.test/guide')]
-    const status = await machine.manager!.status()
+    const status = await must(machine.manager).status()
     expect(status).toMatchObject({ ready: true, owned: true, httpPages: 1, reaper: true, breaker: { open: false } })
     expect(chromeManager.isActiveWebTarget('https://docs.test/guide')).toBe(true)
     expect(chromeManager.isActiveWebTarget('chrome://newtab/')).toBe(false)

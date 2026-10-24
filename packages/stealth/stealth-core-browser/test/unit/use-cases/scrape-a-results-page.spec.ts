@@ -15,6 +15,7 @@ import type { CaptureConfig } from '../../../src/lib/types.js'
 import { loadFixture } from '../../helpers/fake-cdp.js'
 import { articleListHtml, articleListTrace, emptyShellHtml, embeddedDataPageHtml, pageTraceFor, searchApiTrace, serpResultsHtml, SITE_URL } from '../../helpers/page-fixtures.js'
 import { ChromeWorld } from '../../helpers/use-cases/scenario-kit.js'
+import { must } from '../../helpers/must.js'
 
 const world = new ChromeWorld(9403)
 
@@ -28,7 +29,7 @@ afterEach(() => world.dispose())
 async function load(fixture: ReturnType<typeof searchApiTrace>): Promise<{ body: string; methods: string[] }> {
   const server = world.useCdp(fixture)
   const [tab] = await cdp.listPageTargetsOnly(`127.0.0.1:${world.port}`)
-  const response = await capture.captureNetworkResponse(tab!.webSocketDebuggerUrl!, { urlPattern: /./, navigateUrl: SITE_URL })
+  const response = await capture.captureNetworkResponse(must(must(tab).webSocketDebuggerUrl), { urlPattern: /./, navigateUrl: SITE_URL })
   return { body: response.body, methods: server.received.map((r) => r.method) }
 }
 
@@ -50,7 +51,7 @@ describe('Scenario: scrape result rows from three kinds of page without injectin
     const rows = parsers.extractResultsFromHtml(body, cfg({ resultSelector: 'article', fields: { title: 'h2', url: 'a', snippet: 'p' } }))
     expect(rows.map((r) => r.title)).toEqual(['Alpha release', 'Beta release', 'Gamma release'])
     expect(rows[0]).toMatchObject({ url: 'https://a.test/alpha', snippet: 'First public build' })
-    expect(rows[2]!.url).toBe('https://g.test/gamma')
+    expect(must(rows[2]).url).toBe('https://g.test/gamma')
   })
 
   it('[tests-use-cases.2] reads rows embedded as application/json in a code-search style page', async () => {
@@ -58,7 +59,7 @@ describe('Scenario: scrape result rows from three kinds of page without injectin
     const rows = parsers.extractResultsFromEmbeddedJson(body, cfg({ parser: 'embedded-json', resultSelector: 'payload.results', fields: { title: 'hl_name', url: 'repo_nwo', snippet: '_snippet' } }))
     expect(rows).toHaveLength(2)
     expect(rows[0]).toMatchObject({ title: 'acme/widgets', url: 'https://github.com/acme/widgets/blob/main/src/index.ts' })
-    expect(rows[0]!.snippet).toContain('widget')
+    expect(must(rows[0]).snippet).toContain('widget')
   })
 
   it('[tests-use-cases.2] falls back to the structural XPath reader, and a script-only shell yields nothing', async () => {
@@ -68,7 +69,7 @@ describe('Scenario: scrape result rows from three kinds of page without injectin
     const found = parsers.extractWithXpath(serp.body)
     expect(found.map((r) => r.title)).toEqual(['The widget guide', 'Gears for beginners'])
     expect(found[0]).toMatchObject({ url: 'https://widgets.test/guide' })
-    expect(found[0]!.snippet).toContain('walkthrough')
+    expect(must(found[0]).snippet).toContain('walkthrough')
     const shell = await load(pageTraceFor(emptyShellHtml))
     expect(parsers.extractWithXpath(shell.body)).toEqual([])
     expect(parsers.extractResultsFromHtml(shell.body, cfg({ resultSelector: 'article', fields: { title: 'h2', url: 'a', snippet: 'p' } }))).toEqual([])

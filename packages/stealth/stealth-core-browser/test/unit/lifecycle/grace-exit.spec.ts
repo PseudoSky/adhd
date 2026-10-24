@@ -21,6 +21,7 @@ vi.mock('@adhd/sox-service-proxy', async (orig) => (await import('../../helpers/
 
 import { GRACE, resetSp, resetWorld, world } from '../../helpers/lifecycle/manager-world.js'
 import { client, makeHub } from '../../helpers/lifecycle/manager-clients.js'
+import { must } from '../../helpers/must.js'
 
 /** Long client idle window so only the host tick (with shutdownGraceMs) decides here. */
 const CLIENT_IDLE = 600_000
@@ -50,7 +51,7 @@ describe('8468f7b1 [chrome-lifecycle.19] N managers share one Chrome', () => {
     const { hub } = await threeClients()
     expect(world.spawns).toBe(1)
     expect(hub.spawns).toBe(1)
-    expect(hub.host!.clients().map((c) => c.pid)).toEqual([11, 22, 33])
+    expect(must(hub.host).clients().map((c) => c.pid)).toEqual([11, 22, 33])
   })
 })
 
@@ -58,21 +59,21 @@ describe('8468f7b1 [chrome-lifecycle.19] the host closes Chrome within shutdownG
   it('after the last release, the tick waits shutdownGraceMs then reaps', async () => {
     const { hub, cs } = await threeClients()
     for (const c of cs) await c.manager.release()
-    expect(hub.host!.clients()).toEqual([])
+    expect(must(hub.host).clients()).toEqual([])
     await vi.advanceTimersByTimeAsync(shutdownGraceMs - 1)
-    expect(await hub.host!.tick()).toMatchObject({ action: 'wait', pinnedBy: 'grace', reaped: false })
+    expect(await must(hub.host).tick()).toMatchObject({ action: 'wait', pinnedBy: 'grace', reaped: false })
     expect(world.chromeUp).toBe(true)
     await vi.advanceTimersByTimeAsync(1)
-    expect(await hub.host!.tick()).toMatchObject({ action: 'reap', reaped: true })
+    expect(await must(hub.host).tick()).toMatchObject({ action: 'reap', reaped: true })
     expect(world.chromeUp).toBe(false)
   })
 
   it('after the last client disconnects (killed, no release), the tick reaps within shutdownGraceMs', async () => {
     const { hub, cs } = await threeClients()
     for (const c of cs) c.link.kill9()
-    expect(hub.host!.clients()).toEqual([])
+    expect(must(hub.host).clients()).toEqual([])
     await vi.advanceTimersByTimeAsync(shutdownGraceMs)
-    expect(await hub.host!.tick()).toMatchObject({ reaped: true })
+    expect(await must(hub.host).tick()).toMatchObject({ reaped: true })
     expect(world.chromeUp).toBe(false)
   })
 
@@ -83,7 +84,7 @@ describe('8468f7b1 [chrome-lifecycle.19] the host closes Chrome within shutdownG
     const back = client(hub, 44, { idleTimeoutMs: CLIENT_IDLE, shutdownGraceMs })
     await back.manager.ready()
     await vi.advanceTimersByTimeAsync(shutdownGraceMs)
-    expect(await hub.host!.tick()).toMatchObject({ action: 'keep', pinnedBy: 'client' })
+    expect(await must(hub.host).tick()).toMatchObject({ action: 'keep', pinnedBy: 'client' })
     expect(world.spawns).toBe(1)
     expect(world.chromeUp).toBe(true)
   })

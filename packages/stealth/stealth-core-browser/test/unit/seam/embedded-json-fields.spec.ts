@@ -9,6 +9,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { extractResultsFromEmbeddedJson } from '../../../src/lib/parsers.js'
+import { must } from '../../helpers/must.js'
 
 type Capture = Parameters<typeof extractResultsFromEmbeddedJson>[1]
 
@@ -21,7 +22,7 @@ function capture(fields: Record<string, string>): Capture {
   return { resultSelector: 'payload.results', fields } as unknown as Capture
 }
 
-const one = (item: Record<string, unknown>, fields: Record<string, string>) => extractResultsFromEmbeddedJson(page([item]), capture(fields))[0]!
+const one = (item: Record<string, unknown>, fields: Record<string, string>) => must(extractResultsFromEmbeddedJson(page([item]), capture(fields))[0])
 
 describe('8468f7b1 [core-seam.8] extractResultsFromEmbeddedJson renders fields (commit 591e1a7)', () => {
   it('a two-placeholder title {repo.repository.owner_login}/{repo.repository.name} becomes vitejs/vite (591e1a7)', () => {

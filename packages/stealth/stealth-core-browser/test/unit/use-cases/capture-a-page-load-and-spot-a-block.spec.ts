@@ -13,6 +13,7 @@ import { capture, cdp } from '../../../src/index.js'
 import type { BanRule } from '../../../src/lib/types.js'
 import { articleListHtml, articleListTrace, captchaWallTrace, pageTraceFor, rateLimitedTrace, SITE_URL } from '../../helpers/page-fixtures.js'
 import { ChromeWorld, refuseWebSocketOpen } from '../../helpers/use-cases/scenario-kit.js'
+import { must } from '../../helpers/must.js'
 
 const world = new ChromeWorld(9405)
 const RULES: BanRule[] = [
@@ -30,7 +31,7 @@ afterEach(() => world.dispose())
 
 async function wsUrl(): Promise<string> {
   const [tab] = await cdp.listPageTargetsOnly(`127.0.0.1:${world.port}`)
-  return tab!.webSocketDebuggerUrl!
+  return must(must(tab).webSocketDebuggerUrl)
 }
 
 describe('Scenario: capture a page load and spot a block before trusting the content', () => {
@@ -48,10 +49,10 @@ describe('Scenario: capture a page load and spot a block before trusting the con
     const res = await capture.captureNetworkResponse(await wsUrl(), { urlPattern: /./, navigateUrl: SITE_URL })
     const ban = capture.checkBans(RULES, { url: res.url, status: res.status, body: res.body })
     expect(ban).toBe('captcha')
-    const retry = capture.decideRetry({ outcome: ban! }, 1, RETRY)
+    const retry = capture.decideRetry({ outcome: must(ban) }, 1, RETRY)
     expect(retry.shouldRetry).toBe(true)
     expect(retry.delayMs).toBeGreaterThan(0)
-    expect(capture.decideRetry({ outcome: ban! }, 3, RETRY).shouldRetry).toBe(false)
+    expect(capture.decideRetry({ outcome: must(ban) }, 3, RETRY).shouldRetry).toBe(false)
   })
 
   it('[tests-use-cases.2] a 429 is a rate limit', async () => {

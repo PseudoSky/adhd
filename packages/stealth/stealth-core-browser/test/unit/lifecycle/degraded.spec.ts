@@ -27,6 +27,7 @@ vi.mock('@adhd/sox-service-proxy', async (orig) => (await import('../../helpers/
 
 import { ChromeManager } from '../../../src/lib/chrome-manager.js'
 import { HOST, PORT, resetSp, resetWorld, sp, STATE_DIR, world } from '../../helpers/lifecycle/manager-world.js'
+import { must } from '../../helpers/must.js'
 
 const IDLE = 300
 
@@ -105,8 +106,8 @@ describe('8468f7b1 [chrome-lifecycle.28] ensureBackend fails with E_UDS_DIR_UNSA
     await m.shutdownIfIdle()
     expect(vi.mocked(sp.ensureBackend).mock.calls.length).toBeGreaterThan(1)
     expect(warn).toHaveBeenCalledTimes(1)
-    expect(warn.mock.calls[0]![0]).toMatch(/^warning: reaper unavailable, running degraded/)
-    expect(warn.mock.calls[0]![0]).toMatch(/E_UDS_DIR_UNSAFE|not private|0700/)
+    expect(must(warn.mock.calls[0])[0]).toMatch(/^warning: reaper unavailable, running degraded/)
+    expect(must(warn.mock.calls[0])[0]).toMatch(/E_UDS_DIR_UNSAFE|not private|0700/)
   })
 })
 
@@ -130,6 +131,6 @@ describe('8468f7b1 [chrome-lifecycle.28] the state directory is unsafe: degraded
     await m.shutdown()
     expect(world.chromeUp).toBe(false)
     expect(warn).toHaveBeenCalledTimes(1)
-    expect(warn.mock.calls[0]![0]).toMatch(/E_UDS_DIR_UNSAFE|not private/)
+    expect(must(warn.mock.calls[0])[0]).toMatch(/E_UDS_DIR_UNSAFE|not private/)
   })
 })

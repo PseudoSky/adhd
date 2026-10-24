@@ -147,11 +147,12 @@ export async function runChromeReaper(cfg: ChromeReaperConfig, overrides: Chrome
   await tick()
   retirer.arm()
 
+  const armed = retirer
   return {
     host,
     retirer,
     backend,
     retired,
-    close: () => retirer!.retire('closed'),
+    close: () => armed.retire('closed'),
   }
 }

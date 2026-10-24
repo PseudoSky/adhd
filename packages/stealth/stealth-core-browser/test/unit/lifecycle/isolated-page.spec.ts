@@ -16,6 +16,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { FakeCdpServer, loadFixture, type CdpFixture, type CdpFixtureStep } from '../../helpers/fake-cdp.js'
 import { openIsolatedPage, withIsolatedPage } from '../../../src/lib/lifecycle/isolated-page.js'
 import { LifecycleError } from '../../../src/lib/lifecycle/errors.js'
+import { must } from '../../helpers/must.js'
 
 const HOST = '127.0.0.1:9333'
 const BROWSER_WS = 'ws://127.0.0.1/devtools/browser/b1'
@@ -110,9 +111,9 @@ describe('8468f7b1 [chrome-lifecycle.13] openIsolatedPage — success path', () 
     expect(p.browserContextId).toBe('CTX1')
     expect(p.targetId).toBe('T1')
     expect(p.page.connected).toBe(true)
-    const create = w.server.received.find((r) => r.method === 'Target.createTarget')!
+    const create = must(w.server.received.find((r) => r.method === 'Target.createTarget'))
     expect(create.params).toMatchObject({ url: 'about:blank', browserContextId: 'CTX1', background: true, focus: false })
-    const bounds = w.server.received.find((r) => r.method === 'Browser.setWindowBounds')!
+    const bounds = must(w.server.received.find((r) => r.method === 'Browser.setWindowBounds'))
     expect(bounds.params).toEqual({ windowId: 7, bounds: { windowState: 'minimized' } })
     await p.dispose()
     await expectNoLeak()
@@ -133,7 +134,7 @@ describe('8468f7b1 [chrome-lifecycle.13] openIsolatedPage — success path', () 
   it('foreground skips the minimize and focuses', async () => {
     install(withSteps('isolated-context-ok', WINDOW_STEPS))
     const p = await openIsolatedPage(HOST, { foreground: true })
-    expect(w.server.received.find((r) => r.method === 'Target.createTarget')!.params).toMatchObject({ background: false, focus: true })
+    expect(must(w.server.received.find((r) => r.method === 'Target.createTarget')).params).toMatchObject({ background: false, focus: true })
     expect(count('Browser.setWindowBounds')).toBe(0)
     await p.dispose()
   })
@@ -143,7 +144,7 @@ describe('8468f7b1 [chrome-lifecycle.13] openIsolatedPage — success path', () 
     const p = await openIsolatedPage(HOST)
     await p.reveal()
     const bounds = w.server.received.filter((r) => r.method === 'Browser.setWindowBounds')
-    const last = bounds[bounds.length - 1]!
+    const last = must(bounds[bounds.length - 1])
     expect(last.params).toEqual({ windowId: 7, bounds: { left: 80, top: 80, width: 1100, height: 850, windowState: 'normal' } })
     await p.dispose()
     await expectNoLeak()

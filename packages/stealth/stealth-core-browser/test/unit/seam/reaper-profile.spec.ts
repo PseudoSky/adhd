@@ -29,6 +29,7 @@ import type { ProcessProbe } from '../../../src/lib/cdp/browser.js'
 import { REAPER_TICK_MS, runChromeReaper, type ChromeReaperConfig } from '../../../src/lib/lifecycle/reaper-entry.js'
 import { createProxyReaperLink } from '../../../src/lib/lifecycle/reaper-link.js'
 import { PORT, resetSp, resetWorld, sp, STATE_DIR, world } from '../../helpers/lifecycle/manager-world.js'
+import { must } from '../../helpers/must.js'
 
 const DEFAULT_PROFILE = '/home/operator/Library/Application Support/Google/Chrome-CDP'
 const OVERRIDE_PROFILE = '/data/other-profile'
@@ -125,7 +126,7 @@ describe('8468f7b1 [core-seam.11] createProxyReaperLink hands the resolved profi
       await vi.advanceTimersByTimeAsync(100)
     }
     expect(configs.length).toBeGreaterThanOrEqual(2)
-    expect(configs[0]!.profileDir).toBe(OVERRIDE_PROFILE)
+    expect(must(configs[0]).profileDir).toBe(OVERRIDE_PROFILE)
     expect(configs[1]).not.toHaveProperty('profileDir')
   })
 })
