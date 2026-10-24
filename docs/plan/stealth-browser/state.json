@@ -158,10 +158,10 @@
       "end_ref": "7c2f2eae35a7de9e8e4543c1e24b0dd46d0124cd"
     },
     "readme-rewrite": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-10-24T19:20:16.960Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "e2d1cdbef7fb6f209b347899d457429697a2804b",
       "end_ref": null
     },
     "audit-final": {
