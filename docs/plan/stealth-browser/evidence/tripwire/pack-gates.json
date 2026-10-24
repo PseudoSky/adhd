@@ -1,42 +1,42 @@
 {
-  "tw_tree": "b003e5da8c88f32934a049b7d800c03b44d5584f",
-  "head": "95436fa36adf7dcb462bdab713b18c27d6faa8ed",
+  "tw_tree": "11ce31e4b1fb5a4dbce809e2605c1ed8e02ef243",
+  "head": "5367e091d789824214b7a6499f08c69282a2bdad",
   "results": {
     "lint": {
       "cmd": "nx run resilience-core-tripwire:lint",
       "exit": 0,
-      "seconds": 4.0,
-      "tail": ")\n  Recoverable time:  <1ms\n\u001b[1m\u001b[33mThe `@nx/eslint:lint` executor is deprecated and will be removed in Nx v24. Run `nx g @nx/eslint:convert-to-inferred` to migrate to the `@nx/eslint/plugin` inferred targets. See https://nx.dev/docs/guides/tasks--caching/convert-to-inferred for details.\u001b[39m\u001b[22m\n"
+      "seconds": 1.5,
+      "tail": "2m for project resilience-core-tripwire and \u001b[1m1\u001b[22m task it depends on\u001b[39m\n\n\u001b[2mNx read the output from the cache instead of running the command for 2 out of 2 tasks.\u001b[22m\n\n  Run duration:      17ms\n  Cache:             2/2 hit (100%)\n  Critical path:     <1ms (1 task)\n  Recoverable time:  <1ms\n"
     },
     "typecheck": {
       "cmd": "nx run resilience-core-tripwire:typecheck",
       "exit": 0,
-      "seconds": 1.8,
-      "tail": "onfig.lib.json\n\n\n\u001b[2m\u001b[32m\u001b[39m\u001b[22m\n\n\u001b[7m\u001b[1m\u001b[32m NX \u001b[39m\u001b[22m\u001b[27m  \u001b[32mSuccessfully ran target \u001b[1mtypecheck\u001b[22m for project resilience-core-tripwire\u001b[39m\n\n\n  Run duration:      520ms\n  Cache:             Skipped (--skip-nx-cache)\n  Critical path:     509ms (1 task)\n  Recoverable time:  <1ms\n"
+      "seconds": 1.5,
+      "tail": "ssfully ran target \u001b[1mtypecheck\u001b[22m for project resilience-core-tripwire\u001b[39m\n\n\u001b[2mNx read the output from the cache instead of running the command for 1 out of 1 tasks.\u001b[22m\n\n  Run duration:      12ms\n  Cache:             1/1 hit (100%)\n  Critical path:     1ms (1 task)\n  Recoverable time:  <1ms\n"
     },
     "typecheck-spec": {
       "cmd": "nx run resilience-core-tripwire:typecheck-spec",
       "exit": 0,
-      "seconds": 2.5,
-      "tail": "pe-checked).\n\n\u001b[2m\u001b[32m\u001b[39m\u001b[22m\n\n\u001b[7m\u001b[1m\u001b[32m NX \u001b[39m\u001b[22m\u001b[27m  \u001b[32mSuccessfully ran target \u001b[1mtypecheck-spec\u001b[22m for project resilience-core-tripwire\u001b[39m\n\n\n  Run duration:      1.2s\n  Cache:             Skipped (--skip-nx-cache)\n  Critical path:     1.2s (1 task)\n  Recoverable time:  <1ms\n"
+      "seconds": 1.5,
+      "tail": "y ran target \u001b[1mtypecheck-spec\u001b[22m for project resilience-core-tripwire\u001b[39m\n\n\u001b[2mNx read the output from the cache instead of running the command for 1 out of 1 tasks.\u001b[22m\n\n  Run duration:      11ms\n  Cache:             1/1 hit (100%)\n  Critical path:     <1ms (1 task)\n  Recoverable time:  <1ms\n"
     },
     "test": {
       "cmd": "nx run resilience-core-tripwire:test",
       "exit": 0,
-      "seconds": 10.1,
-      "tail": "pyAssetsPlugin` plugin from `@nx/vite/plugins/nx-copy-assets.plugin` is deprecated and will be removed in Nx v24. Use Vite's native `publicDir` option or the `vite-plugin-static-copy` package instead. See https://nx.dev/docs/technologies/build-tools/vite/guides/configure-vite for details.\u001b[39m\u001b[22m\n"
+      "seconds": 1.5,
+      "tail": "2m for project resilience-core-tripwire and \u001b[1m3\u001b[22m tasks it depends on\u001b[39m\n\n\u001b[2mNx read the output from the cache instead of running the command for 4 out of 4 tasks.\u001b[22m\n\n  Run duration:      23ms\n  Cache:             4/4 hit (100%)\n  Critical path:     1ms (1 task)\n  Recoverable time:  <1ms\n"
     },
     "build": {
       "cmd": "nx run resilience-core-tripwire:build",
       "exit": 0,
-      "seconds": 2.9,
-      "tail": "pyAssetsPlugin` plugin from `@nx/vite/plugins/nx-copy-assets.plugin` is deprecated and will be removed in Nx v24. Use Vite's native `publicDir` option or the `vite-plugin-static-copy` package instead. See https://nx.dev/docs/technologies/build-tools/vite/guides/configure-vite for details.\u001b[39m\u001b[22m\n"
+      "seconds": 1.5,
+      "tail": "2m for project resilience-core-tripwire and \u001b[1m1\u001b[22m task it depends on\u001b[39m\n\n\u001b[2mNx read the output from the cache instead of running the command for 2 out of 2 tasks.\u001b[22m\n\n  Run duration:      14ms\n  Cache:             2/2 hit (100%)\n  Critical path:     2ms (2 tasks)\n  Recoverable time:  <1ms\n"
     },
     "verify-dist-load": {
       "cmd": "nx run resilience-core-tripwire:verify-dist-load",
       "exit": 0,
-      "seconds": 3.6,
-      "tail": "pyAssetsPlugin` plugin from `@nx/vite/plugins/nx-copy-assets.plugin` is deprecated and will be removed in Nx v24. Use Vite's native `publicDir` option or the `vite-plugin-static-copy` package instead. See https://nx.dev/docs/technologies/build-tools/vite/guides/configure-vite for details.\u001b[39m\u001b[22m\n"
+      "seconds": 1.5,
+      "tail": "m for project resilience-core-tripwire and \u001b[1m4\u001b[22m tasks it depends on\u001b[39m\n\n\u001b[2mNx read the output from the cache instead of running the command for 5 out of 5 tasks.\u001b[22m\n\n  Run duration:      48ms\n  Cache:             5/5 hit (100%)\n  Critical path:     3ms (2 tasks)\n  Recoverable time:  <1ms\n"
     }
   },
   "all_green": true
