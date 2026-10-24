@@ -1,7 +1,7 @@
 /**
  * guards: a host flag default, value or rendering is wrong, or a bad value is accepted
  * tier: S
- * cites: ticket 8468f7b1 [search-hosts.6] [search-hosts.10] [search-hosts.16]
+ * cites: ticket 8468f7b1 [search-hosts.6] [search-hosts.10] [search-hosts.16] [audit-fixes.1]
  * The host-flag parser (`parseHostFlags`) driven with every flag of the table, its defaults, its
  * `--help` rendering and the bad values it rejects. Ticket 8468f7b1 · plan state search-hosts.
  *
@@ -30,11 +30,13 @@ import type { HostSettings } from '../../../src/host-flags.js'
 /** A valid argument and the setting it must produce, per flag. */
 const VALID: Record<string, { raw?: string; value: unknown }> = {
   'cdp-host': { raw: '10.1.2.3', value: '10.1.2.3' },
+  'allow-cdp-hosts': { raw: 'a.example.net, b.example.net', value: ['a.example.net', 'b.example.net'] },
   'cdp-port': { raw: '19999', value: 19999 },
   'user-data-dir': { raw: '/tmp/profile', value: '/tmp/profile' },
   transport: { raw: 'sse', value: 'sse' },
   'listen-port': { raw: '4100', value: 4100 },
   'listen-host': { raw: '0.0.0.0', value: '0.0.0.0' },
+  'allow-remote-listen': { value: true },
   'idle-shutdown': { raw: '45000', value: 45000 },
   'keep-alive': { value: true },
   'restart-browser': { value: true },
@@ -62,6 +64,7 @@ const VALID: Record<string, { raw?: string; value: unknown }> = {
 /** An argument each value-taking flag must refuse. */
 const INVALID: Record<string, string> = {
   'cdp-host': '  ',
+  'allow-cdp-hosts': ' , ',
   'cdp-port': 'notanumber',
   'listen-port': '70000',
   'idle-shutdown': '-5',
@@ -105,7 +108,7 @@ describe('host flags: every flag of the table [search-hosts.16]', () => {
       expect([...out.given]).toEqual([flag.key])
       expect(out.operation).toBeUndefined()
       expect(out.rest).toEqual([])
-      expect(parse(`--${flag.name}=${sample?.raw ?? ''}`.replace(/=$/, '')).settings[flag.key]).toBe(sample?.value)
+      expect(parse(`--${flag.name}=${sample?.raw ?? ''}`.replace(/=$/, '')).settings[flag.key]).toEqual(sample?.value)
     })
   }
 
@@ -209,10 +212,30 @@ describe('host flags become the typed guard config [search-hosts.16]', () => {
       cooldownBannedMs: 3,
       maxConcurrent: 5,
       maxSiblings: 6,
+      allowCdpHosts: ['127.0.0.1'],
     })
   })
 
   it('an unset --audit-path is not passed, so the config derives it from the data directory', () => {
     expect('auditPath' in toSearchHostConfig(parse().settings)).toBe(false)
+  })
+})
+
+describe('host flags: the endpoint allow list and the sibling help [audit-fixes.1]', () => {
+  it('P9 allow list: --allow-cdp-hosts and a non-default --cdp-host both reach the config, so the operator opts a host in once', () => {
+    const s = parse('--allow-cdp-hosts', 'a.example.net,b.example.net', '--cdp-host', 'c.example.net').settings
+    expect(toSearchHostConfig(s).allowCdpHosts).toEqual(['a.example.net', 'b.example.net', 'c.example.net'])
+    expect(toSearchHostConfig(parse().settings).allowCdpHosts).toEqual(['127.0.0.1'])
+  })
+
+  it('P18 max-siblings help: the text promises a warning only, because the code only warns and never refuses a launch', () => {
+    const row = renderHostFlagRows().find((r) => r.includes('--max-siblings')) ?? ''
+    expect(row).toMatch(/before a warning is logged/)
+    expect(row).not.toMatch(/and before launching is refused/)
+  })
+
+  it('P30 listen help: a non-loopback --listen-host is documented as needing --allow-remote-listen', () => {
+    expect(renderMcpHelp()).toMatch(/--listen-host[^\n]*--allow-remote-listen/)
+    expect(renderMcpHelp()).toMatch(/--allow-remote-listen\s+Allow a non-loopback/)
   })
 })

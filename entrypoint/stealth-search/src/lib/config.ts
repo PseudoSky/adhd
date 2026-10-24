@@ -39,8 +39,10 @@ export interface SearchHostConfig {
   cooldownBannedMs: number
   /** Search and fetch calls allowed in flight per process; 0 or below disables the cap. */
   maxConcurrent: number
-  /** Sibling processes sharing one Chrome that are tolerated before launching is refused. */
+  /** Sibling processes sharing one Chrome that are tolerated before the host logs a warning (launching is never refused). */
   maxSiblings: number
+  /** Non-loopback hosts the chrome verbs and search may address; loopback is always allowed. */
+  allowCdpHosts: readonly string[]
   /** Correlation id written into tripwire records and audit lines. */
   sessionId: string
   /** File-system port for guard and tripwire state; default the Node fs. */
@@ -98,6 +100,7 @@ export const DEFAULT_SEARCH_HOST_CONFIG: Readonly<SearchHostConfig> = Object.fre
   cooldownBannedMs: 60000,
   maxConcurrent: 2,
   maxSiblings: 4,
+  allowCdpHosts: [],
   sessionId: randomUUID(),
 })
 

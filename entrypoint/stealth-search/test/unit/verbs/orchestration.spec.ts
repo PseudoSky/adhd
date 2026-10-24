@@ -257,9 +257,9 @@ describe('the engine call [search-verbs.4]', () => {
   it('the qualifier is prepended, visibility maps to the window and github type:code searches in the shared profile', async () => {
     const engine = scriptedEngine(response())
     const world = makeWorld({ strategies: engine.strategies })
-    await world.svc.search(input({ qualifier: 'type:code', visibility: 'foreground', host: '10.0.0.5', port: 9333 }))
+    await world.svc.search(input({ qualifier: 'type:code', visibility: 'foreground', host: '127.0.0.2', port: 9333 }))
     expect(engine.calls[0]).toMatchObject({ query: 'type:code vite', provider: 'github' })
-    expect(world.core.opened).toEqual([{ cdpHost: '10.0.0.5:9333', foreground: true, sharedProfile: true }])
+    expect(world.core.opened).toEqual([{ cdpHost: '127.0.0.2:9333', foreground: true, sharedProfile: true }])
   })
 
   it('a plain query opens an off-screen isolated page and Chrome is asked to be ready and bumped', async () => {

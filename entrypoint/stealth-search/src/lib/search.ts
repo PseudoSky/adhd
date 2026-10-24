@@ -34,7 +34,7 @@
  * Ticket 8468f7b1 · plan state search-verbs · [search-verbs.4] [search-verbs.10] [search-verbs.11]
  * [search-verbs.13] [search-verbs.14] [search-verbs.15] [search-verbs.16]
  */
-import { capture, cdp, lifecycle, StealthCoreBrowserError } from '@adhd/stealth-core-browser'
+import { capture, cdp, endpoint as coreEndpoint, lifecycle, StealthCoreBrowserError } from '@adhd/stealth-core-browser'
 import type {
   ClearTripwireResult,
   ListProvidersResult,
@@ -66,9 +66,6 @@ import { applyQualifier, resolveProvider } from './utils.js'
 export const DEFAULT_SEARCH_TIMEOUT_MS = 30_000
 /** Attempts on a transient failure when neither the caller nor the provider says otherwise. */
 export const DEFAULT_MAX_ATTEMPTS = 3
-/** The default CDP endpoint of the verbs. */
-const DEFAULT_HOST = '127.0.0.1'
-const DEFAULT_PORT = 9222
 /** Bytes of the raw response / converted document a caller gets for `preview: 'include'`. */
 const PREVIEW_BYTES = 4096
 /** Default byte bound of the serialized output of a search (`Buffer.byteLength(JSON.stringify(out))`); whole results are dropped to fit. */
@@ -381,14 +378,9 @@ function failureOf(e: unknown, provider: string): StealthCoreBrowserError {
   return searchError('SEARCH_FAILED', `Search failed: ${e instanceof Error ? e.message : String(e)}`, { cause: e, detail: { provider } })
 }
 
+/** The validated endpoint of a call: loopback unless the host allowed more (the core's one rule, shared with the chrome verbs). */
 function resolveEndpoint(input: { host?: string; port?: number }): { host: string; port: number; cdpHost: string } {
-  const host = input.host?.trim() || DEFAULT_HOST
-  const port = input.port ?? DEFAULT_PORT
-  if (!Number.isInteger(port) || port < 1 || port > 65535) {
-    throw StealthCoreBrowserError.invalidEndpoint(`port must be an integer between 1 and 65535, got ${String(port)}`)
-  }
-  if (/[\s/]/.test(host)) throw StealthCoreBrowserError.invalidEndpoint(`host must be a bare host name or address, got "${host}"`)
-  return { host, port, cdpHost: `${host}:${port}` }
+  return coreEndpoint.resolveEndpoint(input)
 }
 
 function usageError(provider: string, field: string, rule: string, value: unknown): StealthSearchError {
@@ -798,6 +790,7 @@ let current: SearchService | undefined
 export function configureSearch(options: ConfigureSearchOptions = {}): void {
   configured = options
   current = undefined
+  coreEndpoint.configureEndpointPolicy({ allowHosts: options.config?.allowCdpHosts ?? [] })
 }
 
 /** The service the verbs delegate to, built on first use from the `configureSearch` wiring. */

@@ -52,6 +52,10 @@ export interface HostSettings {
   userDataDir: string | undefined
   listenPort: number
   listenHost: string
+  /** Bind a non-loopback listen host on sse or streaming-http although the transport has no authentication. */
+  allowRemoteListen: boolean
+  /** Non-loopback hosts the chrome verbs and search may address (loopback and `cdpHost` are always allowed). */
+  allowCdpHosts: string[]
   /** Raw transport name; the MCP host validates it (HOST_TRANSPORT_UNSUPPORTED). */
   transport: string
   idleShutdownMs: number
@@ -116,6 +120,12 @@ function oneOf<T extends string>(values: readonly T[]): (flag: string, raw: stri
   }
 }
 
+function hostList(flag: string, raw: string): string[] {
+  const hosts = raw.split(',').map((h) => h.trim()).filter((h) => h !== '')
+  if (hosts.length === 0) throw flagInvalid(flag, 'expected a comma-separated list of hosts', { value: raw })
+  return hosts
+}
+
 function nonEmpty(flag: string, raw: string): string {
   if (raw.trim() === '') throw flagInvalid(flag, 'expected a non-empty value', { value: raw })
   return raw
@@ -125,12 +135,14 @@ const D = DEFAULT_SEARCH_HOST_CONFIG
 
 /** The host-flag table. Order is the order of `--help`. */
 export const HOST_FLAGS: readonly FlagSpec[] = [
-  { name: 'cdp-host', arg: '<host>', key: 'cdpHost', help: 'Chrome remote-debugging host', shown: DEFAULT_CDP_HOST, parse: nonEmpty },
+  { name: 'cdp-host', arg: '<host>', key: 'cdpHost', help: 'Chrome remote-debugging host (a non-loopback host given here is allowed for this run)', shown: DEFAULT_CDP_HOST, parse: nonEmpty },
+  { name: 'allow-cdp-hosts', arg: '<list>', key: 'allowCdpHosts', help: 'Comma-separated non-loopback hosts a tool call may address with its host input (loopback only otherwise)', parse: hostList },
   { name: 'cdp-port', arg: '<n>', key: 'cdpPort', help: 'Chrome remote-debugging port', shown: String(DEFAULT_CDP_PORT), parse: port },
   { name: 'user-data-dir', arg: '<path>', key: 'userDataDir', help: 'Chrome profile directory launchChrome uses when none is given', parse: nonEmpty },
   { name: 'transport', arg: '<name>', key: 'transport', help: 'MCP transport: stdio, sse or streaming-http (MCP host)', shown: DEFAULT_TRANSPORT, parse: nonEmpty },
   { name: 'listen-port', arg: '<n>', key: 'listenPort', help: 'Port the sse and streaming-http transports bind (MCP host)', shown: String(DEFAULT_LISTEN_PORT), parse: port },
-  { name: 'listen-host', arg: '<addr>', key: 'listenHost', help: 'Address the sse and streaming-http transports bind (MCP host)', shown: DEFAULT_LISTEN_HOST, parse: nonEmpty },
+  { name: 'listen-host', arg: '<addr>', key: 'listenHost', help: 'Address the sse and streaming-http transports bind (MCP host); a non-loopback address needs --allow-remote-listen', shown: DEFAULT_LISTEN_HOST, parse: nonEmpty },
+  { name: 'allow-remote-listen', key: 'allowRemoteListen', help: 'Allow a non-loopback --listen-host although sse and streaming-http have no authentication (MCP host)' },
   { name: 'idle-shutdown', arg: '<ms>', key: 'idleShutdownMs', help: 'Close the Chrome this host launched after this many idle milliseconds', shown: String(DEFAULT_IDLE_SHUTDOWN_MS), parse: milliseconds },
   { name: 'keep-alive', key: 'keepAlive', help: 'Never close Chrome on idle' },
   { name: 'restart-browser', key: 'restartBrowser', help: 'Soft-shut Chrome down before the first operation (shutdownChrome)' },
@@ -150,7 +162,7 @@ export const HOST_FLAGS: readonly FlagSpec[] = [
   { name: 'cooldown-rate-ms', arg: '<ms>', key: 'cooldownRateMs', help: 'Cooldown after a rate-limited outcome', shown: String(D.cooldownRateMs), parse: milliseconds },
   { name: 'cooldown-banned-ms', arg: '<ms>', key: 'cooldownBannedMs', help: 'Cooldown after a banned outcome', shown: String(D.cooldownBannedMs), parse: milliseconds },
   { name: 'max-concurrent', arg: '<n>', key: 'maxConcurrent', help: 'Searches in flight per process; 0 or less disables the cap', shown: String(D.maxConcurrent), parse: anyInteger },
-  { name: 'max-siblings', arg: '<n>', key: 'maxSiblings', help: 'Sibling processes tolerated before a warning (and before launching is refused)', shown: String(D.maxSiblings), parse: count },
+  { name: 'max-siblings', arg: '<n>', key: 'maxSiblings', help: 'Sibling processes tolerated before a warning is logged (launching is never refused)', shown: String(D.maxSiblings), parse: count },
   { name: 'pid-file', arg: '<path>', key: 'pidFile', help: 'Registry of live host pids, used to warn about accumulated siblings', parse: nonEmpty },
   { name: 'trace-file', arg: '<path>', key: 'traceFile', help: 'Append one JSON line per boot stage to this file', parse: nonEmpty },
 ]
@@ -163,6 +175,8 @@ export function defaultHostSettings(): HostSettings {
     userDataDir: undefined,
     listenPort: DEFAULT_LISTEN_PORT,
     listenHost: DEFAULT_LISTEN_HOST,
+    allowRemoteListen: false,
+    allowCdpHosts: [],
     transport: DEFAULT_TRANSPORT,
     idleShutdownMs: DEFAULT_IDLE_SHUTDOWN_MS,
     keepAlive: false,
@@ -301,5 +315,6 @@ export function toSearchHostConfig(s: HostSettings): Partial<SearchHostConfig> {
     cooldownBannedMs: s.cooldownBannedMs,
     maxConcurrent: s.maxConcurrent,
     maxSiblings: s.maxSiblings,
+    allowCdpHosts: [...s.allowCdpHosts, s.cdpHost],
   }
 }

@@ -25,7 +25,7 @@
  * [search-hosts.14] [search-hosts.15]
  */
 import { createHash } from 'node:crypto'
-import { appendFileSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { appendFileSync, chmodSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 import { extract } from '@adhd/apigen-core-client'
@@ -33,7 +33,7 @@ import type { Operation, RunInput } from '@adhd/apigen-core-client'
 import { project } from '@adhd/apigen-engine-naming'
 import { buildApigenPackage, createLogger } from '@adhd/apigen-engine-runtime'
 import { mcpPlugin } from '@adhd/apigen-plugin-mcp'
-import { lifecycle, shutdownChrome } from '@adhd/stealth-core-browser'
+import { endpoint, lifecycle, shutdownChrome } from '@adhd/stealth-core-browser'
 import * as api from './api.js'
 import { HostBootFailedError, asHostError, bootFailed, flagInvalid, hostExitCode, transportUnsupported, withMcpErrorChannel } from './host-errors.js'
 import { MCP_TRANSPORTS, renderMcpHelp, toSearchHostConfig } from './host-flags.js'
@@ -188,6 +188,11 @@ function operationsCacheKey(apiSource: string, fs: HostFs): string {
 /** The extractor seam: apigen's `extract` by default, a counter in specs. */
 export type OperationsExtractor = (args: { sourceFile: string; namespace: string; dropFileSegment: boolean }) => Promise<Operation[]>
 
+/** Mode of the state files the host writes at run time (operations cache, boot trace): owner read and write only. */
+export const PRIVATE_FILE_MODE = 0o600
+/** Mode of the baked operations file: a build artifact that holds no secret and must stay readable by every user of a shared install. */
+export const BAKED_FILE_MODE = 0o644
+
 /** The file name of the operations baked into dist at build time (I-35). */
 export const BAKED_OPERATIONS_FILE = 'operations.baked.json'
 
@@ -203,15 +208,15 @@ function readOperationsCache(file: string, key: string, fs: HostFs): Operation[]
 }
 
 /** Write a cache file atomically when the file system can rename, else in place. */
-function writeOperationsCache(file: string, key: string, operations: Operation[], fs: HostFs): void {
+function writeOperationsCache(file: string, key: string, operations: Operation[], fs: HostFs, mode: number = PRIVATE_FILE_MODE): void {
   fs.mkdirp(dirname(file))
   const body = JSON.stringify({ key, operations })
   if (fs.rename) {
     const tmp = `${file}.${process.pid}.tmp`
-    fs.writeFile(tmp, body)
+    fs.writeFile(tmp, body, mode)
     fs.rename(tmp, file)
   } else {
-    fs.writeFile(file, body)
+    fs.writeFile(file, body, mode)
   }
 }
 
@@ -243,8 +248,12 @@ export async function resolveOperations(options: ResolveOperationsOptions): Prom
     let present = true
     try {
       fs.readFile(bakedFile)
-    } catch {
+    } catch (e) {
+      const code = (e as NodeJS.ErrnoException).code
       present = false
+      if (code === 'EACCES' || code === 'EPERM') {
+        options.onStale?.(bootFailed(`the baked operations cache ${bakedFile} is not readable by this user (${code}); re-extracting`, e, { reason: 'baked-cache-unreadable', bakedFile, apiSource }))
+      }
     }
     if (present) options.onStale?.(bootFailed(`the baked operations cache ${bakedFile} is stale (it does not match ${apiSource}); re-extracting`, undefined, { reason: 'baked-cache-stale', bakedFile, apiSource }))
   }
@@ -274,7 +283,7 @@ export async function bakeOperations(options: { apiSource: string; outFile: stri
     const key = operationsCacheKey(options.apiSource, fs)
     const operations = await (options.extractor ?? defaultExtractor)({ sourceFile: options.apiSource, namespace: STEALTH_NAMESPACE, dropFileSegment: true })
     if (operations.length === 0) throw bootFailed(`the extraction of ${options.apiSource} produced no operations`, undefined, { reason: 'bake-empty', apiSource: options.apiSource })
-    writeOperationsCache(options.outFile, key, operations, fs)
+    writeOperationsCache(options.outFile, key, operations, fs, BAKED_FILE_MODE)
     return { file: options.outFile, key, count: operations.length }
   } catch (e) {
     if (e instanceof HostBootFailedError) throw e
@@ -346,6 +355,25 @@ export async function buildStealthSearchPackage(options: BuildPackageOptions = {
 
 // ─── Boot behaviour shared by both hosts ──────────────────────────────────────
 
+/**
+ * The sse and streaming-http transports carry no authentication and expose `launchChrome`, `shutdownChrome`
+ * and URL fetching to whoever can connect. Binding anything but loopback is therefore refused
+ * (HOST_FLAG_INVALID on `--listen-host`) unless `--allow-remote-listen` states that the network in front of
+ * the host authenticates its callers; even then a warning is logged. stdio is a private pipe and is never
+ * affected.
+ */
+export function refuseUnauthenticatedRemoteListen(settings: Pick<HostSettings, 'listenHost' | 'listenPort' | 'allowRemoteListen'>, transport: McpTransport, warn: (msg: string) => void): void {
+  if (transport === 'stdio' || endpoint.isLoopbackHost(settings.listenHost)) return
+  if (!settings.allowRemoteListen) {
+    throw flagInvalid(
+      '--listen-host',
+      `${settings.listenHost} is not a loopback address and the ${transport} transport has no authentication; bind 127.0.0.1, or pass --allow-remote-listen when a reverse proxy or firewall in front of this host authenticates every caller`,
+      { value: settings.listenHost, transport }
+    )
+  }
+  warn(`WARNING: listening on ${settings.listenHost} with no authentication (--allow-remote-listen); anyone who can reach ${settings.listenHost}:${settings.listenPort} can launch Chrome and fetch URLs`)
+}
+
 /** The forced-exit bound of every teardown, in milliseconds. */
 export const FORCE_EXIT_MS = 5000
 /** How long a closed stdin must stay closed before the stdio host treats the client as gone. */
@@ -355,16 +383,24 @@ export const STDIN_GRACE_MS = 1000
 export interface HostFs {
   appendFile(path: string, data: string): void
   readFile(path: string): string
-  writeFile(path: string, data: string): void
+  /** Write `data`; `mode` (default 0o600) is the file mode, applied to a file that already exists too. */
+  writeFile(path: string, data: string, mode?: number): void
   mkdirp(path: string): void
   /** Atomic replace (write a temp file, then rename). Absent: the target is written in place. */
   rename?(from: string, to: string): void
 }
 
 export const nodeHostFs: HostFs = {
-  appendFile: (p, d) => appendFileSync(p, d),
+  appendFile: (p, d) => {
+    appendFileSync(p, d, { mode: PRIVATE_FILE_MODE })
+    // `mode` only applies when the file is created; a trace left by an older run keeps its looser mode otherwise.
+    chmodSync(p, PRIVATE_FILE_MODE)
+  },
   readFile: (p) => readFileSync(p, 'utf8'),
-  writeFile: (p, d) => writeFileSync(p, d, { mode: 0o600 }),
+  writeFile: (p, d, mode = PRIVATE_FILE_MODE) => {
+    writeFileSync(p, d, { mode })
+    chmodSync(p, mode)
+  },
   mkdirp: (p) => {
     mkdirSync(p, { recursive: true, mode: 0o700 })
   },
@@ -601,6 +637,7 @@ export async function startMcpHost(settings: HostSettings, deps: McpHostDeps = {
   const transport = selectTransport(settings.transport)
   const warn = deps.stderr ?? stderrLine
   const logLine = (m: string): void => warn(`[stealth-search-mcp] ${m}`)
+  refuseUnauthenticatedRemoteListen(settings, transport, logLine)
   const trace = createBootTrace(settings.traceFile, { ...(deps.fs ? { fs: deps.fs } : {}), ...(deps.pid === undefined ? {} : { pid: deps.pid }), ...(deps.now ? { now: deps.now } : {}) })
   trace('boot', { transport })
 

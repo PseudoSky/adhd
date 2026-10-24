@@ -82,7 +82,7 @@ export function resolveEndpoint(input: { host?: string; port?: number } = {}): R
   const host = normalizeHost(input.host?.trim() || DEFAULT_HOST)
   if (!isLoopbackHost(host) && !allowed.has(bare(host).toLowerCase())) {
     throw StealthCoreBrowserError.invalidEndpoint(
-      `host "${bare(host)}" is not a loopback address and is not on the allowed list; the process that hosts the verbs must allow it explicitly (configureEndpointPolicy, or --allow-cdp-host for stealth-search)`
+      `host "${bare(host)}" is not a loopback address and is not on the allowed list; the process that hosts the verbs must allow it explicitly (configureEndpointPolicy, or --allow-cdp-hosts for stealth-search)`
     )
   }
   return { host, port, cdpHost: `${host}:${port}` }

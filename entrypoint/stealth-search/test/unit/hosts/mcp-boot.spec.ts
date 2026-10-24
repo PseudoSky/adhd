@@ -130,7 +130,7 @@ describe('transport selection [search-hosts.12] [search-hosts.16]', () => {
       expect(stdio.runs[0]?.options['transport']).toBe('stdio')
       for (const t of ['sse', 'streaming-http'] as const) {
         const rec = recorder()
-        const h = await startMcpHost(settingsFrom('--transport', t, '--listen-port', '4100', '--listen-host', '0.0.0.0'), rec.deps)
+        const h = await startMcpHost(settingsFrom('--transport', t, '--listen-port', '4100', '--listen-host', '0.0.0.0', '--allow-remote-listen'), rec.deps)
         await h.done
         expect(rec.runs[0]?.options).toMatchObject({ transport: t, port: 4100, host: '0.0.0.0' })
         expect(rec.runs[0]?.signal).toBeInstanceOf(AbortSignal)
