@@ -134,6 +134,17 @@ def tree_sha():
     return hashlib.sha256((t["core"] + "|" + t["search"]).encode()).hexdigest() if (t["core"] or t["search"]) else ""
 
 
+def tree_sha_at(ref):
+    """tree_sha() as of `ref` (a commit): the combined core + search code identity frozen at that commit."""
+    a, b = code_tree(CORE_DIR, ref), code_tree(SEARCH_DIR, ref)
+    return hashlib.sha256((a + "|" + b).encode()).hexdigest() if (a or b) else ""
+
+
+def tw_tree_sha_at(ref):
+    """tw_tree_sha() as of `ref`."""
+    return git("rev-parse", f"{ref}:{TW}") if exists(TW) else ""
+
+
 def ownership():
     return jread(f"{SCRIPTS}/ownership.json", {})
 
@@ -1549,10 +1560,17 @@ def _rp3():
 
 @check("review-prep", 4)
 def _rp4():
-    """Only owned paths changed by [psm:review-prep] commits; gates-first evidence trees (the stealth-core-browser + stealth-search code tree and the tripwire package) match the diffed trees."""
-    g = jread(f"{PLAN}/evidence/gates-first.json", {})
+    """Only owned paths changed by [psm:review-prep] commits; gates-first evidence trees (the stealth-core-browser + stealth-search code tree and the tripwire package) match the diffed trees. Both identities are read at the commits where those states completed, so later remediation commits cannot re-open this completed fact."""
+    rref = completion_ref("review-prep")
+    rc, raw = sh(["git", "show", f"{rref}:{PLAN}/evidence/gates-first.json"])  # the gate evidence as it stood when review-prep completed
+    try:
+        g = json.loads(raw) if rc == 0 else {}
+    except ValueError:
+        g = {}
     o = ownership_ok("review-prep")
-    return o[0] and g.get("all_green") is True and g.get("tree") == tree_sha() and g.get("tw_tree") == tw_tree_sha(), f"{o[1]} gates tree match={g.get('tree') == tree_sha()} tw tree match={g.get('tw_tree') == tw_tree_sha()}"
+    tree_ok = bool(tree_sha_at(rref)) and g.get("tree") == tree_sha_at(rref)
+    tw_ok = g.get("tw_tree") == tw_tree_sha_at(rref)
+    return o[0] and g.get("all_green") is True and tree_ok and tw_ok, f"{o[1]} gates-first evidence tree matches the review-prep tree: {tree_ok}; tripwire tree: {tw_ok}"
 
 
 def findings():
@@ -1588,9 +1606,9 @@ def _b3():
 
 @check("audit-migration-blind", 4)
 def _b4():
-    """The package code trees are unchanged since review-prep (the combined stealth-core-browser + stealth-search code tree recorded by gates-first equals HEAD), so the review judged the code that gated green."""
-    g = jread(f"{PLAN}/evidence/gates-first.json", {})
-    return g.get("tree") == tree_sha() and bool(tree_sha()), "code trees unchanged since gates-first"
+    """The package code trees are unchanged since review-prep (the combined stealth-core-browser + stealth-search code tree at the commit where review-prep completed equals the tree where this audit completes, or HEAD while it is in flight), so the review judged the code that gated green."""
+    then, now = tree_sha_at(completion_ref("review-prep")), tree_sha_at(completion_ref("audit-migration-blind"))
+    return bool(then) and then == now, "code trees unchanged since review-prep"
 
 
 @check("resolve-findings", 1)
@@ -2504,7 +2522,8 @@ def _apr2():
     """The audit judged the current code: `tree` in PRE-REVIEW.json equals the current combined core + search code tree sha, and `audit_dod_exit` equals the exit status of re-running `audit_dod.py --phase pre-review` now."""
     f = pre_findings()
     rc, _ = sh([sys.executable, f"{SCRIPTS}/audit_dod.py", "--phase", "pre-review"], timeout=2400)
-    return f.get("tree") == tree_sha() and f.get("audit_dod_exit") == rc, f"tree match={f.get('tree') == tree_sha()} recorded exit={f.get('audit_dod_exit')} rerun={rc}"
+    at = tree_sha_at(completion_ref("audit-pre-review"))  # the code the audit judged: frozen at the commit where the audit completed
+    return f.get("tree") == at and f.get("audit_dod_exit") == rc, f"tree match={f.get('tree') == at} recorded exit={f.get('audit_dod_exit')} rerun={rc}"
 
 
 @check("audit-pre-review", 3)
@@ -2527,7 +2546,7 @@ def _apr4():
     since = st.get("start_ref")
     same = True
     if since:
-        same = hashlib.sha256((code_tree(CORE_DIR, since) + "|" + code_tree(SEARCH_DIR, since)).encode()).hexdigest() == tree_sha()
+        same = tree_sha_at(since) == tree_sha_at(completion_ref("audit-pre-review"))
     return o[0] and same, f"{o[1]} package tree unchanged={same}"
 
 
