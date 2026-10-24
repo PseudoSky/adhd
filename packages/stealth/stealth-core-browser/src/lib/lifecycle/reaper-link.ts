@@ -137,9 +137,10 @@ export function defaultReaperEntry(source?: ReaperEntrySource): string {
 function realSource(): ReaperEntrySource {
   return {
     ...(typeof __filename === 'string' ? { filename: __filename } : {}),
-    // The CJS build rewrites `import.meta.url` to `pathToFileURL(__filename).href` (tools/vite-plugins/import-meta-url-cjs.mjs);
-    // tsconfig.lib.json type-checks as esnext/bundler (the bundler, not tsc, emits this module) so the property is typed without a suppression.
-    moduleUrl: import.meta.url,
+    // The CJS build rewrites `import.meta.url` to `pathToFileURL(__filename).href` (tools/vite-plugins/import-meta-url-cjs.mjs).
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment -- @ts-expect-error would itself fail under the ESM spec tsconfig, where the line is valid
+    // @ts-ignore TS1343: tsconfig.lib compiles as commonjs; the bundler, not tsc, emits this module
+    moduleUrl: import.meta.url as string,
   }
 }
 
