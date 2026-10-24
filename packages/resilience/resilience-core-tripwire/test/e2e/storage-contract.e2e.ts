@@ -1,7 +1,7 @@
 /**
  * guards: createFileStorage breaks the TripwireStorage contract on a real filesystem (real hard link, fsync, rename, exclusive open)
  * tier: P
- * gap: the directory is a fresh os.tmpdir() mkdtemp on the local disk of the test machine; network filesystems, other platforms' link semantics and a crash between write and rename are not exercised
+ * gap: real link, fsync, rename and exclusive-open semantics cannot be observed at tier S because the unit lane forbids real disk and its memory fs only models them; this run uses a fresh os.tmpdir() mkdtemp on the local disk, so network filesystems, other platforms' link semantics and a crash between write and rename stay unobserved
  * cites: ticket 8468f7b1; [tripwire-core.31] TW38.
  * plan: resolve-findings
  * teeth: red: nx run resilience-core-tripwire:e2e --skip-nx-cache -> exit 1; with createFileStorage.createLockIfAbsent answering true after every attempt (mutation in src/lib/storage.ts), 'createLockIfAbsent creates once; the first content wins' fails on the real directory
