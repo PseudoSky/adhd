@@ -3394,7 +3394,7 @@
     },
     {
       "id": "fs-177",
-      "feature": "cdpCall performs a one-shot browser-level CDP command and returns null on any failure; it times out after 10 s.",
+      "feature": "cdpCall performs a one-shot browser-level CDP command, surfaces every failure as a typed StealthBrowserError (never null), and times out after 10 s.",
       "tags": [
         "storage"
       ],
@@ -3406,7 +3406,7 @@
       "owner_state": "tests-unit-data",
       "pin": {
         "file": "src/test/unit/domains-storage/domains.spec.ts",
-        "test": "cdpCall returns null on failure and times out"
+        "test": "[fs-177] cdpCall is one-shot, surfaces every failure as a typed error and times out after 10 s"
       }
     },
     {
@@ -3446,7 +3446,7 @@
     },
     {
       "id": "fs-180",
-      "feature": "BrowserService.getVersion maps /json/version (null when unreachable); histograms, window bounds and command line degrade to empty.",
+      "feature": "BrowserService.getVersion maps /json/version and rejects typed (CDP_UNREACHABLE, CDP_TIMEOUT, CDP_BAD_RESPONSE) when the browser cannot answer; histograms, window bounds and command line degrade to empty.",
       "tags": [
         "storage"
       ],
@@ -3458,7 +3458,7 @@
       "owner_state": "tests-unit-data",
       "pin": {
         "file": "src/test/unit/domains-storage/domains.spec.ts",
-        "test": "reports the browser version or null"
+        "test": "[fs-180] reports the browser version and rejects typed when the browser cannot answer"
       }
     },
     {
