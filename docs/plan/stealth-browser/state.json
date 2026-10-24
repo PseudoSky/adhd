@@ -158,11 +158,11 @@
       "end_ref": "7c2f2eae35a7de9e8e4543c1e24b0dd46d0124cd"
     },
     "readme-rewrite": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-10-24T19:20:16.960Z",
-      "done_at": null,
+      "done_at": "2026-10-24T19:49:23.179Z",
       "start_ref": "e2d1cdbef7fb6f209b347899d457429697a2804b",
-      "end_ref": null
+      "end_ref": "76709a59d418cdb739293de71c79257d2c668189"
     },
     "audit-final": {
       "status": "pending",
@@ -1495,6 +1495,18 @@
       "audit_criteria_total": 12,
       "by": "pseudosky",
       "note": "doc-steward run for core (0.0.1) and search (0.1.0): catalogs reviewed PASS, 12/12 criteria green"
+    },
+    {
+      "ts": "2026-10-24T19:49:23.179Z",
+      "from": "readme-rewrite",
+      "to": "readme-rewrite",
+      "start_ref": "e2d1cdbef7fb6f209b347899d457429697a2804b",
+      "end_ref": "76709a59d418cdb739293de71c79257d2c668189",
+      "audit_exit": 0,
+      "audit_criteria_passed": 10,
+      "audit_criteria_total": 10,
+      "by": "pseudosky",
+      "note": "both READMEs rewritten, readme-rewrite guard exit 0 (10 criteria)"
     }
   ],
   "amendment_log": [
@@ -2272,7 +2284,7 @@
     "version": "0.8.35",
     "hash": "0b6bc1f3d70e"
   },
-  "current_state": "readme-rewrite",
+  "current_state": "audit-final",
   "dod_provenance": {
     "confirmed_at": "2026-10-12T23:49:38.410Z",
     "by": "pseudosky",
