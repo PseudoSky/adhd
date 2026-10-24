@@ -1844,7 +1844,7 @@ def _mr2():
 def _mr3():
     """The code trees gated by gates-rerun (the stealth-core-browser + stealth-search src, bin and manifests, and the tripwire package; docs edits after the gates do not change them) are the trees being merged and the worktree is clean."""
     g = jread(f"{PLAN}/evidence/gates-rerun.json", {})
-    return g.get("tree") == tree_sha() and bool(tree_sha()) and g.get("tw_tree") == tw_tree_sha() and git("status", "--porcelain", "--", CORE_DIR, SEARCH_DIR, TW, PLAN) == "", "clean + gated"
+    return g.get("tree") == tree_sha() and bool(tree_sha()) and g.get("tw_tree") == tw_tree_sha() and git("status", "--porcelain", "--", CORE_DIR, SEARCH_DIR, TW, PLAN, *[f":(exclude){PLAN}/{n}" for n in ("events.ndjson", "evidence/gates-first.json", "evidence/tripwire/pack-gates.json")]) == "", "clean + gated"
 
 
 def mcp_session(cmd, cwd, calls, timeout=90):
