@@ -151,10 +151,10 @@
       "end_ref": "68ddca92cafe9728678b79d39e2b6cffd4dab876"
     },
     "docs-marketing-run": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-10-24T18:23:54.270Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "4ee78a454793e30be16771de5c03fa6c0c027af1",
       "end_ref": null
     },
     "readme-rewrite": {
