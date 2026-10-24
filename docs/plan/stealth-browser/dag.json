@@ -11,7 +11,8 @@
     "review",
     "remediate",
     "docs",
-    "release"
+    "release",
+    "handoff"
   ],
   "terminal": "done",
   "nodes": {
