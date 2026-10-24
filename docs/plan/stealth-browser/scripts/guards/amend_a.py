@@ -459,6 +459,30 @@ def am_rgf_backlog(slug, p):
     return _rgf_dry_cached()
 
 
+def am_rgf_publish(slug, p):
+    """publish/impl.js fails a same-version/different-content package without a bump except under dryRun AND process.env.ADHD_NX_VERSION_DRY_RUN === '1'; impl.spec.mjs has the three cases (dry+env succeeds, dry without env fails, non-dry fails), each citing 8468f7b1 and [release-gate-fixes.8], and passes `node --test`."""
+    impl, spec = "tools/nx-plugins/build/executors/publish/impl.js", "tools/nx-plugins/build/executors/publish/impl.spec.mjs"
+    src = read(impl)
+    i = src.find("built content DIFFERS")
+    win = src[max(0, i - 900): i + 900] if i >= 0 else ""
+    bad = []
+    if not re.search(r"process\.env\.ADHD_NX_VERSION_DRY_RUN", win) or "dryRun" not in win or "dry-run" not in win:
+        bad.append("impl.js: the same-version/different-content branch does not gate a dry-run success on dryRun and process.env.ADHD_NX_VERSION_DRY_RUN")
+    t = read(spec)
+    tag = f"[{slug}.{p['n']}]"
+    if t.count(tag) < 3 or t.count(TICKET) < 3 or "ADHD_NX_VERSION_DRY_RUN" not in t:
+        bad.append(f"impl.spec.mjs: needs >= 3 cases citing {TICKET} and {tag} and the ADHD_NX_VERSION_DRY_RUN env")
+    if bad:
+        return False, "; ".join(bad)
+    if spec not in ((jread("package.json", {}) or {}).get("scripts") or {}).get("test:build-tools", ""):
+        return False, "impl.spec.mjs is not listed in package.json test:build-tools"
+    rc, out = sh(["node", "--test", spec], timeout=900)
+    if rc != 0:
+        return False, f"node --test impl.spec.mjs exit {rc}: {out[-250:]}"
+    rc, out = sh(["node", f"{AM_WIRING}/check-lane-reachability.mjs"], timeout=300)
+    return rc == 0, f"check-lane-reachability exit {rc}: {out[-200:]}"
+
+
 def am_rr_gates(slug, p):
     """Release-readiness gate evidence: every `EXIT <command>: <code>` token, the affected gate based on the merge-base of HEAD with LOCAL main (`BASE <sha>` equals `git merge-base HEAD main`), and no `--base=origin/main`."""
     ev = read(f"{PLAN}/{p['file']}")
@@ -559,7 +583,7 @@ AM_FN = {
     "regress": am_regress, "own": am_own, "evidence": am_evidence, "text": am_text, "spec": am_spec, "repeat_guard": am_repeat_guard,
     "merge_commit": am_merge_commit, "merge_union": am_merge_union, "merge_lock": am_merge_lock, "merge_build": am_merge_build, "merge_own": am_merge_own,
     "tlv_fresh": am_tlv_fresh, "tlv_reach": am_tlv_reach,
-    "rgf_spec": am_rgf_spec, "rgf_wiring": am_rgf_wiring, "rgf_dry": am_rgf_dry, "rgf_decompile": am_rgf_decompile, "rgf_backlog": am_rgf_backlog,
+    "rgf_spec": am_rgf_spec, "rgf_wiring": am_rgf_wiring, "rgf_dry": am_rgf_dry, "rgf_decompile": am_rgf_decompile, "rgf_backlog": am_rgf_backlog, "rgf_publish": am_rgf_publish,
     "rr_gates": am_rr_gates, "rr_order": am_rr_order, "rr_approvals": am_rr_approvals,
 }
 

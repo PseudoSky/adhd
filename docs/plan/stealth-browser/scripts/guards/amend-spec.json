@@ -1131,5 +1131,10 @@
   "text": "Only owned paths changed by [psm:release-gate-fixes] commits (package.json, the wiring check and its two specs, the decompile-cli and backlog specs, backlog project.json, the state's evidence).",
   "type": "own",
   "p": {}
+ },
+ "release-gate-fixes.8": {
+  "text": "The publish executor (tools/nx-plugins/build/executors/publish/impl.js) fails a package that is already on npm at the same version with different built content, unless options.dryRun is true AND process.env.ADHD_NX_VERSION_DRY_RUN === '1', where it logs that a bump would be required and returns success with the 'dry-run' outcome; impl.spec.mjs has three cases (dryRun + env + same version/different hash succeeds, dryRun without the env fails, non-dry fails), each citing 8468f7b1 and [release-gate-fixes.8], it passes `node --test`, and check-lane-reachability exits 0.",
+  "type": "rgf_publish",
+  "p": {}
  }
 }
