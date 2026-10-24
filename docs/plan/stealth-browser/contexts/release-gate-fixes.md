@@ -18,6 +18,7 @@
 
 - [release-gate-fixes.1] tools/nx-plugins/test/executors/wiring/check-test-wiring.spec.mjs exists with the testing-standard header (guards:, tier: S, cites:) citing 8468f7b1 and [release-gate-fixes.1], carries a plugin-inferred-target case and a negative control (a project with specs and no test target, literal or inferred, is still flagged), is listed in package.json `test:build-tools`, passes `node --test`, and check-lane-reachability exits 0.
 
+- [release-gate-fixes.2] check-test-wiring.mjs honours Nx-inferred `test` targets through the project graph (no longer only the literal project.json `targets.test`), keeps its exit 1 for a project with specs and no test target, names no project, and `node tools/nx-plugins/test/executors/wiring/check-test-wiring.mjs` exits 0 on the tree (agent-store-runtime and agent-store-prompts are no longer flagged).
 ---
 
 ## Reservations
