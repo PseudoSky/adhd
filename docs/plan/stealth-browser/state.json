@@ -207,10 +207,10 @@
       "end_ref": "81c96f1e763feb3ccf90ecf877f75149267fe2b8"
     },
     "audit-fixes": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-10-24T08:44:56.357Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "6dffdb3eb63eade98502a6d242aeba4d9f8d6a44",
       "end_ref": null
     },
     "capture-upgrade": {
