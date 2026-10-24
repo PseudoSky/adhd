@@ -438,10 +438,10 @@
       "end_ref": "25eee397d588c6e9f018b607dfe9c48caac89e35"
     },
     "search-cutover": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-10-24T02:35:11.987Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "8cebe4403dff4a3f2540fcba1c027d39570f43c4",
       "end_ref": null
     },
     "consumer-relink": {
