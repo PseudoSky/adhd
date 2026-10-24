@@ -34,6 +34,7 @@
  * Ticket 8468f7b1 · plan state search-verbs · [search-verbs.4] [search-verbs.10] [search-verbs.11]
  * [search-verbs.13] [search-verbs.14] [search-verbs.15] [search-verbs.16]
  */
+import { createHash } from 'node:crypto'
 import { capture, cdp, endpoint as coreEndpoint, lifecycle, StealthCoreBrowserError } from '@adhd/stealth-core-browser'
 import type {
   ClearTripwireResult,
@@ -66,6 +67,27 @@ import { applyQualifier, resolveProvider } from './utils.js'
 export const DEFAULT_SEARCH_TIMEOUT_MS = 30_000
 /** Attempts on a transient failure when neither the caller nor the provider says otherwise. */
 export const DEFAULT_MAX_ATTEMPTS = 3
+
+/** Solved-captcha confirmations that may each grant one more attempt beyond `maxAttempts` in a single call. */
+const MAX_SOLVED_BONUS_ATTEMPTS = 3
+
+/**
+ * The cooldown scope of a call. A search cools down per provider. A fetch cools down per site: the `fetch`
+ * provider is one id for every URL, so a ban or rate limit on one host must not block fetches of every other host.
+ * The key is a guard file name, so it is limited to the provider-id alphabet and 64 characters.
+ */
+export function cooldownKeyFor(providerId: string, isFetch: boolean, url: string): string {
+  if (!isFetch) return providerId
+  let host: string
+  try {
+    host = new URL(url).hostname.toLowerCase()
+  } catch {
+    return providerId
+  }
+  const safe = host.replace(/[^a-z0-9.-]/g, '_')
+  const key = `${providerId}.${safe}`
+  return key.length <= 64 ? key : `${providerId}.${createHash('sha256').update(host).digest('hex').slice(0, 24)}`
+}
 /** Bytes of the raw response / converted document a caller gets for `preview: 'include'`. */
 const PREVIEW_BYTES = 4096
 /** Default byte bound of the serialized output of a search (`Buffer.byteLength(JSON.stringify(out))`); whole results are dropped to fit. */
@@ -480,7 +502,7 @@ export function createSearchService(options: SearchServiceOptions = {}): SearchS
       fetchDeps,
     )
     if (state.aborted) return shapeFetch(res, shape)
-    await guard.recordSearchOutcome(p.id, res.outcome, query)
+    await guard.recordSearchOutcome(cooldownKeyFor(p.id, true, query), res.outcome, query)
     return shapeFetch(res, shape)
   }
 
@@ -508,7 +530,11 @@ export function createSearchService(options: SearchServiceOptions = {}): SearchS
     let carried = null as SearchPage | null
     let retrySleepMs = 0
 
-    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    // A solved captcha re-searches on the page that now holds the clearance. That pass must not be lost to
+    // `maxAttempts`, so each confirmed solve (bounded) extends the limit by one attempt.
+    let attemptLimit = maxAttempts
+    let solvedBonus = 0
+    for (let attempt = 0; attempt < attemptLimit; attempt++) {
       if (state.aborted) break
       if (retrySleepMs > 0) {
         await deps.sleep(retrySleepMs)
@@ -579,6 +605,10 @@ export function createSearchService(options: SearchServiceOptions = {}): SearchS
           if (hitl.reason !== 'login_required') await tripwire.cleared(p.id, 'hitl-clear')
           state.kept.delete(page)
           carried = page
+          if (attempt + 1 >= attemptLimit && solvedBonus < MAX_SOLVED_BONUS_ATTEMPTS) {
+            attemptLimit++
+            solvedBonus++
+          }
           continue
         }
 
@@ -664,16 +694,17 @@ export function createSearchService(options: SearchServiceOptions = {}): SearchS
     }
 
     // 4. Cooldown gate.
-    const remainingMs = await guard.cooldownRemainingMs(p.id)
+    const cooldownKey = cooldownKeyFor(p.id, isFetch, query)
+    const remainingMs = await guard.cooldownRemainingMs(cooldownKey)
     if (remainingMs > 0) {
-      const cd = await guard.readProviderCooldown(p.id)
+      const cd = await guard.readProviderCooldown(cooldownKey)
       return {
         provider: p.id,
         query,
         count: 0,
         results: [],
         outcome: 'rate_limited',
-        error: `Provider "${p.id}" is cooling down after a previous ${cd?.reason ?? 'hostile'} outcome — retry in ~${Math.ceil(remainingMs / 1000)}s`,
+        error: `Provider "${p.id}"${cooldownKey === p.id ? '' : ` (${cooldownKey.slice(p.id.length + 1)})`} is cooling down after a previous ${cd?.reason ?? 'hostile'} outcome — retry in ~${Math.ceil(remainingMs / 1000)}s`,
         tookMs: 0,
         attempts: 0,
         strategy: p.strategies.primary,
