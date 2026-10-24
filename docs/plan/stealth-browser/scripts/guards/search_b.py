@@ -704,7 +704,8 @@ def _bc3():
         idx = os.path.join(nm, "dist/index.js")
         if not os.path.isfile(idx) or _tar_member(tb, "package/dist/index.js") != open(idx, "rb").read():
             problems.append(f"{key}: dist/index.js differs from tarball")
-    committed = git("grep", "-nE", r"(link:|file:)[^\"]*\.worktrees|\.worktrees/[^\"]*(stealth|tripwire)", "--", "package.json", "**/package.json", "docs/plan/stealth-browser/evidence")
+    # manifests: any link:/file:/.worktrees dependency value; evidence files: only a link:/file: value naming a worktree (prose that mentions the worktree path is not a dependency reference)
+    committed = git("grep", "-nE", r"(link:|file:)[^\"]*\.worktrees|\.worktrees/[^\"]*(stealth|tripwire)", "--", "package.json", "**/package.json") + git("grep", "-nE", r"(link:|file:)[^\"]*\.worktrees", "--", "docs/plan/stealth-browser/evidence")
     return not problems and not committed.strip(), "; ".join(problems[:5]) + f" committed refs: {committed[:120]}"
 
 
