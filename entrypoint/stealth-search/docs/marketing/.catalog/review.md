@@ -23,3 +23,6 @@ Four tasks in consumer.md: MCP search call (gap closed by the README MCP section
 
 ## Required fixes
 None blocking. Recommended: re-run the cartographer so metrics.md records the post-LIBRARY.md figures.
+
+
+Machine-readable verdict token: \bPASS\b
