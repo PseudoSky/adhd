@@ -1,6 +1,6 @@
-# CDP API Reference — agent-browser Tool
+# CDP API Reference
 
-What our CDP tool (`CdpSession` in `src/lib/cdp/session.ts`) can actually query against a live browser.
+What `CdpSession` (`src/lib/cdp/session.ts`) can actually query against a live browser.
 
 ## Connection Types
 
@@ -74,16 +74,6 @@ Per-process CPU time, but no per-tab mapping.
 | Get timestamps for historical events | Events forwarded by `setDiscoverTargets` are live-only |
 | Query `Session` history per target | CDP sessions are ephemeral, no history |
 
-## Multi-Process Idle Detection Strategy (Proposed)
+## Multi-Process Idle Detection
 
-Given these constraints, the approach to safely shut down Chrome when multiple MCP server processes share it:
-
-1. **Each process tracks its own `lastSearchAt`** in module memory.
-2. **A shared `IdleShutdown` timer** resets on every `search()` call.  
-3. **On idle fire**, check CDP `/json/list` (equivalent to `Target.getTargets`):
-   - If any `type === "page"` targets exist with real URLs → skip shutdown (Chrome is in use).
-   - If zero page targets → check local `lastSearchAt`: if it's within the last 10 seconds, a request might be in-flight → skip.
-   - Otherwise → safely shut down (close targets and/or kill Chrome).
-4. **No heartbeat file needed** — the browser's own target list is the shared truth.
-
-Rationale: Since our `search()` function now closes its tab in a `finally` block (`closePageTarget`), normal idle state is zero page targets. Stale processes' timers fire, see zero targets, and shut down harmlessly. A live process with an in-flight search would have a target open, protecting Chrome from premature shutdown.
+The shipped design is not a target-list heuristic. Every `ChromeManager` holds one connection to the reaper host of its port; the host keeps the registry of connected clients and, before an idle shutdown, checks sibling activity, open http(s) page targets and recent history (see [chrome-manager.md](../chrome-manager.md)). The constraints above (no per-target timestamps, no per-process target tag) are why the host tracks clients itself instead of inferring them from Chrome.

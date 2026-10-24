@@ -60,6 +60,19 @@ describe('8468f7b1 AC2 [tests-unit-data.1] checkChromeActivity', () => {
     expect(r.pageTargets).toEqual(['A'])
   })
 
+  it('[resolve-findings.2] F131 browser-internal pages (the default new-tab page, devtools, extensions) are not activity', async () => {
+    fake.pages = [
+      { targetId: 'N', url: 'chrome://newtab/' },
+      { targetId: 'D', url: 'devtools://devtools/bundled/inspector.html' },
+      { targetId: 'E', url: 'chrome-extension://abc/background.html' },
+      { targetId: 'W', url: 'https://web.test/' },
+      { targetId: 'H', url: 'HTTP://UPPER.test/' },
+    ]
+    const r = await checkChromeActivity('h:1')
+    expect(r.pageTargets).toEqual(['W', 'H'])
+    expect(r.activePages).toBe(2)
+  })
+
   it('passes the cdp host through and reports meta (profileDir stripped of Default/History)', async () => {
     const r = await checkChromeActivity('h:1')
     expect(fake.hosts).toEqual(['h:1'])

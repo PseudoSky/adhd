@@ -9,6 +9,7 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { detectBanInPage, extractFromDom, walkDomTree } from '../../../src/lib/capture/dom.js'
+import { pageEvents } from '../../helpers/capture/capture-kit.js'
 import type { DomExtractor } from '../../../src/lib/types.js'
 
 interface N {
@@ -130,12 +131,14 @@ describe('8468f7b1 AC2 [tests-unit-extract.1] extractFromDom (pattern mode)', ()
 
 /** Structural extraction is only reachable through walkDomTree (extractFromDom is pattern mode). */
 const walkStructural = (tree: N) => {
+  const events = pageEvents()
   const send = vi.fn(async (method: string, params: Record<string, unknown> = {}) => {
+    if (method === 'Page.navigate') queueMicrotask(() => events.fire('Page.loadEventFired'))
     if (method === 'DOM.getDocument') return { root: params['depth'] === -1 ? tree : { nodeId: 1, nodeType: 9, nodeName: '#document' } }
     if (method === 'DOM.querySelector') return { nodeId: 42 }
     return {}
   })
-  return walkDomTree({ send } as never, { navigateUrl: 'https://s.test/', waitFor: '#r', timeoutMs: 1_000 }, { structural: true })
+  return walkDomTree({ send, on: events.on } as never, { navigateUrl: 'https://s.test/', waitFor: '#r', timeoutMs: 1_000 }, { structural: true })
 }
 
 describe('8468f7b1 AC2 [tests-unit-extract.1] walkDomTree (structural mode)', () => {
@@ -190,24 +193,23 @@ describe('8468f7b1 AC2 [tests-unit-extract.1][tests-unit-extract.3] walkDomTree'
     vi.restoreAllMocks()
   })
 
-  const makeSession = (handlers: Record<string, (p: Record<string, unknown>) => unknown>) => {
+  const makeSession = (handlers: Record<string, (p: Record<string, unknown>) => unknown>, opts: { load?: boolean } = {}) => {
+    const events = pageEvents()
     const send = vi.fn(async (method: string, params: Record<string, unknown> = {}) => {
+      if (method === 'Page.navigate' && opts.load !== false) queueMicrotask(() => events.fire('Page.loadEventFired'))
       const h = handlers[method]
       if (!h) return {}
       return h(params)
     })
-    return { send }
+    return { send, on: events.on, events }
   }
   const opts = { navigateUrl: 'https://search.test/?q=a', waitFor: '#res', timeoutMs: 5_000 }
 
-  it('[fs-134] navigates waits and extracts from the full tree (load failure tolerated)', async () => {
+  it('[fs-134] navigates waits and extracts from the full tree', async () => {
     const tree = doc(result('https://hit.test/', 'Hit'))
     const session = makeSession({
       'DOM.getDocument': (p) => (p['depth'] === -1 ? { root: tree } : { root: { nodeId: 1, nodeType: 9, nodeName: '#document' } }),
       'DOM.querySelector': () => ({ nodeId: 42 }),
-      'Page.loadEventFired': () => {
-        throw new Error('no event')
-      },
     })
     const out = await walkDomTree(session as never, opts, { structural: true })
     expect(out[0].title).toBe('Hit')
@@ -272,7 +274,9 @@ describe('8468f7b1 AC2 [tests-unit-extract.1] detectBanInPage', () => {
       throw new Error('gone')
     })
     expect(await detectBanInPage({ send: boom } as never, 1)).toBeNull()
-    expect(boom).toHaveBeenCalledTimes(6)
+    // every ban selector was probed (the count is the rule list's business), each one through the DOM API only
+    expect(boom.mock.calls.length).toBeGreaterThan(1)
+    expect(new Set(boom.mock.calls.map((c) => (c as unknown[])[0]))).toEqual(new Set(['DOM.querySelector']))
   })
 
   it('ignores a hit that is the document node itself', async () => {

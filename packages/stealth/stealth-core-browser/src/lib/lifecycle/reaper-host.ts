@@ -169,7 +169,8 @@ export function createReaperHost(deps: ReaperHostDeps): ReaperHost {
   const registry = new Map<string, ClientEntry>()
   let lastPinAt: number | null = deps.now()
   let chromeUp = false
-  let reaping: Promise<ReapOutcome> | null = null
+  /** The evaluation in flight and the question it answers (grace window + excluded caller). */
+  let reaping: { key: string; promise: Promise<ReapOutcome> } | null = null
 
   const views = (): ClientView[] =>
     [...registry.entries()].map(([id, c]) => ({ id, pid: c.pid, checkHistory: c.checkHistory, lastActivityAt: c.lastActivityAt }))
@@ -255,7 +256,14 @@ export function createReaperHost(deps: ReaperHostDeps): ReaperHost {
   }
 
   const evaluate = async (graceMs: number, callerId?: string): Promise<ReapOutcome> => {
-    if (reaping) return reaping
+    // One evaluation at a time. A caller asking the SAME question (same grace window, same excluded caller) shares
+    // the in-flight answer; a different question (a `reapIfIdle` with graceMs 0 during a grace tick, or another
+    // caller excluded) waits for it to finish and is then answered on its own terms.
+    const key = `${graceMs}|${callerId ?? ''}`
+    while (reaping) {
+      if (reaping.key === key) return reaping.promise
+      await reaping.promise.catch(() => undefined)
+    }
     const run = (async (): Promise<ReapOutcome> => {
       const up = await probe()
       if (!up) return { action: 'none', reaped: false }
@@ -281,11 +289,12 @@ export function createReaperHost(deps: ReaperHostDeps): ReaperHost {
       await orderedReap(rec, valid)
       return { ...decision, reaped: true }
     })()
-    reaping = run
+    const mine = { key, promise: run }
+    reaping = mine
     try {
       return await run
     } finally {
-      reaping = null
+      if (reaping === mine) reaping = null
     }
   }
 

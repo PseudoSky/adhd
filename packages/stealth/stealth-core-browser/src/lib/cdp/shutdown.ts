@@ -16,9 +16,17 @@
 export interface IdleShutdownOptions {
   /** Idle timeout in ms. Default 120_000 (2 minutes). */
   timeoutMs?: number
-  /** Called when idle timeout expires. */
+  /**
+   * Called when the idle timeout expires. `new IdleShutdown` runs it as its only action;
+   * `createPageTargetIdleShutdown` runs it as the "stop Chrome" step, after the page targets are closed and only
+   * when {@link shutDownChrome} is true.
+   */
   onShutdown?: () => Promise<void>
-  /** If true, also shut down Chrome (not just close targets). Default false. */
+  /**
+   * `createPageTargetIdleShutdown` only (`IdleShutdown` ignores it): when true, `onShutdown` (the step that stops
+   * Chrome) runs after the page targets are closed. When false (default) only the targets are closed and
+   * `onShutdown` is not called. Default false.
+   */
   shutDownChrome?: boolean
   /** Log function for diagnostics. */
   logger?: (msg: string) => void
@@ -99,7 +107,8 @@ export function createPageTargetIdleShutdown(
     onShutdown: async () => {
       await closeTargets()
       if (opts.shutDownChrome) {
-        await opts.onShutdown?.()
+        if (opts.onShutdown) await opts.onShutdown()
+        else opts.logger?.('[idle-shutdown] shutDownChrome is set but no onShutdown was given: only the page targets were closed')
       }
     },
   })

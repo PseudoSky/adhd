@@ -59,7 +59,8 @@ describe('8468f7b1 AC2 [tests-unit-extract.1][tests-unit-extract.3] captureNetwo
   it('decodes base64 bodies', async () => {
     boot('binary-base64')
     const out = await captureNetworkResponse(WS, { ...baseOpts, urlPattern: /img/, navigateUrl: 'https://site.test/img.png' })
-    expect(out.body).toBe(Buffer.from('iVBORw0KGgo=', 'base64').toString('utf-8'))
+    // 'iVBORw0KGgo=' is the PNG signature: 0x89 'PNG' CR LF 0x1A LF. 0x89 is not valid UTF-8, so it decodes to U+FFFD.
+    expect(out.body).toBe('\uFFFDPNG\r\n\u001a\n')
   })
 
   it('prefers the largest captured body', async () => {

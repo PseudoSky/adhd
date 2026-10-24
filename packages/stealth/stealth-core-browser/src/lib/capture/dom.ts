@@ -15,6 +15,7 @@
 import type { CdpSession } from '../cdp/session.js'
 import type { DomExtractor, DomPattern, ParseResult } from '../types.js'
 import { StealthCoreBrowserError } from '../../errors.js'
+import { normalizeUrl } from '../redirect-url.js'
 
 export interface DomWalkOptions {
   navigateUrl: string
@@ -37,12 +38,17 @@ export async function walkDomTree(
   options: DomWalkOptions,
   extractConfig: DomExtractor,
 ): Promise<ParseResult[]> {
-  // Navigate
-  await pageSession.send('Page.enable')
-  await pageSession.send('Page.navigate', { url: options.navigateUrl })
-
-  // Wait for load
-  await pageSession.send('Page.loadEventFired', {}, options.timeoutMs).catch(() => undefined)
+  // The load event is an event, not a command: subscribe BEFORE navigating so it cannot be missed, then wait for
+  // it (bounded by the timeout). A page that never fires `load` is not fatal here: the result selector wait below
+  // has its own deadline and is what decides whether the page is usable.
+  const load = awaitEvent(pageSession, 'Page.loadEventFired', options.timeoutMs)
+  try {
+    await pageSession.send('Page.enable')
+    await pageSession.send('Page.navigate', { url: options.navigateUrl })
+    await load.settled
+  } finally {
+    load.cancel()
+  }
 
   // Wait for result selector
   const doc0 = await pageSession.send<{ root: DomNode }>('DOM.getDocument', { depth: 0 })
@@ -58,6 +64,24 @@ export async function walkDomTree(
     : extractFromDom(full.root, extractConfig)
 
   return results
+}
+
+/** One-shot wait for a CDP event on a session; `settled` resolves true when it fired, false on timeout. */
+function awaitEvent(
+  session: CdpSession,
+  method: string,
+  timeoutMs: number,
+): { settled: Promise<boolean>; cancel: () => void } {
+  let done: (fired: boolean) => void = () => undefined
+  const settled = new Promise<boolean>((resolve) => { done = resolve })
+  const handler = (): void => { cleanup(); done(true) }
+  const timer = setTimeout(() => { cleanup(); done(false) }, timeoutMs)
+  const unsubscribe = session.on(method, handler)
+  function cleanup(): void {
+    clearTimeout(timer)
+    unsubscribe()
+  }
+  return { settled, cancel: () => { cleanup(); done(false) } }
 }
 
 // ─── DOM helpers ──────────────────────────────────────────────────────────────
@@ -147,17 +171,6 @@ function findContainers(node: DomNode, pattern: DomPattern): DomNode[] {
   }
   walk(node)
   return results
-}
-
-function normalizeUrl(raw: string): string {
-  const ddgMatch = raw.match(/[?&]uddg=([^&]+)/)
-  if (ddgMatch) return decodeURIComponent(ddgMatch[1])
-  const googleMatch = raw.match(/[?&]q=([^&]+)/)
-  if (googleMatch && !raw.startsWith('http')) return decodeURIComponent(googleMatch[1])
-  if (raw.startsWith('//')) return 'https:' + raw
-  // Google's newer SERP encrypted redirect.
-  if (raw.startsWith('/goto?url=')) return `https://www.google.com${raw}`
-  return raw
 }
 
 /**

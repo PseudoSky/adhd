@@ -14,9 +14,10 @@
 import { execSync, spawn } from 'node:child_process'
 import * as nodeFs from 'node:fs'
 import { existsSync, mkdirSync, openSync, closeSync, unlinkSync, statSync, renameSync } from 'node:fs'
-import { homedir, platform, tmpdir } from 'node:os'
+import { platform, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { lifecycleError, type LifecycleError } from '../lifecycle/errors.js'
+import { googleSupportDir } from '../helpers.js'
 import { isChromeReachable } from './targets.js'
 import { StealthCoreBrowserError } from '../../errors.js'
 
@@ -24,7 +25,7 @@ import { StealthCoreBrowserError } from '../../errors.js'
 
 /** The CDP port used when no `port` option is given. Override per call with `port`. */
 export const DEFAULT_CDP_PORT = 9222
-/** Directory name of the dedicated CDP profile under `~/Library/Application Support/Google`. */
+/** Directory name of the dedicated CDP profile under the per-platform Google application-data directory (see `googleSupportDir`). */
 export const DEFAULT_PROFILE_NAME = 'Chrome-CDP'
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -46,7 +47,7 @@ export interface ProcessProbe {
 export interface LaunchChromeOptions {
   /** CDP port. Default: DEFAULT_CDP_PORT (9222). */
   port?: number
-  /** Chrome user data directory. Default: ~/Library/Application Support/Google/Chrome-CDP (DEFAULT_PROFILE_NAME) */
+  /** Chrome user data directory. Default: <googleSupportDir()>/Chrome-CDP (DEFAULT_PROFILE_NAME) */
   profileDir?: string
   /** Process probe used to prove a reachable Chrome is this tool's own. Default: lsof / fuser / ps. */
   probe?: ProcessProbe
@@ -76,14 +77,14 @@ function defaultChromePath(): string {
 }
 
 function defaultProfileDir(): string {
-  const base = join(homedir(), 'Library', 'Application Support', 'Google')
+  const base = googleSupportDir()
   mkdirSync(base, { recursive: true })
   return join(base, DEFAULT_PROFILE_NAME)
 }
 
 /** The profile directory an identity check compares against: the RESOLVED one, with no filesystem side effect. */
 function resolvedProfileDir(opts: { profileDir?: string }): string {
-  return opts.profileDir ?? join(homedir(), 'Library', 'Application Support', 'Google', DEFAULT_PROFILE_NAME)
+  return opts.profileDir ?? join(googleSupportDir(), DEFAULT_PROFILE_NAME)
 }
 
 // ─── Profile identity (backlog 7f881aa7, [core-seam.6]) ───────────────────────
@@ -430,10 +431,13 @@ export async function killProcessGroup(pid: number): Promise<void> {
   killGroup(pid, 'SIGTERM')
   // Wait for the main process to exit.
   await new Promise<void>((resolve) => {
+    // Whichever of the exit probe and the 5 s cap fires first settles the wait AND cancels the other, so the cap
+    // timer never keeps the event loop alive for its remaining time after the main pid exited.
+    const finish = (): void => { clearInterval(check); clearTimeout(cap); resolve() }
     const check = setInterval(() => {
-      try { process.kill(pid, 0) } catch { clearInterval(check); resolve() }
+      try { process.kill(pid, 0) } catch { finish() }
     }, 200)
-    setTimeout(() => { clearInterval(check); resolve() }, 5000)
+    const cap = setTimeout(finish, 5000)
   })
   // The main may be gone while its Helpers linger (they were orphaned) — the
   // group is still addressable as long as any member lives, so SIGKILL it too.
@@ -481,17 +485,21 @@ export async function killChrome(port = DEFAULT_CDP_PORT, opts: KillChromeOption
   }
   const [firstPid] = pids
   if (firstPid === undefined) return
-  for (const pid of pids) {
+  // The group each listener belongs to (its own pid when the probe cannot tell). The SAME id is used for SIGTERM and
+  // for the final SIGKILL, so the escalation can never address a different group than the one asked to stop.
+  const groupOfPid = (pid: number): number => probe.groupOf(pid) ?? pid
+  for (const group of new Set(pids.map(groupOfPid))) {
     // Kill the listener's process GROUP so Chrome's detached Helpers go too.
-    killGroup(probe.groupOf(pid) ?? pid, 'SIGTERM')
+    killGroup(group, 'SIGTERM')
   }
-  // Wait for the first PID to die, then SIGKILL its group for lingering Helpers.
+  // Wait for the first PID to die, then SIGKILL its group for lingering Helpers. A listener that never exits is
+  // left alone: it is not ours to force-kill once it ignored SIGTERM.
   for (let i = 0; i < 25; i++) {
     try {
       process.kill(firstPid, 0)
       await new Promise((r) => setTimeout(r, 200))
     } catch {
-      try { process.kill(-firstPid, 'SIGKILL') } catch { /* no group left */ }
+      try { process.kill(-groupOfPid(firstPid), 'SIGKILL') } catch { /* no group left */ }
       return
     }
   }

@@ -6,6 +6,7 @@
  * WebSocket, fixtures stream the protocol, and the persistence store is a
  * hand-written three-method fake. No socket, process, network or Chrome.
  */
+import { afterEach, beforeEach, vi } from 'vitest'
 import type { AdapterTransaction, TransactionOptions } from '@adhd/sox-store-adapter'
 import { CdpSession } from '../../../src/lib/cdp/session.js'
 import type { CaptureOptions } from '../../../src/lib/capture/network.js'
@@ -86,6 +87,29 @@ export function commandLog(server: FakeCdpServer): string[] {
   return server.received.map((r) => r.method)
 }
 
+/** A session's event surface for specs that drive code calling `session.on(...)` without a socket. */
+export interface PageEvents {
+  on(method: string, handler: (params: Record<string, unknown>) => void): () => void
+  fire(method: string, params?: Record<string, unknown>): void
+  subscribers(method: string): number
+}
+
+export function pageEvents(): PageEvents {
+  const subs = new Map<string, Set<(params: Record<string, unknown>) => void>>()
+  return {
+    on(method, handler) {
+      const set = subs.get(method) ?? new Set()
+      set.add(handler)
+      subs.set(method, set)
+      return () => { set.delete(handler) }
+    },
+    fire(method, params = {}) {
+      for (const h of [...(subs.get(method) ?? [])]) h(params)
+    },
+    subscribers: (method) => subs.get(method)?.size ?? 0,
+  }
+}
+
 /** Let queued microtasks (fake socket replies) run. */
 export async function flushMicrotasks(rounds = 20): Promise<void> {
   for (let i = 0; i < rounds; i += 1) await Promise.resolve()
@@ -144,7 +168,7 @@ export function makeStoreFake(opts: { failOnRun?: (callIndex: number) => Error |
     runs.push({ sql, args, inTransaction: depth > 0 })
     const fail = opts.failOnRun?.(runCount++)
     if (fail) throw fail
-    if (/^INSERT OR REPLACE INTO recording_schema/.test(sql)) rows.set(`schema:${String(args?.[0])}`, args ?? [])
+    if (/^INSERT INTO recording_schema/.test(sql)) rows.set(`schema:${String(args?.[0])}`, args ?? [])
     else if (/^INSERT OR REPLACE INTO/.test(sql)) rows.set(`${String(args?.[0])}:${String(args?.[1])}`, args ?? [])
     return { rowsAffected: 1, lastInsertRowid: 0 }
   }

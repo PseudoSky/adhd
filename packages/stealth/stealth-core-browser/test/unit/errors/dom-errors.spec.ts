@@ -8,6 +8,7 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { walkDomTree } from '../../../src/lib/capture/dom.js'
+import { pageEvents } from '../../helpers/capture/capture-kit.js'
 
 afterEach(() => {
   vi.useRealTimers()
@@ -16,12 +17,14 @@ afterEach(() => {
 describe('8468f7b1 [prod-errors.2] walkDomTree rejects with a typed code (PA5.4)', () => {
   it('rejects with SELECTOR_TIMEOUT naming the selector and the last error when the selector never appears', async () => {
     vi.useFakeTimers()
+    const events = pageEvents()
     const send = vi.fn(async (method: string) => {
+      if (method === 'Page.navigate') queueMicrotask(() => events.fire('Page.loadEventFired'))
       if (method === 'DOM.getDocument') return { root: { nodeId: 1, nodeType: 9, nodeName: '#document' } }
       if (method === 'DOM.querySelector') throw new Error('selector failed')
       return {}
     })
-    const p = walkDomTree({ send } as never, { navigateUrl: 'https://search.test/?q=a', waitFor: '#res', timeoutMs: 2_000 }, {})
+    const p = walkDomTree({ send, on: events.on } as never, { navigateUrl: 'https://search.test/?q=a', waitFor: '#res', timeoutMs: 2_000 }, {})
     const assertion = expect(p).rejects.toMatchObject({
       code: 'SELECTOR_TIMEOUT',
       message: expect.stringContaining('Timed out waiting for "#res" (2000ms). Last error: selector failed'),

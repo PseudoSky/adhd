@@ -1,6 +1,6 @@
-# CDP Protocol Reference — agent-browser
+# CDP Protocol Reference
 
-This directory documents Chrome DevTools Protocol domains relevant to `agent-browser`.
+This directory documents Chrome DevTools Protocol domains relevant to `@adhd/stealth-core-browser`.
 
 ## Quick Links
 
@@ -10,7 +10,7 @@ This directory documents Chrome DevTools Protocol domains relevant to `agent-bro
 - [`target-domain.md`](./target-domain.md) — Target lifecycle, discovery, inspection
 - [`target-timing.md`](./target-timing.md) — Deep dive on target timing: what's available and workarounds
 - [`monitoring.md`](./monitoring.md) — Performance metrics, timestamps, histogram introspection
-- [`api-reference.md`](./api-reference.md) — Method/event/type reference for our CDP tool
+- [`api-reference.md`](./api-reference.md) — Method/event/type reference for `CdpSession` and the CDP verbs
 
 ## Chrome Version
 

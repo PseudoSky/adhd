@@ -20,7 +20,8 @@
  */
 
 import { CdpSession } from '../cdp/session.js'
-import { captureError, errorMessage, type CaptureError } from '../recording/errors.js'
+import { captureError, type CaptureError } from '../recording/errors.js'
+import { errorMessage } from '../lifecycle/errors.js'
 import { NetworkRecorder, decodeBody } from '../recording/network-recorder.js'
 import type { Headers, RecordedExchange, RecordedRequest, RecordingSink, RedirectHop } from '../recording/types.js'
 import type { BanRule } from '../types.js'

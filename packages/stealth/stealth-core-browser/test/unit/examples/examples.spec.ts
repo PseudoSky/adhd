@@ -9,9 +9,9 @@
  * seam (`managerFor`, `shutdownIdleAt`) is mocked. No Chrome, no process, no socket, no port 9222.
  * guards: chromeStatus: reports a running Chrome and a missing one
  * tier: S
- * cites: 8468f7b1 [prod-examples.1] [prod-examples.2] [prod-examples.4] [prod-examples.5] [prod-examples.6]
+ * cites: 8468f7b1 [prod-examples.1] [prod-examples.2] [prod-examples.4] [prod-examples.5] [prod-examples.6] [resolve-findings.3]
  */
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs'
 import { DatabaseSync } from 'node:sqlite'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -25,7 +25,8 @@ vi.mock('../../../src/lib/managers.js', async (orig) => {
 import { managerFor, shutdownIdleAt } from '../../../src/lib/managers.js'
 import { FakeCdpServer, type CdpFixture } from '../../helpers/fake-cdp.js'
 import { fixtureWith } from '../../helpers/capture/capture-kit.js'
-import { chromeMicros, makeProfile } from '../../helpers/domains-storage/profile-fixture.js'
+import { makeProfile } from '../../helpers/domains-storage/profile-fixture.js'
+import { chromeMicros } from '../../helpers/profile-fixtures.js'
 
 import { run as runChromeStatus } from '../../../examples/verbs/chromeStatus.js'
 import { run as runLaunchChrome } from '../../../examples/verbs/launchChrome.js'
@@ -341,5 +342,20 @@ describe('8468f7b1 [prod-examples.4] examples never touch the default port (PA7.
     await runListPageTargets({ port: PORT, log: () => undefined })
     expect(chrome.requested.length).toBeGreaterThan(0)
     expect(chrome.requested.every((u) => new URL(u).port === String(PORT))).toBe(true)
+  })
+})
+
+describe('8468f7b1 [resolve-findings.3] every example file is exercised by this spec (F99)', () => {
+  it('imports the run() of each file under examples/verbs and examples/namespaces', () => {
+    const here = readFileSync(new URL(import.meta.url), 'utf8')
+    const missing: string[] = []
+    for (const dir of ['verbs', 'namespaces']) {
+      for (const file of readdirSync(new URL(`../../../examples/${dir}/`, import.meta.url))) {
+        if (!file.endsWith('.ts')) continue
+        const spec = `examples/${dir}/${file.replace(/\.ts$/, '.js')}`
+        if (!here.includes(`'../../../${spec}'`)) missing.push(spec)
+      }
+    }
+    expect(missing).toEqual([])
   })
 })

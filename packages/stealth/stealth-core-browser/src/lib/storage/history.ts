@@ -1,6 +1,6 @@
 import { openDb, toUnixTimeSql } from './helpers.js'
 import { join } from 'node:path'
-import { transitionName, chromeProfileDir, hydrateVisit } from '../helpers.js'
+import { transitionName, chromeProfileDir, chromeTimeToDate, hydrateVisit } from '../helpers.js'
 import type { VisitRow } from '../helpers.js'
 import type {
   ChromeVisit,
@@ -9,6 +9,26 @@ import type {
   RedirectChainEntry,
   ClusterInfo,
 } from '../types.js'
+
+/** `LIKE` pattern matching `query` as a literal substring (`%`, `_` and `\\` are escaped; use with `ESCAPE '\\'`). */
+export function likeContains(query: string): string {
+  return `%${query.replace(/[\\%_]/g, '\\$&')}%`
+}
+
+/** Chrome's "real navigation" visits: the last hop of a redirect chain. */
+const CHAIN_END = '(v.transition & 0x20000000) != 0'
+
+function toUrlInfo(r: Record<string, unknown>): UrlInfo {
+  return {
+    id: Number(r['id']),
+    url: String(r['url'] ?? ''),
+    title: String(r['title'] ?? ''),
+    visitCount: Number(r['visit_count']),
+    typedCount: Number(r['typed_count']),
+    lastVisitTime: chromeTimeToDate(Number(r['last_visit_time'])),
+    hidden: Boolean(r['hidden']),
+  }
+}
 
 const VISIT_COLUMNS = `
   v.id, v.url AS url_id, u.url, u.title,
@@ -105,16 +125,7 @@ export class HistoryClient {
         ? db.prepare('SELECT * FROM urls WHERE id = ?')
         : db.prepare('SELECT * FROM urls WHERE url = ?')
       const r = stmt.get(urlOrId) as Record<string, unknown> | undefined
-      if (!r) return null
-      return {
-        id: Number(r['id']),
-        url: String(r['url'] ?? ''),
-        title: String(r['title'] ?? ''),
-        visitCount: Number(r['visit_count']),
-        typedCount: Number(r['typed_count']),
-        lastVisitTime: new Date(((Number(r['last_visit_time']) / 1000) - 11644473600000)),
-        hidden: Boolean(r['hidden']),
-      }
+      return r ? toUrlInfo(r) : null
     } finally {
       db.close()
     }
@@ -125,19 +136,11 @@ export class HistoryClient {
     try {
       const rows = db.prepare(`
         SELECT * FROM urls
-        WHERE url LIKE ? OR title LIKE ?
+        WHERE url LIKE ? ESCAPE '\\' OR title LIKE ? ESCAPE '\\'
         ORDER BY last_visit_time DESC
         LIMIT ?
-      `).all(`%${query}%`, `%${query}%`, limit) as Record<string, unknown>[]
-      return rows.map((r) => ({
-        id: Number(r['id']),
-        url: String(r['url'] ?? ''),
-        title: String(r['title'] ?? ''),
-        visitCount: Number(r['visit_count']),
-        typedCount: Number(r['typed_count']),
-        lastVisitTime: new Date(((Number(r['last_visit_time']) / 1000) - 11644473600000)),
-        hidden: Boolean(r['hidden']),
-      }))
+      `).all(likeContains(query), likeContains(query), limit) as Record<string, unknown>[]
+      return rows.map(toUrlInfo)
     } finally {
       db.close()
     }
@@ -150,21 +153,35 @@ export class HistoryClient {
     try {
       const chromeNow = (Math.floor(Date.now() / 1000) + 11644473600) * 1_000_000
       const threshold = chromeNow - days * 86400 * 1_000_000
+      const dayOf = `date(datetime((v.visit_time / 1000000) - 11644473600, 'unixepoch'))`
       const rows = db.prepare(`
-        SELECT date(datetime((v.visit_time / 1000000) - 11644473600, 'unixepoch')) AS day,
+        SELECT ${dayOf} AS day,
                COUNT(*) AS visits,
                COUNT(DISTINCT u.url) AS unique_urls
         FROM visits v
         JOIN urls u ON v.url = u.id
         WHERE v.visit_time > ?
-          AND (v.transition & 0x20000000) != 0
+          AND ${CHAIN_END}
         GROUP BY day ORDER BY day DESC
       `).all(threshold) as Array<{ day: string; visits: number; unique_urls: number }>
+      const perDay = db.prepare(`
+        SELECT ${dayOf} AS day, (v.transition & 255) AS core, COUNT(*) AS count
+        FROM visits v
+        WHERE v.visit_time > ?
+          AND ${CHAIN_END}
+        GROUP BY day, core ORDER BY count DESC
+      `).all(threshold) as Array<{ day: string; core: number | bigint; count: number | bigint }>
+      const breakdowns = new Map<string, Record<string, number>>()
+      for (const r of perDay) {
+        const day = breakdowns.get(String(r.day)) ?? {}
+        day[transitionName(Number(r.core))] = Number(r.count)
+        breakdowns.set(String(r.day), day)
+      }
       return rows.map((r) => ({
         date: String(r.day),
         visits: Number(r.visits),
         uniqueUrls: Number(r.unique_urls),
-        transitionBreakdown: {},
+        transitionBreakdown: breakdowns.get(String(r.day)) ?? {},
       }))
     } finally {
       db.close()
@@ -180,6 +197,7 @@ export class HistoryClient {
         SELECT (v.transition & 255) AS core, COUNT(*) AS count
         FROM visits v
         WHERE v.visit_time > ?
+          AND ${CHAIN_END}
         GROUP BY core ORDER BY count DESC
       `).all(threshold) as Array<{ core: number; count: number }>
       const result: Record<string, number> = {}
@@ -219,7 +237,8 @@ export class HistoryClient {
       const visitStmt = db.prepare(`
         SELECT cav.visit_id, cav.score, u.url, u.title
         FROM clusters_and_visits cav
-        JOIN urls u ON cav.visit_id = u.id
+        JOIN visits vv ON cav.visit_id = vv.id
+        JOIN urls u ON vv.url = u.id
         WHERE cav.cluster_id = ?
         ORDER BY cav.score DESC
       `)

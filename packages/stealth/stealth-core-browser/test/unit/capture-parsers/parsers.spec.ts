@@ -167,6 +167,28 @@ describe('8468f7b1 AC2 [tests-unit-extract.1] extractResultsFromEmbeddedJson', (
     expect(out[1].url).toBe('https://t.test/plain')
   })
 
+  it('[resolve-findings.2] F132 finds the script whatever the attribute order, spacing and quote style', () => {
+    const json = JSON.stringify(data)
+    for (const tag of [
+      `<script data-target="react-app.embeddedData" type="application/json">${json}</script>`,
+      `<script  type='application/json'   data-target='react-app.embeddedData' >${json}</script>`,
+      `<script id="x" type="application/json" crossorigin data-target="react-app.embeddedData">${json}</script>`,
+      `<SCRIPT TYPE="application/json" DATA-TARGET="react-app.embeddedData">${json}</SCRIPT>`,
+    ]) {
+      expect(extractResultsFromEmbeddedJson(`<html>${tag}</html>`, c).map((r) => r.title), tag).toEqual(['a.ts', 'fallback'])
+    }
+    // a different script first, the right one second
+    const two = `<script type="text/javascript">var a=1</script><script type="application/json" data-target="other">{}</script><script data-target="react-app.embeddedData" type="application/json">${json}</script>`
+    expect(extractResultsFromEmbeddedJson(two, c)).toHaveLength(2)
+  })
+
+  it('[resolve-findings.2] F133 snippet lines decode entities the same way titles do', () => {
+    const encoded = { payload: { results: [{ repo_nwo: 'o/r', ref_name: 'main', path: 'p', name: 'Tom &amp; Jerry', snippets: [{ lines: ['<b>a</b> &lt;tools&gt; &amp; &quot;q&quot;'] }] }] } }
+    const out = extractResultsFromEmbeddedJson(page('react-app.embeddedData', encoded), c)
+    expect(out[0]?.title).toBe('Tom & Jerry')
+    expect(out[0]?.snippet).toBe('a <tools> & "q"')
+  })
+
   it('returns [] when the script tag is absent, has other target, or JSON is broken', () => {
     expect(extractResultsFromEmbeddedJson('<html></html>', c)).toEqual([])
     expect(extractResultsFromEmbeddedJson(page('other', data), c)).toEqual([])

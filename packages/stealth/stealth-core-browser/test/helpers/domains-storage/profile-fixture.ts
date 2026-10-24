@@ -7,9 +7,6 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-/** Unix seconds -> Chrome microseconds since 1601-01-01. */
-export const chromeMicros = (unixSeconds: number): number => (unixSeconds + 11644473600) * 1_000_000
-
 export interface Fixture {
   root: string
   defaultDir: string

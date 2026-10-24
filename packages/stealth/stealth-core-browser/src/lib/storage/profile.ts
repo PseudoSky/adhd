@@ -1,4 +1,4 @@
-import { chromeProfileDir } from '../helpers.js'
+import { chromeProfileDir, chromeTimeToDate } from '../helpers.js'
 import { openDb } from './helpers.js'
 import { join } from 'node:path'
 import { readFileSync, readdirSync } from 'node:fs'
@@ -64,7 +64,7 @@ export class ProfileClient {
         name: r.name ?? '',
         value: opts.redactValues ? AUTOFILL_REDACTED : (r.value ?? ''),
         count: Number(r.count ?? 0),
-        lastUsed: new Date((Number(r.date_last_used ?? 0) / 1000) - 11644473600000),
+        lastUsed: chromeTimeToDate(Number(r.date_last_used ?? 0)),
       }))
     } finally { db.close() }
   }

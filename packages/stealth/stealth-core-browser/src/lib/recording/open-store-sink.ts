@@ -21,7 +21,8 @@
 import type { createStoreAdapter } from '@adhd/sox-store-adapter'
 import { chmodSync, closeSync, existsSync, mkdirSync, openSync } from 'node:fs'
 import { dirname } from 'node:path'
-import { captureError, errorMessage } from './errors.js'
+import { captureError } from './errors.js'
+import { errorMessage } from '../lifecycle/errors.js'
 import { StoreRecordingSink } from './store-sink.js'
 
 export interface OpenStoreRecordingSinkOptions {

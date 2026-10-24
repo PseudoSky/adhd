@@ -130,4 +130,16 @@ describe('8468f7b1 AC2 [tests-unit-extract.1] checkBans', () => {
   it('first matching rule wins', () => {
     expect(checkBans(rules, { url: 'https://x.test/sorry/', status: 429, body: 'access denied' })).toBe('captcha')
   })
+
+  it('[resolve-findings.2] F127 a global or sticky pattern gives the same answer on every call (lastIndex is not carried over)', () => {
+    const sticky: BanRule[] = [
+      { name: 'g-url', signal: 'captcha', checkUrl: /\/sorry\//g },
+      { name: 'y-body', signal: 'banned', checkBody: /denied/y },
+    ]
+    const sorry = { url: 'https://x.test/sorry/', status: 200, body: 'fine' }
+    for (let i = 0; i < 4; i++) expect(checkBans(sticky, sorry)).toBe('captcha')
+    const denied = { url: 'https://x.test/', status: 200, body: 'denied' }
+    for (let i = 0; i < 4; i++) expect(checkBans(sticky, denied)).toBe('banned')
+    expect(sticky[0]?.checkUrl?.lastIndex).toBe(0)
+  })
 })

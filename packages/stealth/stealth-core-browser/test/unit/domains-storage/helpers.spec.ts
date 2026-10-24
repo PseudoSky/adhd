@@ -23,7 +23,7 @@ vi.mock('node:sqlite', () => ({
   },
 }))
 
-vi.mock('node:os', () => ({ homedir: () => '/fake/home' }))
+vi.mock('node:os', () => ({ homedir: () => '/fake/home', platform: () => 'darwin' }))
 
 import { openDb, toUnixTimeSql } from '../../../src/lib/storage/helpers.js'
 import { chromeProfileDir, chromeTimeToDate, hydrateVisit, notYet, transitionName, type VisitRow } from '../../../src/lib/helpers.js'
@@ -68,7 +68,7 @@ describe('8468f7b1 AC2 [tests-unit-data.1] storage helpers', () => {
 
   it('openDb opens a read-only immutable URI', () => {
     openDb('/tmp/fixture/History')
-    expect(sqlite.uris[0].uri).toBe('file:/tmp/fixture/History?mode=ro&immutable=1')
+    expect(sqlite.uris[0].uri).toBe('file:///tmp/fixture/History?mode=ro&immutable=1')
     expect(sqlite.uris[0].uri).toContain('mode=ro&immutable=1')
   })
 
@@ -89,6 +89,6 @@ describe('8468f7b1 AC2 [tests-unit-data.1] storage helpers', () => {
   })
 
   it('toUnixTimeSql converts Chrome microseconds-since-1601 to unix seconds', () => {
-    expect(toUnixTimeSql('v.visit_time')).toBe('((v.visit_time / 1000000) - 11644473600)')
+    expect(toUnixTimeSql('v.visit_time')).toBe('((v.visit_time / 1000000.0) - 11644473600)')
   })
 })

@@ -1,7 +1,29 @@
-import { openDb, toUnixTimeSql } from './helpers.js'
+import { openDb, toUnixTimeOrNullSql } from './helpers.js'
 import { join } from 'node:path'
 import { chromeProfileDir } from '../helpers.js'
 import type { CookieInfo } from '../types.js'
+
+/** The value shown in place of a cookie value when `redactValues` is set. */
+export const COOKIE_REDACTED = '[redacted]'
+
+/** Options of every cookie read. */
+export interface CookieReadOptions {
+  /**
+   * Replace every cookie value with {@link COOKIE_REDACTED}. Session cookies are credentials: pass this whenever the
+   * result can reach a log, a transcript or any other party. Names, hosts, flags and dates are unaffected.
+   */
+  redactValues?: boolean
+}
+
+/**
+ * The `host_key` values a domain filter matches: the name as given and its counterpart with or without the
+ * leading dot (Chrome stores a domain cookie for `example.com` as `.example.com`).
+ */
+export function hostFilterKeys(filter: string): string[] {
+  const host = filter.trim().toLowerCase()
+  if (host === '' || host === '.') return []
+  return host.startsWith('.') ? [host, host.slice(1)] : [host, `.${host}`]
+}
 
 /**
  * Every `host_key` that can hold a cookie for `hostname`: the host itself, the dotted form of it, and the dotted
@@ -28,34 +50,42 @@ export class CookieClient {
 
   private _cookiesDb(): string { return join(this.defaultDir, 'Cookies') }
 
-  getCookies(hostFilter?: string): CookieInfo[] {
-    return this.readCookies(hostFilter ? [hostFilter] : [])
+  /**
+   * Cookies ordered by last access, newest first, at most 200. With `hostFilter`, only the cookies whose
+   * `host_key` is that name or its dotted/undotted counterpart (`example.com` matches `example.com` and
+   * `.example.com`).
+   */
+  getCookies(hostFilter?: string, opts: CookieReadOptions = {}): CookieInfo[] {
+    const keys = hostFilter ? hostFilterKeys(hostFilter) : []
+    if (hostFilter && keys.length === 0) return []
+    return this.readCookies(keys, opts)
   }
 
-  private readCookies(hostKeys: readonly string[]): CookieInfo[] {
+  private readCookies(hostKeys: readonly string[], opts: CookieReadOptions): CookieInfo[] {
     const db = openDb(this._cookiesDb())
     try {
       const rows = db.prepare(`
         SELECT name, value, host_key, path,
-               ${toUnixTimeSql('creation_utc')} AS creation_unix,
-               ${toUnixTimeSql('last_access_utc')} AS last_access_unix,
+               ${toUnixTimeOrNullSql('creation_utc')} AS creation_unix,
+               ${toUnixTimeOrNullSql('last_access_utc')} AS last_access_unix,
                has_expires,
-               CASE WHEN expires_utc = 0 THEN NULL ELSE ${toUnixTimeSql('expires_utc')} END AS expires_unix,
+               ${toUnixTimeOrNullSql('expires_utc')} AS expires_unix,
                is_secure, is_httponly, samesite, priority
         FROM cookies
         ${hostKeys.length > 0 ? `WHERE host_key IN (${hostKeys.map(() => '?').join(', ')})` : ''}
         ORDER BY last_access_utc DESC
         LIMIT 200
       `).all(...hostKeys) as Record<string, unknown>[]
+      const toDate = (v: unknown): Date | null => (v == null ? null : new Date(Math.round(Number(v) * 1000)))
       return rows.map((r) => ({
         name: String(r['name']),
-        value: String(r['value']),
+        value: opts.redactValues ? COOKIE_REDACTED : String(r['value']),
         host: String(r['host_key']),
         path: String(r['path']),
-        creationUtc: new Date(Number(r['creation_unix']) * 1000),
-        lastAccessUtc: new Date(Number(r['last_access_unix']) * 1000),
+        creationUtc: toDate(r['creation_unix']),
+        lastAccessUtc: toDate(r['last_access_unix']),
         hasExpires: Boolean(r['has_expires']),
-        expiresUtc: r['expires_unix'] != null ? new Date(Number(r['expires_unix']) * 1000) : null,
+        expiresUtc: toDate(r['expires_unix']),
         isSecure: Boolean(r['is_secure']),
         isHttpOnly: Boolean(r['is_httponly']),
         samesite: String(r['samesite'] ?? 'unspecified'),
@@ -72,13 +102,14 @@ export class CookieClient {
    * name (`notexample.com`, `example.com.evil.net`) never matches. The host keys are matched in SQL, so the
    * 200-row cap of an unfiltered read cannot hide a match.
    */
-  getCookiesForHostname(hostname: string): CookieInfo[] {
+  getCookiesForHostname(hostname: string, opts: CookieReadOptions = {}): CookieInfo[] {
     const keys = cookieHostKeys(hostname)
     if (keys.length === 0) return []
-    return this.readCookies(keys)
+    return this.readCookies(keys, opts)
   }
 
-  getCookiesByDomain(domain: string): CookieInfo[] {
-    return this.getCookies(domain)
+  /** The cookies set for `domain` (host-only or `.domain`); same as `getCookies(domain, opts)`. */
+  getCookiesByDomain(domain: string, opts: CookieReadOptions = {}): CookieInfo[] {
+    return this.getCookies(domain, opts)
   }
 }

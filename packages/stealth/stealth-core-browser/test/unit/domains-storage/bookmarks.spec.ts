@@ -43,7 +43,8 @@ describe('8468f7b1 AC2 [tests-unit-data.1] BookmarkClient', () => {
 
   it('converts date_added from Chrome microseconds to a Date', () => {
     const [bar] = new BookmarkClient(fx.root).getBookmarks()
-    expect(bar.dateAdded).toEqual(new Date(13_000_000_000_000))
+    // 13_000_000_000_000_000 µs since 1601-01-01 is 2012-12-14 (not 1601: the epoch offset applies)
+    expect(bar.dateAdded).toEqual(new Date('2012-12-14T23:06:40.000Z'))
     expect(bar.dateModified).toBeUndefined()
   })
 
@@ -75,7 +76,7 @@ describe('8468f7b1 AC2 [tests-unit-data.1] BookmarkClient', () => {
     expect(nodes.map((n) => n.name)).toEqual(['Bar', 'Other', 'Mobile', 'Managed'])
     expect(nodes[0].type).toBe('folder')
     expect(nodes[0].children?.[0]).toMatchObject({ type: 'url', url: 'https://l.test' })
-    expect(nodes[0].dateModified).toEqual(new Date(13_000_000_001_000))
+    expect(nodes[0].dateModified).toEqual(new Date('2012-12-14T23:06:41.000Z'))
     fx.raw('Bookmarks', 'not json')
     expect(new BookmarkClient(fx.root).getBookmarks()).toEqual([])
   })

@@ -44,7 +44,3 @@ export function captureError(code: CaptureErrorCode, message: string, init: Capt
   return new CaptureError(code, message, init)
 }
 
-/** Message text of anything thrown. */
-export function errorMessage(e: unknown): string {
-  return e instanceof Error ? e.message : String(e)
-}

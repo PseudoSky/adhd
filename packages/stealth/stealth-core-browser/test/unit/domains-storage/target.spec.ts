@@ -55,6 +55,14 @@ describe('8468f7b1 AC2 [tests-unit-data.1] TargetService', () => {
     expect(await svc.countActivePages()).toBe(1)
   })
 
+  it('[resolve-findings.2] F131 countActivePages uses the same rule as the reaper: chrome://newtab/ and other internal pages do not count', async () => {
+    f.mockResolvedValue({ ok: true, status: 200, json: async () => [
+      { id: 'N', type: 'page', title: 'New Tab', url: 'chrome://newtab/', webSocketDebuggerUrl: 'ws://x/N' },
+      { id: 'W', type: 'page', title: 'Web', url: 'https://web.test/', webSocketDebuggerUrl: 'ws://x/W' },
+    ] })
+    expect(await svc.countActivePages()).toBe(1)
+  })
+
   it('getTargetInfo sends Target.getTargetInfo and unwraps targetInfo', async () => {
     cdpCall.mockResolvedValue({ targetInfo: { targetId: 'A' } })
     expect(await svc.getTargetInfo('A')).toEqual({ targetId: 'A' })

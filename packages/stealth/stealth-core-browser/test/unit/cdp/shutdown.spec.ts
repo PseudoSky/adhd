@@ -129,6 +129,22 @@ describe('8468f7b1 AC2 [tests-unit-core.1] createPageTargetIdleShutdown', () => 
     expect(order).toEqual(['targets', 'chrome'])
   })
 
+  it('[resolve-findings.2] F155 shutDownChrome without onShutdown says so in the log instead of silently doing nothing', async () => {
+    const logger = vi.fn()
+    const closeTargets = vi.fn(async () => undefined)
+    createPageTargetIdleShutdown(closeTargets, { timeoutMs: 200, shutDownChrome: true, logger })
+    await vi.advanceTimersByTimeAsync(200)
+    expect(closeTargets).toHaveBeenCalledTimes(1)
+    expect(logger).toHaveBeenCalledWith(expect.stringContaining('shutDownChrome is set but no onShutdown was given'))
+  })
+
+  it('[resolve-findings.2] F155 a failing Chrome-stop step is logged, not thrown', async () => {
+    const logger = vi.fn()
+    createPageTargetIdleShutdown(async () => undefined, { timeoutMs: 200, shutDownChrome: true, logger, onShutdown: async () => { throw new Error('kill failed') } })
+    await vi.advanceTimersByTimeAsync(200)
+    expect(logger).toHaveBeenCalledWith('[idle-shutdown] error: kill failed')
+  })
+
   it('defaults to a 120s window and surfaces closeTargets failures to the logger', async () => {
     const logger = vi.fn()
     const closeTargets = vi.fn(async () => {

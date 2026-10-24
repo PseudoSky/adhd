@@ -8,7 +8,14 @@
  * every envelope is one parametrized INSERT OR REPLACE keyed by
  * (recording_id, request_id), so a replay never duplicates a row.
  *
- * Ticket 8468f7b1 · plan state capture-upgrade [capture-upgrade.11].
+ * Redaction is NOT this sink's job: it persists the envelope the recorder hands it, headers and
+ * `postData` included. Pass the recorder `redactHeaders()` (docs/reference/README.md) to keep `cookie`,
+ * `set-cookie` and `authorization` out of the table.
+ *
+ * Lifecycle: a failed `init()` is not cached (the next write retries it); `close()` waits for every
+ * write already admitted and every later write is refused; an empty batch touches nothing.
+ *
+ * Ticket 8468f7b1 · plan state capture-upgrade [capture-upgrade.11], resolve-findings [resolve-findings.3].
  */
 import type { StoreAdapter } from '@adhd/sox-store-adapter'
 import { captureError } from './errors.js'
@@ -63,7 +70,8 @@ export function recordingDdl(table: string = DEFAULT_RECORDING_TABLE): { stateme
       `CREATE INDEX IF NOT EXISTS ${table}_status ON ${table} (status)`,
       'CREATE TABLE IF NOT EXISTS recording_schema (table_name TEXT PRIMARY KEY, version INTEGER NOT NULL)',
     ],
-    versionSql: 'INSERT OR REPLACE INTO recording_schema (table_name, version) VALUES (?, ?)',
+    // Upgrade-only: an older build opening a table written by a newer one never lowers the recorded version.
+    versionSql: 'INSERT INTO recording_schema (table_name, version) VALUES (?, ?) ON CONFLICT(table_name) DO UPDATE SET version = excluded.version WHERE recording_schema.version < excluded.version',
   }
 }
 
@@ -105,6 +113,8 @@ export class StoreRecordingSink implements RecordingSink {
   private readonly owned?: StoreOwnership
   private initPromise?: Promise<void>
   private closePromise?: Promise<void>
+  /** Writes admitted before close(); close() waits for them so none races the store shutting down. */
+  private readonly inflight = new Set<Promise<void>>()
   private readonly insertSql: string
 
   /**
@@ -124,7 +134,14 @@ export class StoreRecordingSink implements RecordingSink {
 
   /** Creates the table and records the schema version. Runs once; later calls return the same promise. */
   init(): Promise<void> {
-    this.initPromise ??= this.runInit()
+    if (!this.initPromise) {
+      const attempt = this.runInit()
+      this.initPromise = attempt
+      // A rejected init must not be cached forever: clear it so the next write retries.
+      attempt.catch(() => {
+        if (this.initPromise === attempt) this.initPromise = undefined
+      })
+    }
     return this.initPromise
   }
 
@@ -141,6 +158,17 @@ export class StoreRecordingSink implements RecordingSink {
   /** One immediate transaction for the whole batch. */
   async writeBatch(envelopes: readonly RecordingEnvelope[]): Promise<void> {
     if (this.closePromise) throw captureError('CAPTURE_SINK_FAILED', 'StoreRecordingSink is closed')
+    if (envelopes.length === 0) return
+    const run = this.runBatch(envelopes)
+    this.inflight.add(run)
+    try {
+      await run
+    } finally {
+      this.inflight.delete(run)
+    }
+  }
+
+  private async runBatch(envelopes: readonly RecordingEnvelope[]): Promise<void> {
     await this.init()
     await this.store.transaction(
       async (tx) => {
@@ -152,7 +180,11 @@ export class StoreRecordingSink implements RecordingSink {
 
   /** Idempotent. Closes the store only when this sink opened it. */
   close(): Promise<void> {
-    this.closePromise ??= this.owned ? this.owned.close() : Promise.resolve()
+    this.closePromise ??= (async () => {
+      // Writes admitted before close() finish first; the store is never closed under a running transaction.
+      await Promise.allSettled([...this.inflight])
+      if (this.owned) await this.owned.close()
+    })()
     return this.closePromise
   }
 }

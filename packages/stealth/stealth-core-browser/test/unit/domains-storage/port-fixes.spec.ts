@@ -14,7 +14,8 @@ import { CookieClient } from '../../../src/lib/storage/cookies.js'
 import { HistoryClient } from '../../../src/lib/storage/history.js'
 import { cdpCall } from '../../../src/lib/domains/transport.js'
 import { FakeCdpServer } from '../../helpers/fake-cdp.js'
-import { chromeMicros, makeProfile, type Fixture } from '../../helpers/domains-storage/profile-fixture.js'
+import { makeProfile, type Fixture } from '../../helpers/domains-storage/profile-fixture.js'
+import { chromeMicros } from '../../helpers/profile-fixtures.js'
 
 const NOW = 1_800_000_000
 const TYPED = 1 | 0x20000000

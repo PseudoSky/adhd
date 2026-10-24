@@ -30,7 +30,7 @@ const sqlite = vi.hoisted(() => {
 })
 
 vi.mock('node:sqlite', () => ({ DatabaseSync: sqlite.DatabaseSync }))
-vi.mock('node:os', () => ({ homedir: () => '/fake/home' }))
+vi.mock('node:os', () => ({ homedir: () => '/fake/home', platform: () => 'darwin' }))
 
 import {
   VISIT_COLUMNS,
@@ -108,7 +108,7 @@ describe('8468f7b1 AC2 [tests-unit-core.1] Chrome time conversion', () => {
   })
 
   it('builds the SQL expression for a column', () => {
-    expect(toUnixTimeSql('v.visit_time')).toBe('((v.visit_time / 1000000) - 11644473600)')
+    expect(toUnixTimeSql('v.visit_time')).toBe('((v.visit_time / 1000000.0) - 11644473600)')
   })
 
   it('embeds that expression in VISIT_COLUMNS', () => {
@@ -157,6 +157,6 @@ describe('8468f7b1 AC2 [tests-unit-core.1] openDb re-export', () => {
   it('re-exports the one read-only immutable opener from storage/helpers under the same name', () => {
     expect(helpersOpenDb).toBe(storageOpenDb)
     helpersOpenDb('/tmp/fixture/History')
-    expect(sqlite.state.uris[sqlite.state.uris.length - 1]).toBe('file:/tmp/fixture/History?mode=ro&immutable=1')
+    expect(sqlite.state.uris[sqlite.state.uris.length - 1]).toBe('file:///tmp/fixture/History?mode=ro&immutable=1')
   })
 })

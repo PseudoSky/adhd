@@ -130,7 +130,8 @@ describe('8468f7b1 [chrome-lifecycle.8] tier 3: history recency', () => {
     const stamp = must(must(hub.host).clients()[0]).lastActivityAt
     await vi.advanceTimersByTimeAsync(IDLE)
     expect(world.chromeUp).toBe(true)
-    expect(c.logs).toContain('Chrome in use (history) — deferring')
+    // the wording is free; the reason (history tier) and the outcome (deferring) are the contract
+    expect(c.logs.some((l) => /Chrome in use \(history\)/.test(l) && /deferring/.test(l))).toBe(true)
     expect(must(must(hub.host).clients()[0]).lastActivityAt).toBe(stamp)
   })
 

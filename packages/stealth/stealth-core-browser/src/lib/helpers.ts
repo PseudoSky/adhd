@@ -4,8 +4,9 @@
  * Extracted from cdp-query-client.ts (helper section + VisitRow).
  */
 
-import { homedir } from 'node:os'
+import { homedir, platform } from 'node:os'
 import { join } from 'node:path'
+import { toUnixTimeSql } from './storage/helpers.js'
 import type { ChromeVisit } from './types.js'
 
 /** The single read-only (`mode=ro&immutable=1`) Chrome database opener lives in storage/helpers.ts; re-exported here under the same name. */
@@ -37,12 +38,33 @@ export function transitionName(raw: number): string {
 // Chrome profile / paths
 // ═══════════════════════════════════════════════════════════════════════════════
 
-export function chromeProfileDir(): string {
-  return join(homedir(), 'Library', 'Application Support', 'Google', 'Chrome-CDP')
+/** Directory name of the dedicated CDP profile under the Google application-data directory. */
+export const CDP_PROFILE_NAME = 'Chrome-CDP'
+
+/**
+ * The per-platform directory Chrome keeps user data under: `~/Library/Application Support/Google` on macOS,
+ * `%LOCALAPPDATA%\\Google` on Windows, `$XDG_CONFIG_HOME/google` (default `~/.config/google`) elsewhere.
+ */
+export function googleSupportDir(
+  platformName: NodeJS.Platform = platform(),
+  home: string = homedir(),
+  env: NodeJS.ProcessEnv = process.env,
+): string {
+  if (platformName === 'darwin') return join(home, 'Library', 'Application Support', 'Google')
+  if (platformName === 'win32') return join(env['LOCALAPPDATA'] || join(home, 'AppData', 'Local'), 'Google')
+  return join(env['XDG_CONFIG_HOME'] || join(home, '.config'), 'google')
 }
 
+/** The dedicated, automation-only Chrome profile (never the everyday profile). */
+export function chromeProfileDir(): string {
+  return join(googleSupportDir(), CDP_PROFILE_NAME)
+}
+
+/** The everyday Chrome profile directory of this platform. */
 export function defaultChromeDir(): string {
-  return join(homedir(), 'Library', 'Application Support', 'Google', 'Chrome')
+  const current = platform()
+  if (current === 'darwin' || current === 'win32') return join(googleSupportDir(), 'Chrome')
+  return join(process.env['XDG_CONFIG_HOME'] || join(homedir(), '.config'), 'google-chrome')
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -58,18 +80,22 @@ export function notYet(name: string): void {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /** Convert a Chrome timestamp (microseconds since 1601-01-01) to a JS Date. */
-export function chromeTimeToDate(chromeTime: number): Date {
-  return new Date((chromeTime / 1000) - 11644473600000)
+export function chromeTimeToDate(chromeTime: number | bigint | string): Date {
+  return new Date((Number(chromeTime) / 1000) - 11644473600000)
+}
+
+/** Like {@link chromeTimeToDate}, but an unset timestamp (absent, empty or `0`) is `null`, not the year 1601. */
+export function chromeTimeToDateOrNull(chromeTime: number | bigint | string | null | undefined): Date | null {
+  if (chromeTime === null || chromeTime === undefined || chromeTime === '') return null
+  const n = Number(chromeTime)
+  return Number.isFinite(n) && n > 0 ? chromeTimeToDate(n) : null
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // SQL column helpers (used by HistoryClient)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-/** Convert a Chrome timestamp column to Unix epoch seconds in SQL. */
-export function toUnixTimeSql(column: string): string {
-  return `((${column} / 1000000) - 11644473600)`
-}
+export { toUnixTimeSql } from './storage/helpers.js'
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Visit row helpers
@@ -102,7 +128,7 @@ export function hydrateVisit(row: VisitRow): ChromeVisit {
     url: row.url,
     title: row.title,
     visitTimeUnix,
-    visitTime: new Date(visitTimeUnix * 1000),
+    visitTime: new Date(Math.round(visitTimeUnix * 1000)),
     transitionType: transitionName(transition),
     transitionRaw: transition,
     fromVisitId: Number(row.from_visit),

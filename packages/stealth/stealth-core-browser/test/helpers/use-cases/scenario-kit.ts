@@ -11,6 +11,13 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { FakeCdpServer, type CdpFixture } from '../fake-cdp.js'
 import type { BuiltProfile } from '../profile-fixtures.js'
+import type { ProcessProbe } from '../../../src/lib/cdp/browser.js'
+import type { FakeProc } from '../fake-proc.js'
+import { decideReap, type ClientView, type ReapOutcome } from '../../../src/lib/lifecycle/index.js'
+import type { ReaperLink } from '../../../src/lib/lifecycle/reaper-link.js'
+import type { ReaperStatus } from '../../../src/lib/lifecycle/reaper-host.js'
+import type { LifecycleError } from '../../../src/lib/lifecycle/errors.js'
+import { isActiveWebTarget } from '../../../src/lib/lifecycle/page-tier.js'
 
 export interface FakeTab { id: string; type: string; url: string; title: string; webSocketDebuggerUrl?: string }
 
@@ -114,8 +121,6 @@ export function installSilentWebSocket(): () => void {
 }
 
 /** The machine of a launch scenario: a fake process table, a fake Chrome and a probe that sees only the fake processes. */
-import type { ProcessProbe } from '../../../src/lib/cdp/browser.js'
-import type { FakeProc } from '../fake-proc.js'
 
 export interface LaunchRig {
   proc: FakeProc
@@ -171,11 +176,6 @@ export function makeLaunchRig(proc: FakeProc, world: ChromeWorld): LaunchRig {
   return rig
 }
 
-import { decideReap, type ClientView, type ReapOutcome } from '../../../src/lib/lifecycle/index.js'
-import type { ReaperLink } from '../../../src/lib/lifecycle/reaper-link.js'
-import type { ReaperStatus } from '../../../src/lib/lifecycle/reaper-host.js'
-import type { LifecycleError } from '../../../src/lib/lifecycle/errors.js'
-import { isActiveWebTarget } from '../../../src/lib/lifecycle/page-tier.js'
 
 /**
  * The reaper host of one port, simulated: a `ReaperLink` whose soft reap runs the REAL `lifecycle.decideReap`

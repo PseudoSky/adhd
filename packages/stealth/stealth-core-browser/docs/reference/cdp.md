@@ -10,7 +10,8 @@ The CDP entrypoint provides everything you need to connect to, control, and moni
 The fundamental building block. Provides command/response via `send()`, event subscription via `on()`/`off()`, and connection lifecycle.
 
 ```typescript
-import { CdpSession } from '@adhd/stealth-core-browser/cdp'
+import { cdp } from '@adhd/stealth-core-browser'
+const { CdpSession } = cdp
 
 const session = new CdpSession()
 await session.connect('ws://127.0.0.1:9222/devtools/browser/<id>')
@@ -59,8 +60,8 @@ new CdpSession()
 // Navigate to a URL
 await pageSession.send('Page.navigate', { url: 'https://example.com' })
 
-// Wait for page load
-await pageSession.send('Page.loadEventFired', {}, 10_000)
+// Wait for the page to settle (Page.loadEventFired is an EVENT, not a command)
+await awaitPageSettled(pageSession, { deadlineMs: 10_000 })
 
 // Get response body
 const { body } = await pageSession.send<{ body: string }>(
@@ -72,7 +73,8 @@ const { body } = await pageSession.send<{ body: string }>(
 ### Timing Helpers
 
 ```typescript
-import { rand, humanPause, shortPause } from '@adhd/stealth-core-browser/cdp'
+import { cdp } from '@adhd/stealth-core-browser'
+const { rand, humanPause, shortPause } = cdp
 
 rand(300, 900)        // Random integer in [300, 900]
 await humanPause()    // Sleep 600-1800ms
@@ -84,12 +86,8 @@ await shortPause()    // Sleep 300-900ms
 Functions for launching, detecting, and terminating the Chrome process.
 
 ```typescript
-import {
-  launchChrome,
-  ensureChromeRunning,
-  killChrome,
-  isChromeRunning,
-} from '@adhd/stealth-core-browser/cdp'
+import { cdp } from '@adhd/stealth-core-browser'
+const { launchChrome, ensureChromeRunning, killChrome, isChromeRunning } = cdp
 ```
 
 ### `launchChrome(options?)`
@@ -135,7 +133,7 @@ const { pid, port, profileDir } = await ensureChromeRunning()
 
 ### `killChrome(port?)`
 
-Kill the Chrome process associated with a CDP port. If this session spawned Chrome (via `launchChrome`), kills the tracked child process first. Otherwise, uses `lsof -ti:<port>` to find the process listening on the port — safe because it only targets Chrome explicitly launched with `--remote-debugging-port`.
+Stop the Chrome associated with a CDP port. If this process launched Chrome (via `launchChrome`), it stops the tracked launch's process group (SIGTERM, then SIGKILL after a bounded wait). Otherwise it acts only on a listener on the port whose command line carries `--user-data-dir=<resolved profile>` (the `profileDir` option, default the dedicated CDP profile); a listener that does not match is skipped with a logged reason. It never kills an arbitrary process that happens to own the port.
 
 ```typescript
 await killChrome(9222)
@@ -154,15 +152,8 @@ const running = await isChromeRunning('127.0.0.1:9222')
 Functions for creating, listing, and closing page targets.
 
 ```typescript
-import {
-  getChromeInfo,
-  isChromeReachable,
-  listPageTargets,
-  listPageTargetsOnly,
-  createPageTarget,
-  closePageTarget,
-  closeAllPageTargets,
-} from '@adhd/stealth-core-browser/cdp'
+import { cdp } from '@adhd/stealth-core-browser'
+const { getChromeInfo, isChromeReachable, listPageTargets, listPageTargetsOnly, createPageTarget, closePageTarget, closeAllPageTargets } = cdp
 ```
 
 ### `createPageTarget(cdpHost)`
@@ -182,7 +173,7 @@ const { targetId, pageWsUrl } = await createPageTarget('127.0.0.1:9222')
 
 ### `closePageTarget(cdpHost, targetId)`
 
-Close a page target by ID. Best-effort — catches errors silently.
+Close a page target by ID. Best-effort: a failure is logged with `console.warn` and not thrown.
 
 ```typescript
 await closePageTarget('127.0.0.1:9222', targetId)
@@ -243,177 +234,63 @@ interface ChromeVersionInfo {
 
 ## Domain Services
 
-Higher-level wrappers for CDP domains, providing typed methods and automatic WebSocket management.
+`CdpClient` is the typed facade over five domain services (Target, Browser, Page, Network, System). The service classes are internal; they are reached as `client.target`, `client.browser`, `client.page`, `client.network` and `client.system`, or through the facade's passthrough methods. Every method is implemented, talks to Chrome, and throws a typed `StealthCoreBrowserError` on failure; none returns `null` to mean "failed" (see [ERRORS.md](../ERRORS.md)).
 
 ```typescript
-import {
-  CdpClient,
-  TargetService,
-  BrowserService,
-  PageService,
-  NetworkService,
-  SystemService,
-} from '@adhd/stealth-core-browser/cdp'
+import { cdp } from '@adhd/stealth-core-browser'
+const { CdpClient } = cdp
+
+const client = new CdpClient('127.0.0.1:9222')
+const version = await client.getVersion()
+console.log(`Chrome ${version.browserVersion}`)
 ```
 
-### `TargetService`
+Target-scoped commands (`Page.*`, `Network.*`, `Performance.*`) are routed through a flat page session attached to the requested target; browser-scoped commands (`Target.*`, `Browser.*`, `SystemInfo.*`) use the browser session. A call that names an unknown target throws `TARGET_NOT_FOUND`; an unreachable or invalid endpoint throws `CDP_UNREACHABLE`; a timeout throws `CDP_TIMEOUT`; a malformed reply throws `CDP_BAD_RESPONSE`; a CDP error reply throws `CDP_REMOTE_ERROR`.
 
-Manages browser page targets. Two methods use Chrome's HTTP API (`/json/list`); more advanced methods use CDP WebSocket.
-
-```typescript
-const target = new TargetService('127.0.0.1:9222')
-```
-
-| Method | Returns | Description | Status |
+| Method | Service | Returns | Backing call |
 |---|---|---|---|
-| `listPageTargets()` | `Promise<CdpTargetInfo[]>` | List all page targets via `GET /json/list` | **Shipped** |
-| `countActivePages()` | `Promise<number>` | Number of page targets with non-blank URLs | **Shipped** |
-| `getTargetInfo(targetId)` | `Promise<CdpTargetInfo \| null>` | Extended target info via CDP `Target.getTargetInfo` over WebSocket | **Shipped** |
-| `activateTarget(targetId)` | `Promise<boolean>` | Activate / focus a target page | 🔴 Not yet implemented — returns `false` |
+| `getVersion()` | Browser | `Promise<ChromeVersion>` | `GET /json/version` |
+| `listPageTargets()` | Target | `Promise<CdpTargetInfo[]>` | `GET /json/list`, `type === 'page'` only |
+| `countActivePages()` | Target | `Promise<number>` | page targets with an http(s) URL |
+| `getTargetInfo(targetId)` | Target | `Promise<CdpTargetInfo>` | `Target.getTargetInfo` |
+| `activateTarget(targetId)` | Target | `Promise<void>` | `Target.activateTarget`; throws `TARGET_NOT_FOUND` |
+| `getHistograms(query?)` | Browser | `Promise<unknown[]>` | `Browser.getHistograms` |
+| `getHistogram(name)` | Browser | `Promise<unknown>` | `Browser.getHistogram` |
+| `getWindowBounds(targetId)` | Browser | `Promise<BrowserWindowBounds>` | `Browser.getWindowForTarget`, then `Browser.getWindowBounds` |
+| `getWindowForTarget(targetId)` | Browser | `Promise<{ windowId, bounds }>` | `Browser.getWindowForTarget` |
+| `getBrowserCommandLine()` | Browser | `Promise<string[]>` | `Browser.getBrowserCommandLine` |
+| `getNavigationHistory(targetId)` | Page | `Promise<{ currentIndex, entries }>` | `Page.getNavigationHistory` (page session) |
+| `getFrameTree(targetId)` | Page | `Promise<unknown>` | `Page.getFrameTree` (page session) |
+| `getResourceTree(targetId)` | Page | `Promise<unknown>` | `Page.getResourceTree` (page session) |
+| `getLayoutMetrics(targetId)` | Page | `Promise<unknown>` | `Page.getLayoutMetrics` (page session) |
+| `captureScreenshot(targetId, format?)` | Page | `Promise<string>` (base64) | `Page.captureScreenshot` (page session) |
+| `getPageMetrics(targetId)` | Page | `Promise<PageMetrics>` | `Performance.getMetrics` (page session) |
+| `getCookies(urls?, targetId?)` | Network | `Promise<CookieInfo[]>` | `Network.getCookies` (page session) |
+| `getAllCookies(targetId?)` | Network | `Promise<CookieInfo[]>` | `Network.getAllCookies` (page session) |
+| `getSystemInfo()` | System | `Promise<SystemInfo>` | `SystemInfo.getInfo` |
+| `getProcessInfo()` | System | `Promise<ProcessInfo[]>` | `SystemInfo.getProcessInfo` |
+| `getMemoryCounters(targetId?)` | System | `Promise<ChromeMemoryCounters>` | `Performance.getMetrics` |
 
 ```typescript
-// List all page targets
-const pages = await target.listPageTargets()
-for (const p of pages) {
-  console.log(`${p.title}: ${p.url} (attached: ${p.attached})`)
-}
+// List page targets and focus the first one
+const pages = await client.listPageTargets()
+for (const p of pages) console.log(`${p.title}: ${p.url} (attached: ${p.attached})`)
+if (pages[0]) await client.activateTarget(pages[0].targetId)
 
-// Count active pages (non-blank URLs)
-const count = await target.countActivePages()
-
-// Get extended info for a specific target
-const info = await target.getTargetInfo(targetId)
+// Page-scoped reads need a target id
+const metrics = await client.getPageMetrics(pages[0]!.targetId)
 ```
 
-### `BrowserService`
+For cookie values from the profile on disk rather than the live browser, use the storage module's cookie readers (`storage.getCookies`), which read Chrome's SQLite cookie database. For resource monitoring, use `collectResourceUsage` (below).
 
-Browser-wide state and configuration.
-
-```typescript
-const browser = new BrowserService('127.0.0.1:9222')
-```
-
-| Method | Returns | Description | Status |
-|---|---|---|---|
-| `getVersion()` | `Promise<ChromeVersion \| null>` | Chrome version from `GET /json/version` | **Shipped** |
-| `getHistograms(query?)` | `Promise<unknown[]>` | Browser histogram data | 🔴 Not yet implemented |
-| `getHistogram(name)` | `Promise<unknown \| null>` | Single named histogram | 🔴 Not yet implemented |
-| `getWindowBounds(targetId)` | `Promise<BrowserWindowBounds \| null>` | Window bounds for a target | 🔴 Not yet implemented |
-| `getWindowForTarget(targetId)` | `Promise<... \| null>` | Window info for a target | 🔴 Not yet implemented |
-| `getBrowserCommandLine()` | `Promise<string[]>` | Browser command-line arguments | 🔴 Not yet implemented |
-
-```typescript
-const version = await browser.getVersion()
-if (version) {
-  console.log(`Chrome ${version.browserVersion}`)
-  console.log(`User-Agent: ${version.userAgent}`)
-}
-```
-
-### `PageService`
-
-Per-page operations — navigation, frames, screenshots, metrics.
-
-**All methods in this service are stubs and return `null` or empty results.**
-
-```typescript
-const page = new PageService('127.0.0.1:9222')
-```
-
-| Method | Returns | Status |
-|---|---|---|
-| `getNavigationHistory(targetId)` | `Promise<{currentIndex, entries} \| null>` | 🔴 Not yet implemented |
-| `getFrameTree(targetId)` | `Promise<unknown \| null>` | 🔴 Not yet implemented |
-| `getResourceTree(targetId)` | `Promise<unknown \| null>` | 🔴 Not yet implemented |
-| `getLayoutMetrics(targetId)` | `Promise<unknown \| null>` | 🔴 Not yet implemented |
-| `captureScreenshot(targetId, format?)` | `Promise<string \| null>` | 🔴 Not yet implemented |
-| `getPageMetrics(targetId)` | `Promise<PageMetrics \| null>` | 🔴 Not yet implemented |
-
-For navigation and network capture, use `CdpSession` directly or the `captureNetworkResponse` function from the capture module.
-
-### `NetworkService`
-
-Network/cookie operations via CDP.
-
-**All methods in this service are stubs and return empty arrays.**
-
-```typescript
-const network = new NetworkService('127.0.0.1:9222')
-```
-
-| Method | Returns | Status |
-|---|---|---|
-| `getCookies(urls?)` | `Promise<CookieInfo[]>` | 🔴 Not yet implemented |
-| `getAllCookies()` | `Promise<CookieInfo[]>` | 🔴 Not yet implemented |
-
-For cookie access, use the storage module's `CookieClient` which reads Chrome's SQLite cookie database directly.
-
-### `SystemService`
-
-Chrome system information and diagnostics.
-
-**All methods in this service are stubs and return `null` or empty results.**
-
-```typescript
-const sys = new SystemService('127.0.0.1:9222')
-```
-
-| Method | Returns | Status |
-|---|---|---|
-| `getSystemInfo()` | `Promise<SystemInfo \| null>` | 🔴 Not yet implemented |
-| `getProcessInfo()` | `Promise<ProcessInfo[]>` | 🔴 Not yet implemented |
-| `getMemoryCounters()` | `Promise<ChromeMemoryCounters \| null>` | 🔴 Not yet implemented |
-
-For resource monitoring, use `collectResourceUsage` from `src/lib/cdp/monitor.ts` directly.
-
-### `CdpClient` — Unified Facade
-
-Composes all five domain services into a single class with convenience passthroughs.
-
-```typescript
-const cdp = new CdpClient('127.0.0.1:9222')
-
-// Versions
-const version = await cdp.getVersion()
-const targetList = await cdp.listPageTargets()
-const active = await cdp.countActivePages()
-```
-
-| Method | Delegates to | Status |
-|---|---|---|
-| `getVersion()` | `BrowserService.getVersion()` | **Shipped** |
-| `listPageTargets()` | `TargetService.listPageTargets()` | **Shipped** |
-| `countActivePages()` | `TargetService.countActivePages()` | **Shipped** |
-| `getTargetInfo(targetId)` | `TargetService.getTargetInfo()` | **Shipped** |
-| `activateTarget(targetId)` | `TargetService.activateTarget()` | 🔴 Stub |
-| `getHistograms(query?)` | `BrowserService.getHistograms()` | 🔴 Stub |
-| `getHistogram(name)` | `BrowserService.getHistogram()` | 🔴 Stub |
-| `getWindowBounds(targetId)` | `BrowserService.getWindowBounds()` | 🔴 Stub |
-| `getWindowForTarget(targetId)` | `BrowserService.getWindowForTarget()` | 🔴 Stub |
-| `getBrowserCommandLine()` | `BrowserService.getBrowserCommandLine()` | 🔴 Stub |
-| `getNavigationHistory(targetId)` | `PageService.getNavigationHistory()` | 🔴 Stub |
-| `getFrameTree(targetId)` | `PageService.getFrameTree()` | 🔴 Stub |
-| `getResourceTree(targetId)` | `PageService.getResourceTree()` | 🔴 Stub |
-| `getLayoutMetrics(targetId)` | `PageService.getLayoutMetrics()` | 🔴 Stub |
-| `captureScreenshot(targetId, format?)` | `PageService.captureScreenshot()` | 🔴 Stub |
-| `getPageMetrics(targetId)` | `PageService.getPageMetrics()` | 🔴 Stub |
-| `getCookies(urls?)` | `NetworkService.getCookies()` | 🔴 Stub |
-| `getAllCookies()` | `NetworkService.getAllCookies()` | 🔴 Stub |
-| `getSystemInfo()` | `SystemService.getSystemInfo()` | 🔴 Stub |
-| `getProcessInfo()` | `SystemService.getProcessInfo()` | 🔴 Stub |
-| `getMemoryCounters()` | `SystemService.getMemoryCounters()` | 🔴 Stub |
 
 ## Resource Monitoring
 
 Runtime monitoring via CDP `SystemInfo` and `Performance` domains.
 
 ```typescript
-import {
-  collectResourceUsage,
-  checkWatermark,
-  clearBrowserCache,
-  formatResourceUsage,
-} from '@adhd/stealth-core-browser/cdp'
+import { cdp } from '@adhd/stealth-core-browser'
+const { collectResourceUsage, checkWatermark, clearBrowserCache, formatResourceUsage } = cdp
 ```
 
 ### `collectResourceUsage(browserSession, pageSession?)`
@@ -458,7 +335,8 @@ console.log(formatResourceUsage(usage))
 Prevents Chrome instances from accumulating when an agent forgets to clean up.
 
 ```typescript
-import { IdleShutdown, createPageTargetIdleShutdown } from '@adhd/stealth-core-browser/cdp'
+import { cdp } from '@adhd/stealth-core-browser'
+const { IdleShutdown, createPageTargetIdleShutdown } = cdp
 ```
 
 ### `IdleShutdown`
@@ -580,12 +458,8 @@ interface ResourceUsage {
 ## Usage Pattern: Full Browser Session
 
 ```typescript
-import {
-  CdpSession,
-  ensureChromeRunning,
-  createPageTarget,
-  closePageTarget,
-} from '@adhd/stealth-core-browser/cdp'
+import { cdp } from '@adhd/stealth-core-browser'
+const { CdpSession, awaitPageSettled, ensureChromeRunning, createPageTarget, closePageTarget } = cdp
 
 const cdpHost = '127.0.0.1:9222'
 await ensureChromeRunning({ port: 9222 })
@@ -596,8 +470,8 @@ const page = new CdpSession()
 try {
   await page.connect(pageWsUrl)
   await page.send('Page.enable')
-  await page.send('Page.navigate', { url })
-  await page.send('Page.loadEventFired', {}, 15_000)
+  const settled = await awaitPageSettled(page, { navigate: url, deadlineMs: 15_000 })
+  if (!settled.settled) console.warn(`never settled (${settled.signal})`)
   // ... process page ...
 } finally {
   page.close()

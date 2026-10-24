@@ -188,6 +188,16 @@ describe('8468f7b1 [chrome-lifecycle.15] the held connection', () => {
     expect(await l.status()).toMatchObject({ clients: 1, chromeUp: true, httpPages: 1 })
   })
 
+  it('[resolve-findings.2] F129 a connection whose send rejects answers null instead of rejecting', async () => {
+    const l = link()
+    await l.ensureAndHello()
+    must(backend.dials[0]).send = vi.fn(async () => { throw new Error('socket reset') })
+    await expect(l.reapIfIdle()).resolves.toBeNull()
+    await expect(l.status()).resolves.toBeNull()
+    expect(logs.join('\n')).toMatch(/reapIfIdle not answered: socket reset/)
+    expect(logs.join('\n')).toMatch(/status not answered: socket reset/)
+  })
+
   it('release unregisters and closes the connection; the host registry is empty', async () => {
     const l = link()
     await l.ensureAndHello()

@@ -165,7 +165,7 @@ Relevant histograms:
 **Limitations:**
 - **Aggregate only** — merges data across all tabs
 - You get bucket counts, not per-target values
-- A bucket with `high < 5000` and `count > 0` means at least one tab was active in the last 5s — useful as a heuristic
+- A bucket with `high < 5000` and `count > 0` would suggest a tab was active in the last 5s (unverified: inferred from the histogram name, not measured against a live Chrome)
 - No way to identify which target contributed to which bucket
 
 ### 6. SystemInfo.getProcessInfo (Browser-Level, Per-Process)
@@ -177,7 +177,7 @@ const info = await browser.send('SystemInfo.getProcessInfo')
 
 **Limitations:** Per-process CPU time, no per-tab mapping. A renderer process may host multiple tabs (site isolation complicates the mapping).
 
-### 7. Page.getMetrics / Page.getLayoutMetrics (Page-Level)
+### 7. Performance.getMetrics / Page.getLayoutMetrics (Page-Level)
 
 ```typescript
 const metrics = await page.send('Page.getLayoutMetrics')
@@ -188,51 +188,6 @@ const metrics = await page.send('Page.getLayoutMetrics')
 
 ---
 
-## The Idle Shutdown Proposal
+## Idle shutdown in the shipped package
 
-Given these constraints, the multi-process idle detection strategy:
-
-### Heuristic
-
-```typescript
-async function shouldShutdown(): Promise<boolean> {
-  // 1. Check target list
-  const targets = await browser.send('Target.getTargets')
-  const livePages = targets.targetInfos.filter(
-    (t: any) => t.type === 'page' && t.url !== 'about:blank'
-  )
-
-  // If any real page exists, someone else is using Chrome
-  if (livePages.length > 0) return false
-
-  // 2. Check our own last activity
-  if (Date.now() - lastSearchAt < 10_000) return false // request in flight
-
-  // 3. (Optional) Check histogram for recent activity
-  const hist = await browser.send('Browser.getHistogram', {
-    name: 'Tabs.PageLoad.TimeSinceActive2'
-  })
-  const recentBucket = hist.buckets.find((b: any) => b.high < 5000)
-  if (recentBucket && recentBucket.count > 0) return false // recent activity
-
-  // 4. Shut down
-  return true
-}
-```
-
-### Strengths
-
-- Zero coordination between processes (Chrome's target list is the shared truth)
-- No heartbeat files, no IPC
-- Each process's `finally` block closes its own target
-- Normal idle state = zero page targets → safe to shutdown
-
-### Weaknesses
-
-- Cannot distinguish between "our process's target" and "another process's target" with same `browserContextId`
-- Aggregate histogram is noisy in multi-tab scenarios
-- Race: a target may be about to be created but not yet visible
-
-### Recommendation
-
-The target-list-only heuristic (step 1) is sufficient for safety. Steps 2–3 are refinements to prevent false positives. The histogram check (step 3) is optional and may be removed if it adds latency without benefit.
+The package does not use a target-list or histogram heuristic. The reaper host (see [chrome-manager.md](../chrome-manager.md)) decides: it tracks connected clients, open http(s) pages and recent history. The histogram check sketched in earlier research (`Tabs.PageLoad.TimeSinceActive2` buckets) is **unverified** against a live Chrome: the bucket semantics are inferred from the histogram names, not measured, so it is not used for any decision. See [monitoring.md](./monitoring.md) for what the histograms do and do not provide.

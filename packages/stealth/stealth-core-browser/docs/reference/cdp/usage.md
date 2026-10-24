@@ -1,4 +1,4 @@
-# CDP Usage — agent-browser
+# CDP Usage
 
 How `CdpSession` connects and uses the Chrome DevTools Protocol.
 
@@ -81,14 +81,14 @@ class CdpSession {
 - Timeout rejects pending commands after `timeoutMs` (default 30s)
 - Errors from CDP (`msg.error`) reject the promise with an `Error`
 
-### Commands used in agent-browser
+### Commands used by this package
 
 | Method | When | Purpose |
 |--------|------|---------|
-| `Target.createTarget` | Per-search | Open a blank page for navigation |
-| `Target.closeTarget` | Search cleanup | Close the page tab |
+| `Target.createTarget` | Per capture | Open a blank page for navigation |
+| `Target.closeTarget` | Capture cleanup | Close the page tab |
 | `Page.enable` | Per-page session | Subscribe to page events |
-| `Page.navigate` | Per-search | Navigate to search URL |
+| `Page.navigate` | Per capture | Navigate to search URL |
 | `Network.enable` | Per-page session | Capture network responses |
 | `Network.getResponseBody` | Per-response | Extract HTML body from network |
 | `Performance.getMetrics` | Per-page | Get nav timestamps |
@@ -99,7 +99,8 @@ class CdpSession {
 ## Target Lifecycle
 
 ```typescript
-import { createPageTarget, closePageTarget } from '@adhd/stealth-core-browser/cdp'
+import { cdp } from '@adhd/stealth-core-browser'
+const { createPageTarget, closePageTarget } = cdp
 
 // Create — opens about:blank, returns { targetId, pageWsUrl }
 const { targetId, pageWsUrl } = await createPageTarget('127.0.0.1:9222')
@@ -158,7 +159,7 @@ page.off('Network.requestWillBeSent')
 page.close()
 ```
 
-### Events used in agent-browser
+### Events used by this package
 
 | Event | Purpose |
 |-------|---------|

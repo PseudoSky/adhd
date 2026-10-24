@@ -39,8 +39,9 @@ describe('8468f7b1 [audit-fixes.5] P33 AGENTS.md names only what the package con
     expect(agents).not.toMatch(/`e2e`/)
   })
 
-  it('does not name a bin/ entry the package lacks', () => {
-    expect(existsSync(join(root, 'bin'))).toBe(false)
-    expect(agents).not.toMatch(/`bin\//)
+  it('names a bin/ entry exactly when the package has a bin/ directory', () => {
+    // AGENTS.md is checked against the filesystem, not the other way round: the package gaining a bin/ directory
+    // must be documented, and a documented bin/ must exist.
+    expect(/`bin\//.test(agents)).toBe(existsSync(join(root, 'bin')))
   })
 })

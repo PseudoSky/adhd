@@ -158,6 +158,7 @@ export function browserModule(spy: Spy = plain): Record<string, unknown> {
     }),
     killProcessGroup: spy(async (pid: number) => {
       world.events.push(`kill-group:${pid}`)
+      if (world.failKill) throw new Error('kill EPERM')
       chromeGone()
     }),
   }

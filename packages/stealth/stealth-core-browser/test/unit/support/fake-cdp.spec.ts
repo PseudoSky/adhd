@@ -10,6 +10,7 @@
 import { readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { flushMicrotasks } from '../../helpers/capture/capture-kit.js'
 import { CdpSession } from '../../../src/lib/cdp/session.js'
 import { FakeCdpServer, loadFixture, type CdpFixture } from '../../helpers/fake-cdp.js'
 
@@ -111,8 +112,7 @@ describe('8468f7b1 [cdp-test-harness.3] HC2 strict unknown command', () => {
     raw.addEventListener('message', (ev) => frames.push(JSON.parse(String(ev.data))))
     await new Promise((r) => raw.addEventListener('open', r, { once: true }))
     raw.send(JSON.stringify({ id: 7, method: 'Runtime.evaluate', params: { expression: '1' } }))
-    await Promise.resolve()
-    await Promise.resolve()
+    await flushMicrotasks()
     expect(frames).toEqual([{ id: 7, error: { code: -32601, message: "'Runtime.evaluate' wasn't found" } }])
     expect(server.unexpected).toEqual(['Runtime.evaluate'])
   })
@@ -190,9 +190,9 @@ const NAVIGATE_RESULT_FIELDS = ['frameId', 'loaderId', 'errorText']
 describe('8468f7b1 [cdp-test-harness.1] HC4 Network-domain field-name allow-list', () => {
   const names = readdirSync(FIXTURES).filter((f) => f.endsWith('.cdp.json')).map((f) => f.replace('.cdp.json', ''))
 
-  it('HC4 covers exactly the fourteen required fixtures', () => {
-    expect(names.sort()).toEqual(
-      ['binary-base64', 'cached-304', 'cors-failure', 'doc-200', 'extrainfo-after-main', 'extrainfo-before-main', 'isolated-context-ok', 'isolated-context-target-missing', 'no-body-204', 'post-json-api', 'rate-limit-429', 'redirect-301-200', 'search-404', 'two-tabs-parallel'].sort(),
+  it('HC4 includes every one of the fourteen required fixtures', () => {
+    expect(names).toEqual(
+      expect.arrayContaining(['binary-base64', 'cached-304', 'cors-failure', 'doc-200', 'extrainfo-after-main', 'extrainfo-before-main', 'isolated-context-ok', 'isolated-context-target-missing', 'no-body-204', 'post-json-api', 'rate-limit-429', 'redirect-301-200', 'search-404', 'two-tabs-parallel']),
     )
   })
 

@@ -15,7 +15,8 @@ import { CookieClient } from '../../../src/lib/storage/cookies.js'
 import { openDb, toUnixTimeSql } from '../../../src/lib/storage/helpers.js'
 import { HistoryClient } from '../../../src/lib/storage/history.js'
 import { ProfileClient } from '../../../src/lib/storage/profile.js'
-import { chromeMicros, makeProfile, type Fixture } from '../../helpers/domains-storage/profile-fixture.js'
+import { makeProfile, type Fixture } from '../../helpers/domains-storage/profile-fixture.js'
+import { chromeMicros } from '../../helpers/profile-fixtures.js'
 
 describe('8468f7b1 AC2 [tests-unit-data.6] read-only profile access', () => {
   let fx: Fixture
@@ -69,7 +70,7 @@ describe('8468f7b1 AC2 [tests-unit-data.6] read-only profile access', () => {
   })
 
   it('[fs-159] converts chrome timestamps', () => {
-    expect(toUnixTimeSql('t.col')).toBe('((t.col / 1000000) - 11644473600)')
+    expect(toUnixTimeSql('t.col')).toBe('((t.col / 1000000.0) - 11644473600)')
     // the SQL expression really evaluates to unix seconds
     const db = openDb(join(fx.defaultDir, 'History'))
     try {

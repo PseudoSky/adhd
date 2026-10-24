@@ -17,7 +17,8 @@ The recommended parser for HTML responses. Uses `@xmldom/xmldom` for server-side
 Optimized for Google search results but works with any provider when given the right XPath expression.
 
 ```typescript
-import { extractWithXpath } from '@adhd/stealth-core-browser/parsers'
+import { parsers } from '@adhd/stealth-core-browser'
+const { extractWithXpath } = parsers
 
 const html = await getSearchResponseBody()
 const results = extractWithXpath(html)
@@ -68,7 +69,8 @@ If the HTML is so malformed that `@xmldom` throws (rare), the function returns a
 For JSON API responses (npm, crates, Wikipedia, Maven, etc.). Uses dot-path selectors to navigate the JSON structure.
 
 ```typescript
-import { extractResultsFromJson } from '@adhd/stealth-core-browser/parsers'
+import { parsers } from '@adhd/stealth-core-browser'
+const { extractResultsFromJson } = parsers
 import type { CaptureConfig } from '@adhd/stealth-core-browser/types'
 
 const config: CaptureConfig = {
@@ -119,7 +121,8 @@ Uses regex-based extraction on raw HTML with tag+class selectors. Fragile — cl
 **Deprecated in favor of `extractWithXpath`.**
 
 ```typescript
-import { extractResultsFromHtml } from '@adhd/stealth-core-browser/parsers'
+import { parsers } from '@adhd/stealth-core-browser'
+const { extractResultsFromHtml } = parsers
 import type { CaptureConfig } from '@adhd/stealth-core-browser/types'
 
 const config: CaptureConfig = {
@@ -160,7 +163,8 @@ Uses `node-html-parser` to parse HTML into a DOM tree, then finds results using 
 **Deprecated.** Use `extractWithXpath` instead.
 
 ```typescript
-import { extractStructural } from '@adhd/stealth-core-browser/parsers'
+import { parsers } from '@adhd/stealth-core-browser'
+const { extractStructural } = parsers
 
 // Same structural extraction as extractWithXpath, but via node-html-parser
 const results = extractStructural(htmlBody, captureConfig)
@@ -242,9 +246,10 @@ interface CaptureConfig {
 ## Example: Full Pipeline (CDP Capture → XPath Parse)
 
 ```typescript
-import { ensureChromeRunning, createPageTarget, closePageTarget } from '@adhd/stealth-core-browser/cdp'
-import { captureNetworkResponse } from '@adhd/stealth-core-browser/capture'
-import { extractWithXpath } from '@adhd/stealth-core-browser/parsers'
+import { cdp, capture, parsers } from '@adhd/stealth-core-browser'
+const { ensureChromeRunning, createPageTarget, closePageTarget } = cdp
+const { captureNetworkResponse } = capture
+const { extractWithXpath } = parsers
 
 await ensureChromeRunning()
 const { targetId, pageWsUrl } = await createPageTarget('127.0.0.1:9222')

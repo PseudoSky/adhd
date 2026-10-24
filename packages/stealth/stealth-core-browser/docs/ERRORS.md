@@ -39,7 +39,7 @@ The codes below are listed in the order of `ERROR_CODES`.
 | `CHROME_START_TIMEOUT` | 20 | Chrome was spawned but its CDP endpoint did not answer within 10 s. | Check that the Chrome profile is not locked by another process, then retry the launch. |
 | `CDP_UNREACHABLE` | 21 | Nothing answers on the CDP host and port, or the host or port you passed cannot address a Chrome (detail.reason is invalid-endpoint). | Start Chrome with launchChrome, or check the host and port you passed. |
 | `CDP_BAD_RESPONSE` | 22 | The DevTools HTTP endpoint answered with an error status or a body that is not JSON. | Check that the endpoint is Chrome DevTools and that Chrome is not shutting down, then retry. |
-| `TARGET_NOT_FOUND` | 23 | A created page target did not register in /json/list within 3 s. | List the open pages again and use a current target id. |
+| `TARGET_NOT_FOUND` | 23 | A created page target did not register in /json/list within 3 s, or Chrome knows no target with the id you passed to a target-scoped call (`getTargetInfo`, `activateTarget`, page-scoped reads). | List the open pages again and use a current target id. |
 | `CDP_CONNECT_FAILED` | 24 | The CDP WebSocket failed or timed out before it opened. | Check that the page websocket URL is current and the page is still open, then retry. |
 | `CDP_NOT_CONNECTED` | 25 | A command was sent on a session that is not connected. | Connect the session first and use it only while it is connected. |
 | `CDP_TIMEOUT` | 26 | Chrome did not answer a CDP command within its timeout. | Increase the command timeout or retry when Chrome is less busy. |
@@ -47,7 +47,7 @@ The codes below are listed in the order of `ERROR_CODES`.
 | `CDP_SESSION_CLOSED` | 28 | The session closed while a command was pending. | Open a new session and retry the operation. |
 | `CDP_SEND_FAILED` | 29 | Writing a command to the CDP socket threw. | Reconnect the session and retry the command. |
 | `NAVIGATION_FAILED` | 30 | Page.navigate reported an errorText. | Check the URL and the network, then retry the navigation. |
-| `PAGE_SETTLE_FAILED` | 31 | awaitPageSettled was called with neither navigate nor loaderId. | Pass a navigate URL or a loaderId so the wait can scope to your navigation. |
+| `PAGE_SETTLE_FAILED` | 31 | awaitPageSettled was called with neither navigate nor loaderId, or its navigation was same-document (a fragment change starts no loader; `detail.reason` is `same-document`). | Pass a navigate URL or a loaderId so the wait can scope to your navigation. |
 | `OPERATION_ABORTED` | 32 | The caller aborted the operation through its AbortSignal (the abort reason is the cause). | Retry the operation if the abort was not intended. |
 | `SELECTOR_TIMEOUT` | 33 | The result selector never appeared before the DOM-walk timeout. | Check the selector against the page or increase the timeout, then retry. |
 

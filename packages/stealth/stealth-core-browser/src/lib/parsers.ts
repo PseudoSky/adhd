@@ -14,6 +14,7 @@
  */
 
 import type { ParseResult, CaptureConfig } from './types.js'
+import { normalizeUrl } from './redirect-url.js'
 import type { HTMLElement } from 'node-html-parser';
 import { parse } from 'node-html-parser'
 
@@ -136,12 +137,11 @@ export function extractResultsFromJson(body: string, capture: CaptureConfig): Pa
  *    - Fields starting with `_url_` — constructs a GitHub blob URL from repo_nwo/ref_name/path */
 export function extractResultsFromEmbeddedJson(body: string, capture: CaptureConfig): ParseResult[] {
   const dataTarget = capture.dataTarget ?? 'react-app.embeddedData'
-  const pattern = new RegExp(`<script\\s+type="application/json"\\s+data-target="${escapeRe(dataTarget)}">(.*?)<\\/script>`, 's')
-  const match = pattern.exec(body)
-  if (!match) return []
+  const payload = findEmbeddedJsonScript(body, dataTarget)
+  if (payload === null) return []
 
   let data: unknown
-  try { data = JSON.parse(match[1]) } catch { return [] }
+  try { data = JSON.parse(payload) } catch { return [] }
 
   const items = resolvePath(data, capture.resultSelector)
   if (!Array.isArray(items)) return []
@@ -154,7 +154,7 @@ export function extractResultsFromEmbeddedJson(body: string, capture: CaptureCon
     const maxLines = capture.snippetLines ?? 1
     if (Array.isArray(snippets) && snippets[0]?.lines?.length) {
       snippet = snippets[0].lines.slice(0, maxLines)
-        .map((l) => stripHtml(l).trim())
+        .map((l) => cleanText(l))
         .filter(Boolean)
         .join(' ')
         .slice(0, 500)
@@ -177,6 +177,22 @@ export function extractResultsFromEmbeddedJson(body: string, capture: CaptureCon
       meta: capture.fields.meta ? extractMeta(itemObj, capture.fields.meta) : undefined,
     }
   })
+}
+
+/**
+ * The text of the first `<script type="application/json" data-target="<dataTarget>">` element. Attributes are read
+ * individually, so their order, spacing and quote style (`"` or `'`) do not matter.
+ */
+function findEmbeddedJsonScript(body: string, dataTarget: string): string | null {
+  const scriptTag = /<script\b([^>]*)>([\s\S]*?)<\/script>/gi
+  for (let m = scriptTag.exec(body); m !== null; m = scriptTag.exec(body)) {
+    const attrs = new Map<string, string>()
+    for (const a of (m[1] ?? '').matchAll(/([\w:-]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+))/g)) {
+      attrs.set((a[1] ?? '').toLowerCase(), a[2] ?? a[3] ?? a[4] ?? '')
+    }
+    if (attrs.get('type')?.toLowerCase() === 'application/json' && attrs.get('data-target') === dataTarget) return m[2] ?? ''
+  }
+  return null
 }
 
 function extractMeta(item: unknown, metaConfig: Record<string, string>): Record<string, string> {
@@ -426,35 +442,3 @@ function applyUrlTemplate(url: string, capture: CaptureConfig): string {
   return template ? template.replace('{}', url) : url
 }
 
-/**
- * `decodeURIComponent` that cannot throw on page-supplied text: every run of valid `%XX` escapes is
- * decoded and a malformed run (a lone `%`, a truncated multi-byte sequence) keeps its undecodable bytes as written, so one
- * bad link never aborts the parse of a results page.
- */
-function safeDecode(s: string): string {
-  return s.replace(/(?:%[0-9A-Fa-f]{2})+/g, (run) => {
-    try {
-      return decodeURIComponent(run)
-    } catch {
-      // A truncated or invalid multi-byte tail: keep it as written but still decode the ASCII escapes around it.
-      return run.replace(/%([0-7][0-9A-Fa-f])/g, (_m, hex: string) => String.fromCharCode(parseInt(hex, 16)))
-    }
-  })
-}
-
-function normalizeUrl(raw: string): string {
-  if (!raw) return raw
-  const ddg = raw.match(/[?&]uddg=([^&]+)/)
-  if (ddg) return safeDecode(ddg[1])
-  const ggl = raw.match(/[?&]q=([^&]+)/)
-  if (ggl && !raw.startsWith('http')) return safeDecode(ggl[1])
-  if (raw.startsWith('//')) return 'https:' + raw
-  if (raw.startsWith('/abs/')) return `https://arxiv.org${raw}`
-  // Google's newer SERP wraps result links as an ENCRYPTED redirect
-  // (`/goto?url=<opaque token>` — NOT client-decodable, unlike the `/url?q=`
-  // form handled above). Absolutize it so the link is at least navigable
-  // (Google 302s to the real target); without this, google results carry
-  // unusable bare relative paths.
-  if (raw.startsWith('/goto?url=')) return `https://www.google.com${raw}`
-  return raw
-}

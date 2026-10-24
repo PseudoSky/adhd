@@ -9,8 +9,6 @@
       "node",
       "vitest"
     ],
-    "module": "esnext",
-    "moduleResolution": "bundler",
     "allowJs": true
   },
   "include": [
@@ -19,6 +17,10 @@
     "vitest.config.mts",
     "test/**/*.ts",
     "test/**/*.tsx",
+    "src/**/*.test.ts",
+    "src/**/*.spec.ts",
+    "src/**/*.test.tsx",
+    "src/**/*.spec.tsx",
     "src/**/*.d.ts",
     "examples/**/*.ts"
   ]

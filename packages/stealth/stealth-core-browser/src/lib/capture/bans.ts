@@ -120,11 +120,23 @@ export interface BanCheckContext {
   body: string
 }
 
+/**
+ * Stateless `RegExp.test`: a caller-supplied pattern with the `g` or `y` flag carries a `lastIndex` between calls,
+ * which would make the same input match on one check and miss on the next. The index is reset before and after.
+ */
+function matches(pattern: RegExp | undefined, text: string): boolean {
+  if (!pattern) return false
+  pattern.lastIndex = 0
+  const hit = pattern.test(text)
+  pattern.lastIndex = 0
+  return hit
+}
+
 export function checkBans(rules: BanRule[], ctx: BanCheckContext): BanSignal | null {
   for (const rule of rules) {
-    if (rule.checkUrl?.test(ctx.url)) return rule.signal
+    if (matches(rule.checkUrl, ctx.url)) return rule.signal
     if (rule.checkStatus?.includes(ctx.status)) return rule.signal
-    if (rule.checkBody?.test(ctx.body)) return rule.signal
+    if (matches(rule.checkBody, ctx.body)) return rule.signal
   }
   return null
 }

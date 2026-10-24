@@ -8,7 +8,8 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { CookieClient, cookieHostKeys } from '../../../src/lib/storage/cookies.js'
-import { chromeMicros, makeProfile, type Fixture } from '../../helpers/domains-storage/profile-fixture.js'
+import { makeProfile, type Fixture } from '../../helpers/domains-storage/profile-fixture.js'
+import { chromeMicros } from '../../helpers/profile-fixtures.js'
 
 const DDL = `CREATE TABLE cookies (name TEXT, value TEXT, host_key TEXT, path TEXT,
   creation_utc INTEGER, last_access_utc INTEGER, has_expires INTEGER, expires_utc INTEGER,
@@ -30,8 +31,8 @@ describe('8468f7b1 AC2 [tests-unit-data.1] CookieClient', () => {
   it('reads all cookies ordered by last access desc with converted timestamps', () => {
     const cookies = new CookieClient(fx.root).getCookies()
     expect(cookies.map((c) => c.name)).toEqual(['sid', 'pref'])
-    expect(cookies[0].creationUtc.getTime()).toBe(1_000_000)
-    expect(cookies[0].lastAccessUtc.getTime()).toBe(3_000_000)
+    expect(cookies[0].creationUtc?.getTime()).toBe(1_000_000)
+    expect(cookies[0].lastAccessUtc?.getTime()).toBe(3_000_000)
     expect(cookies[0].expiresUtc?.getTime()).toBe(9_000_000)
   })
 

@@ -13,13 +13,16 @@ This package exists because the usual approaches to browser automation — Puppe
 
 ## Entrypoints
 
-| Import path | What it gives you | Status |
+The package has ONE entry, the root `@adhd/stealth-core-browser`; there are no subpath exports. Areas are namespaces on that root:
+
+| Root export | What it gives you | Status |
 |---|---|---|
-| `@adhd/stealth-core-browser/cdp` | CDP connection management, domain services, browser lifecycle | Shipped |
-| `@adhd/stealth-core-browser/storage` | Read-only access to Chrome's History, Cookies, Bookmarks and Profile databases | Shipped (partial) |
-| `@adhd/stealth-core-browser/capture` | Network response capture, DOM tree walk, ban detection, retry/backoff | Shipped |
-| `@adhd/stealth-core-browser/parsers` | Server-side HTML (xpath/class/structural) and JSON extraction | Shipped |
-| `@adhd/stealth-core-browser/chrome-manager` | Auto-start, activity-bumped idle timer, heartbeat, 3-tier safety shutdown | Shipped |
+| `cdp` | CDP connection management, the `CdpClient` domain facade, browser lifecycle | Shipped |
+| `storage` | Read-only access to Chrome's History, Cookies, Bookmarks and Profile databases | Shipped |
+| `capture` | Network response capture, DOM tree walk, ban detection, retry/backoff | Shipped |
+| `parsers` | Server-side HTML (xpath/class/structural) and JSON extraction | Shipped |
+| `chromeManager` | Auto-start, activity-bumped idle timer, reaper-host 3-tier safety shutdown | Shipped |
+| `lifecycle`, `recording`, `endpoint` | Manager seam and reaper, network recording, endpoint policy | Shipped |
 
 ## Installation
 
@@ -39,7 +42,8 @@ pnpm add @adhd/stealth-core-browser
 ### Launch Chrome and navigate
 
 ```typescript
-import { CdpSession, ensureChromeRunning, createPageTarget } from '@adhd/stealth-core-browser/cdp'
+import { cdp } from '@adhd/stealth-core-browser'
+const { CdpSession, ensureChromeRunning, createPageTarget } = cdp
 
 // 1. Ensure Chrome is running (starts it if missing)
 const { port, profileDir } = await ensureChromeRunning()
@@ -60,7 +64,8 @@ page.close()
 ### Capture a network response
 
 ```typescript
-import { captureNetworkResponse } from '@adhd/stealth-core-browser/capture'
+import { capture } from '@adhd/stealth-core-browser'
+const { captureNetworkResponse } = capture
 
 const response = await captureNetworkResponse(pageWsUrl, {
   navigateUrl: 'https://example.com/search?q=test',
@@ -74,17 +79,20 @@ console.log(response.body) // Full HTML/JSON of the matched response
 ### Read Chrome history
 
 ```typescript
-import { HistoryClient } from '@adhd/stealth-core-browser/storage'
+import { storage } from '@adhd/stealth-core-browser'
+const { HistoryClient } = storage
 
 const history = new HistoryClient()
-const lastVisit = history.getLastVisit()
-console.log(`${lastVisit.title} — ${lastVisit.url}`)
+const lastVisit = history.getLastVisit() // null when the history is empty
+if (lastVisit) console.log(`${lastVisit.title} — ${lastVisit.url}`)
 ```
 
 ### Automatic Chrome lifecycle management
 
 ```typescript
-import { ChromeManager } from '@adhd/stealth-core-browser/chrome-manager'
+import { cdp, chromeManager } from '@adhd/stealth-core-browser'
+const { createPageTarget } = cdp
+const { ChromeManager } = chromeManager
 
 const chrome = new ChromeManager({ idleTimeoutMs: 120_000 })
 await chrome.ready()
@@ -99,18 +107,18 @@ await chrome.withBrowser(async () => {
   // ... do work ...
 })
 
-// Shuts down when idle timeout expires (after safety checks)
+// When the idle timeout expires the reaper host closes Chrome only after its safety checks pass
 ```
 
 ## Module Overview
 
 | Module | Key exports | Documents |
 |---|---|---|
-| **cdp** | `CdpSession`, `CdpClient`, `TargetService`, `BrowserService`, `PageService`, `NetworkService`, `SystemService`, `launchChrome`, `ensureChromeRunning`, `killChrome`, `createPageTarget`, `IdleShutdown`, `collectResourceUsage` | [docs/cdp.md](./cdp.md) |
-| **storage** | `HistoryClient`, `CookieClient`, `BookmarkClient`, `ProfileClient`, `openDb` | [docs/storage.md](./storage.md) |
-| **capture** | `captureNetworkResponse`, `walkDomTree`, `checkBans`, `decideRetry`, `detectBanInPage` | [docs/capture.md](./capture.md) |
-| **parsers** | `extractWithXpath`, `extractResultsFromHtml`, `extractResultsFromJson`, `extractStructural` | [docs/parsers.md](./parsers.md) |
-| **chrome-manager** | `ChromeManager`, `ChromeManagerOptions` | [docs/chrome-manager.md](./chrome-manager.md) |
+| **cdp** | `CdpSession`, `CdpClient`, `launchChrome`, `ensureChromeRunning`, `killChrome`, `createPageTarget`, `IdleShutdown`, `collectResourceUsage` | [docs/cdp.md](./cdp.md) |
+| **storage** | `HistoryClient`, `CookieClient`, `BookmarkClient`, `ProfileClient`, `openDb`, `toUnixTimeSql` | [docs/storage.md](./storage.md) |
+| **capture** | `captureNetworkResponse`, `walkDomTree`, `checkBans`, `decideRetry`, `captureAllNetworkResponses` | [docs/capture.md](./capture.md) |
+| **parsers** | `extractWithXpath`, `extractResultsFromHtml`, `extractResultsFromJson`, `extractStructural`, `extractResultsFromEmbeddedJson` | [docs/parsers.md](./parsers.md) |
+| **chrome-manager** | `ChromeManager`, `ChromeManagerOptions`, `isActiveWebTarget` | [docs/chrome-manager.md](./chrome-manager.md) |
 | **endpoint** | `configureEndpointPolicy`, `resolveEndpoint`, `assertSameEndpoint`, `isLoopbackHost`, `allowedHosts`, `portOf`, `DEFAULT_HOST`, `DEFAULT_PORT` | [Endpoint policy](#endpoint-policy) below |
 
 ## Architecture
@@ -124,7 +132,7 @@ src/lib/
 │   ├── shutdown.ts          # IdleShutdown — auto-shutdown timer
 │   └── monitor.ts           # Resource usage tracking, watermarks, cache clearing
 ├── domains/                 # Higher-level CDP domain wrappers
-│   ├── target.ts            # TargetService — page listing, target info
+│   ├── target.ts            # TargetService — page listing, target info (reached through CdpClient)
 │   ├── browser.ts           # BrowserService — version, histograms, windows
 │   ├── page.ts              # PageService — navigation, screenshots, metrics
 │   ├── network.ts           # NetworkService — cookie access
@@ -164,17 +172,19 @@ This package launches Chrome without that flag, using only `--remote-debugging-p
 
 ### Immutable database access
 
-All Chrome SQLite databases (History, Cookies) are opened with `mode=ro&immutable=1` and `PRAGMA query_only = ON`. This means:
+All Chrome SQLite databases (History, Cookies, Bookmarks, Profile) are opened with `mode=ro&immutable=1` and `PRAGMA query_only = ON`. This means:
 - No file locking — multiple processes can read simultaneously
 - No risk of corrupting Chrome's databases
 - No write access (read-only by design)
 
+The trade-off: `immutable=1` tells SQLite the file cannot change, so it ignores the write-ahead log. Rows Chrome has written but not yet checkpointed are invisible, and a read of a database Chrome is writing right now can be stale or, rarely, inconsistent. Treat the readers as a view of the last checkpoint. See [storage.md](./storage.md).
+
 ## Endpoint policy
 
-Every verb and the chrome manager address Chrome through `endpoint.resolveEndpoint({ host, port })`. The host must be a bare host name or address and, by default, loopback (`127.0.0.1`, `localhost`, `::1`). A hosting process that really talks to a remote Chrome opts in once with `endpoint.configureEndpointPolicy({ allowHosts: ['chrome.internal'] })` (the `stealth-search` host exposes this as `--allow-cdp-hosts <comma-separated list>`; loopback only otherwise); the entry point reads no environment variable. The debugger WebSocket URL a Chrome reports must name the host that was asked (`endpoint.assertSameEndpoint`), every CDP HTTP request times out after 5 s, and a frame that is not a CDP message closes the connection with `CDP_BAD_RESPONSE`. The launch lock of a port is reclaimed atomically after 15 s without an owner; a launcher that cannot take it within 30 s fails with `LAUNCH_LOCK_TIMEOUT` and never starts a second Chrome without the lock. A launch that does not answer CDP within 10 s kills the Chrome it spawned (`CHROME_START_TIMEOUT`). `killChrome(port)` signals only the Chrome this process launched on that port, and forgets it the moment the child exits.
+Every verb and the chrome manager address Chrome through `endpoint.resolveEndpoint({ host, port })`. The host must be a bare host name or address and, by default, loopback (`127.0.0.1`, `localhost`, `::1`). A hosting process that really talks to a remote Chrome opts in once with `endpoint.configureEndpointPolicy({ allowHosts: ['chrome.internal'] })` (the `stealth-search` host exposes this as `--allow-cdp-hosts <comma-separated list>`; loopback only otherwise); the entry point reads no environment variable. The debugger WebSocket URL a Chrome reports must name the host that was asked (`endpoint.assertSameEndpoint`), every CDP HTTP request times out after 5 s, and a frame that is not a CDP message closes the connection with `CDP_BAD_RESPONSE`. The launch lock of a port is reclaimed atomically after 15 s without an owner; a launcher that cannot take it within 30 s fails with `LAUNCH_LOCK_TIMEOUT` and never starts a second Chrome without the lock. A launch that does not answer CDP within 10 s kills the Chrome it spawned (`CHROME_START_TIMEOUT`). `killChrome(port)` stops the process group of the Chrome this process launched on that port and forgets it the moment the child exits; for a Chrome it did not launch it acts only on a listener whose command line carries `--user-data-dir=<resolved profile>` and skips any other listener with a logged reason.
 
 ## Verb inputs and results
 
 - `getPageContext({ targetId, host?, port?, userDataDir? })` and `checkChromeActivity({ host?, port?, withinMinutes?, userDataDir? })` read cookies and history from `userDataDir` (default: the dedicated CDP profile). `cookieCount` counts the cookies a request to the page's host would carry (see `CookieClient.getCookiesForHostname`).
-- `shutdownChrome()` never throws. `ok` is `false` when the soft shutdown itself failed; `running` says whether Chrome still answers afterwards (a deliberate deferral to an active session leaves `ok: true, running: true`).
+- `shutdownChrome()` never throws for a failed shutdown, but an invalid endpoint (a host the endpoint policy refuses) rejects with `CDP_UNREACHABLE` and `detail.reason` `invalid-endpoint` before any work. `ok` is `false` when the soft shutdown itself failed; `running` says whether Chrome still answers afterwards (a deliberate deferral to an active session leaves `ok: true, running: true`).
 - A network recording opened through the store sink is created owner-only (0600, in a 0700 directory) together with its `-wal` and `-shm` files, and the open fails with `CAPTURE_SINK_UNAVAILABLE` when that cannot be done. The recorder default stays identity redaction because replay needs the cookies; pass `redactHeaders()` to mask `cookie`, `set-cookie` and `authorization` headers. A token in a URL query string is never masked.

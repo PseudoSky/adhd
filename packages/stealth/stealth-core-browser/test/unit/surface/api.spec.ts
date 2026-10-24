@@ -121,6 +121,22 @@ describe('shutdownChrome', () => {
     expect(lib.shutdownIdleAt).toHaveBeenCalledWith('127.0.0.1', 9555)
     expect(lib.isChromeReachable).toHaveBeenCalledWith('127.0.0.1:9555')
   })
+
+  it('[resolve-findings.2] F125 a failed soft shutdown reports ok:false instead of throwing', async () => {
+    lib.shutdownIdleAt.mockRejectedValue(new Error('boom'))
+    lib.isChromeReachable.mockResolvedValue(true)
+    expect(await shutdownChrome({ port: 9555 })).toEqual({ ok: false, running: true })
+  })
+
+  it('[resolve-findings.2] F125 an endpoint that is not allowed rejects typed before anything is attempted', async () => {
+    lib.shutdownIdleAt.mockClear()
+    await expect(shutdownChrome({ host: 'evil.example', port: 9555 })).rejects.toMatchObject({
+      code: 'CDP_UNREACHABLE',
+      detail: { reason: 'invalid-endpoint' },
+    })
+    await expect(shutdownChrome({ port: 0 })).rejects.toMatchObject({ code: 'CDP_UNREACHABLE' })
+    expect(lib.shutdownIdleAt).not.toHaveBeenCalled()
+  })
 })
 
 describe('listPageTargets', () => {

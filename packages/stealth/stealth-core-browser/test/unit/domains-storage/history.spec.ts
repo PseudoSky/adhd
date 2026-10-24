@@ -11,7 +11,8 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { HistoryClient } from '../../../src/lib/storage/history.js'
-import { chromeMicros, makeProfile, type Fixture } from '../../helpers/domains-storage/profile-fixture.js'
+import { makeProfile, type Fixture } from '../../helpers/domains-storage/profile-fixture.js'
+import { chromeMicros } from '../../helpers/profile-fixtures.js'
 
 const NOW = 1_800_000_000 // unix seconds
 const TYPED = 1 | 0x20000000 // TYPED + CHAIN_END (user-visible)
@@ -107,7 +108,7 @@ describe('8468f7b1 AC2 [tests-unit-data.1] HistoryClient', () => {
   it('getVisitStats groups recent visits by day and excludes older ones', () => {
     const stats = new HistoryClient(fx.root).getVisitStats(30)
     expect(stats.reduce((n, s) => n + s.visits, 0)).toBe(3)
-    expect(stats[0].transitionBreakdown).toEqual({})
+    expect(stats[0].transitionBreakdown).toEqual({ LINK: 1, TYPED: 1, AUTO_SUBFRAME: 1 })
   })
 
   it('getTransitionBreakdown names transitions and respects the window', () => {
@@ -127,6 +128,8 @@ describe('8468f7b1 AC2 [tests-unit-data.1] HistoryClient', () => {
     expect(clusters.map((c) => c.clusterId)).toEqual([7, 8])
     expect(clusters[0].label).toBe('Reading')
     expect(clusters[0].visits.map((v) => v.score)).toEqual([0.9, 0.4])
+    // clusters_and_visits.visit_id is a visits.id: visit 2 is a visit of url 1 (Alpha), visit 1 of url 2 (Beta)
+    expect(clusters[0].visits.map((v) => v.url)).toEqual(['https://a.test/', 'https://b.test/'])
     expect(clusters[1].label).toBeNull()
     expect(clusters[1].visits).toEqual([])
   })

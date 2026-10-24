@@ -23,13 +23,9 @@
  */
 import { randomUUID } from 'node:crypto'
 import type { CdpSession } from '../cdp/session.js'
-import { captureError, errorMessage } from './errors.js'
+import { captureError } from './errors.js'
+import { errorMessage } from '../lifecycle/errors.js'
 import { StealthCoreBrowserError } from '../../errors.js'
-
-/** A CDP frame the recorder cannot read; it is logged and skipped, never fatal. */
-function malformed(what: string): StealthCoreBrowserError {
-  return new StealthCoreBrowserError('CDP_BAD_RESPONSE', what)
-}
 import type {
   Headers,
   RecordedExchange,
@@ -39,6 +35,11 @@ import type {
   RecordingEnvelope,
   RecordingSink,
 } from './types.js'
+
+/** A CDP frame the recorder cannot read; it is logged and skipped, never fatal. */
+function malformed(what: string): StealthCoreBrowserError {
+  return new StealthCoreBrowserError('CDP_BAD_RESPONSE', what)
+}
 
 /** Bounded orphan ExtraInfo buffer. */
 export const EXTRA_INFO_BUFFER_MAX = 1000
@@ -398,6 +399,7 @@ export class NetworkRecorder {
       // The pending count drops BEFORE listeners run, so a listener sees only OTHER work as pending.
       this.bodyFetchPending -= 1
       if (ready) this.settle(d)
+      this.drafts.delete(d.id) // the exchange is final: do not keep every request of a long session in memory
       this.checkIdle()
     })
   }
@@ -423,6 +425,7 @@ export class NetworkRecorder {
     }
     this.rebuildResponse(d)
     this.settle(d)
+    this.drafts.delete(d.id)
     this.checkIdle()
   }
 

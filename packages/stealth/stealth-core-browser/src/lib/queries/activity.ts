@@ -1,5 +1,6 @@
 import { CdpClient } from '../domains/index.js'
 import { HistoryClient } from '../storage/history.js'
+import { isActiveWebTarget } from '../lifecycle/page-tier.js'
 import type { CdpTargetInfo, ChromeVisit, ChromeActivity } from '../types.js'
 
 export async function checkChromeActivity(
@@ -16,7 +17,9 @@ export async function checkChromeActivity(
   let lastVisit: ChromeVisit | null = null
   try { lastVisit = history.getLastVisit() } catch (e) { console.warn('[activity] history unavailable:', (e as Error).message) }
 
-  const active = pages.filter((p) => p.url && p.url !== 'about:blank')
+  // The same rule the idle reaper applies: only a real web document counts as use. chrome://newtab/ (the default
+  // window), about:blank, devtools:// and extension pages do not.
+  const active = pages.filter((p) => isActiveWebTarget(p.url))
   const recentlyUsed = lastVisit
     ? (Date.now() - lastVisit.visitTime.getTime()) < withinMinutes * 60 * 1000
     : false

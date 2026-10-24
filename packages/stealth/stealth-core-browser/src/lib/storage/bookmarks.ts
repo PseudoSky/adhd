@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { chromeProfileDir } from '../helpers.js'
+import { chromeProfileDir, chromeTimeToDateOrNull } from '../helpers.js'
 import type { BookmarkNode } from '../types.js'
 
 /** Shape of a node in Chrome's on-disk `Bookmarks` JSON (all fields optional on disk). */
@@ -41,8 +41,9 @@ export class BookmarkClient {
       id: String(raw.id ?? ''),
       name: String(raw.name ?? ''),
       type: raw.type === 'url' || raw.url ? 'url' : 'folder',
-      dateAdded: raw.date_added ? new Date(Math.floor(Number(raw.date_added) / 1000)) : undefined,
-      dateModified: raw.date_modified ? new Date(Math.floor(Number(raw.date_modified) / 1000)) : undefined,
+      // Chrome writes these as microseconds since 1601-01-01, like every other Chrome timestamp.
+      dateAdded: chromeTimeToDateOrNull(raw.date_added) ?? undefined,
+      dateModified: chromeTimeToDateOrNull(raw.date_modified) ?? undefined,
     }
     if (raw.type === 'url' || raw.url) node.url = String(raw.url ?? '')
     if (raw.children && Array.isArray(raw.children)) {

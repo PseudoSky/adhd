@@ -81,7 +81,7 @@ describe('Scenario: keep a shared Chrome open while a person is browsing and clo
     const status = await chromeStatus({ port: world.port })
     expect(status).toMatchObject({ running: true, version: 'Chrome/150.0.1', managed: true })
     await launchChrome({ port: world.port, userDataDir: home.profileDir })
-    expect(link.activities).toBeGreaterThanOrEqual(2)
+    expect(link.activities).toBe(2) // one activity per launchChrome call: exactly two calls were made
   })
 
   it('[tests-use-cases.2] checkChromeActivity tells the job a person is on the page and recently visited it', async () => {

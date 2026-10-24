@@ -194,9 +194,12 @@ export async function launchChrome(input?: LaunchChromeInput): Promise<LaunchChr
 
 /**
  * Soft-shutdown the managed Chrome: close it only when it is genuinely idle,
- * deferring to other sessions and to any open web page. Never throws: `ok` is
- * false when the shutdown itself failed, and `running` reports whether Chrome
- * is still running afterwards.
+ * deferring to other sessions and to any open web page. A failed shutdown does
+ * not throw: `ok` is false and `running` reports whether Chrome is still
+ * running afterwards. The one exception is an input endpoint that is not
+ * allowed (a non-loopback host the process did not allow, a bad port), which
+ * rejects with `CDP_UNREACHABLE` (`detail.reason: 'invalid-endpoint'`) before
+ * anything is attempted.
  */
 export async function shutdownChrome(input?: ChromeEndpointInput): Promise<ShutdownChromeResult> {
   const { host, port, cdpHost } = resolveEndpoint(input)
@@ -243,6 +246,6 @@ export async function checkChromeActivity(input?: CheckChromeActivityInput): Pro
 export async function getPageContext(input: GetPageContextInput): Promise<PageContextResult> {
   const cdpHost = resolveCdpHost(input)
   const context = await readPageContext(input.targetId, cdpHost, input.userDataDir)
-  noteActivity(input ?? {})
+  noteActivity(input)
   return { found: context !== null, context }
 }

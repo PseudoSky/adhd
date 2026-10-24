@@ -9,7 +9,7 @@
 | Profile | Path |
 |---------|------|
 | Default Chrome profile | `~/Library/Application Support/Google/Chrome/Default/History` |
-| Chrome-CDP (remote debug) profile | `~/Library/Application Support/Google/Chrome/Default/History` |
+| Chrome-CDP (remote debug) profile, the one `@adhd/stealth-core-browser` launches and reads by default | `~/Library/Application Support/Google/Chrome-CDP/Default/History` |
 | Canary | `~/Library/Application Support/Google/Chrome Canary/Default/History` |
 | Chromium | `~/Library/Application Support/Chromium/Default/History` |
 
@@ -625,7 +625,6 @@ Chrome opens the History database in **Write-Ahead Log (WAL) mode**, which allow
 
 ```python
 conn = sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True)
-conn.execute("PRAGMA journal_mode=WAL;")       # Allow reading WAL content
 conn.execute("PRAGMA query_only = ON;")         # Prevent accidental writes
 conn.execute("PRAGMA temp_store = MEMORY;")     # Performance
 ```
@@ -641,7 +640,6 @@ def query_history(sql, params=(), retries=3, delay=0.1):
         try:
             conn = sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True)
             conn.execute("PRAGMA query_only = ON;")
-            conn.execute("PRAGMA journal_mode=WAL;")
             cur = conn.execute(sql, params)
             results = cur.fetchall()
             conn.close()
@@ -652,6 +650,10 @@ def query_history(sql, params=(), retries=3, delay=0.1):
                 continue
             raise
 ```
+
+### How `@adhd/stealth-core-browser` reads it
+
+The package opens the database with `mode=ro&immutable=1` (see [storage.md](../storage.md)). `immutable=1` makes SQLite ignore the `-wal` file and take no locks, so Chrome is never blocked, but rows still in the WAL are invisible and a read that overlaps a Chrome write can be stale or inconsistent. The examples above that omit `immutable=1` do read the WAL and take shared locks; use those when you need the newest rows.
 
 ### Using `sqlite3` CLI
 
@@ -665,7 +667,7 @@ sqlite3 "file:${HOME}/Library/Application Support/Google/Chrome/Default/History?
 
 ### Chrome Running (WAL mode)
 
-When Chrome is open, the DB can be read safely via WAL mode. The `History-wal` file may contain uncheckpointed writes. Always set `PRAGMA journal_mode=WAL` before reading to include WAL content.
+When Chrome is open, a connection opened with `mode=ro` (no `immutable`) reads the WAL and sees uncheckpointed writes; a connection opened with `immutable=1` does not (see above). `PRAGMA journal_mode=WAL` is not needed: the database is already in WAL mode, and changing the journal mode is a write that a read-only connection refuses.
 
 ### Corrupted Database
 

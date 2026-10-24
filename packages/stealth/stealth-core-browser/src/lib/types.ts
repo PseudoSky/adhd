@@ -74,8 +74,10 @@ export interface CookieInfo {
   value: string
   host: string
   path: string
-  creationUtc: Date
-  lastAccessUtc: Date
+  /** `null` when Chrome never recorded the time (the column is 0). */
+  creationUtc: Date | null
+  /** `null` when Chrome never recorded the time (the column is 0). */
+  lastAccessUtc: Date | null
   hasExpires: boolean
   expiresUtc: Date | null
   isSecure: boolean

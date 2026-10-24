@@ -7,7 +7,8 @@ Part of `@adhd/stealth-core-browser`; consumed by the capture layer, the chrome 
 ## Quick start
 
 ```ts
-import { ensureChromeRunning, createPageTarget, CdpSession } from '@adhd/stealth-core-browser/cdp'
+import { cdp } from '@adhd/stealth-core-browser'
+const { ensureChromeRunning, createPageTarget, CdpSession } = cdp
 
 // 1. Launch Chrome (idempotent — no-ops if already running)
 await ensureChromeRunning()
@@ -19,17 +20,15 @@ const { pageWsUrl } = await createPageTarget('127.0.0.1:9222')
 const session = new CdpSession()
 await session.connect(pageWsUrl)
 await session.send('Page.navigate', { url: 'https://example.com' })
-const title = await session.send<{ result: { value: string } }>(
-  'Runtime.evaluate',
-  { expression: 'document.title' },
-)
-console.log(title.result.value) // "Example Domain"
+// Read the page from the DOM domain (no Runtime.evaluate: script injection is detectable)
+const { root } = await session.send<{ root: { nodeId: number } }>('DOM.getDocument', { depth: 0 })
+console.log(root.nodeId)
 session.close()
 ```
 
 ## Modules
 
-### Session (`src/session.ts`)
+### Session (`src/lib/cdp/session.ts`)
 
 Raw CDP WebSocket with command/response + event subscription.
 
@@ -49,7 +48,7 @@ session.on('Network.responseReceived', (params) => {
 })
 ```
 
-### Targets (`src/targets.ts`)
+### Targets (`src/lib/cdp/targets.ts`)
 
 Page target lifecycle.
 
@@ -63,7 +62,7 @@ Page target lifecycle.
 | `closePageTarget(cdpHost, targetId)` | Close a specific tab |
 | `closeAllPageTargets(cdpHost)` | Close every page tab |
 
-### Browser (`src/browser.ts`)
+### Browser (`src/lib/cdp/browser.ts`)
 
 Chrome process lifecycle — launch, ensure, kill.
 
@@ -71,7 +70,7 @@ Chrome process lifecycle — launch, ensure, kill.
 |---|---|
 | `launchChrome(opts?)` | Launch Chrome with `--remote-debugging-port`. No `--enable-automation`. Waits up to 10s for CDP. |
 | `ensureChromeRunning(opts?)` | `launchChrome` if not reachable, no-op if already running. Main entry point for consumers. |
-| `killChrome(opts?)` | Kill the Chrome process we launched (not externally-managed ones) |
+| `killChrome(port?, opts?)` | Stop the process group of the Chrome this process launched; otherwise only a listener whose command line carries `--user-data-dir=<resolved profile>` (others are skipped with a logged reason) |
 | `isChromeRunning(cdpHost)` | Alias for `isChromeReachable` |
 
 Launch options:
@@ -90,7 +89,7 @@ Key design (the stealth launch recipe):
 - **Idempotent** — no-ops if already running
 - **Background** — `spawn` with `detached: true`, survives parent exit
 
-### Monitor (`src/monitor.ts`)
+### Monitor (`src/lib/cdp/monitor.ts`)
 
 Resource usage collection and GC.
 
@@ -119,7 +118,7 @@ console.log(formatResourceUsage(usage))
 // "RSS: 342MB | heap: 128/512MB | cache: 12.3MB | CPU: Apple M3 (8 cores)"
 ```
 
-### Shutdown (`src/shutdown.ts`)
+### Shutdown (`src/lib/cdp/shutdown.ts`)
 
 Idle-based auto-shutdown to prevent Chrome process accumulation.
 

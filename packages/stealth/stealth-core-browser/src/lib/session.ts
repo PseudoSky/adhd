@@ -5,24 +5,13 @@
  * opened during this session so audit logs can correlate events.
  */
 
-let _uuid: string | null = null
+import { randomUUID } from 'node:crypto'
 
-/** RFC 4122 v4 UUID. */
-function generateUuid(): string {
-  const hex = '0123456789abcdef'
-  const bits = new Uint8Array(16)
-  crypto.getRandomValues(bits)
-  bits[6] = (bits[6] & 0x0f) | 0x40
-  bits[8] = (bits[8] & 0x3f) | 0x80
-  return Array.from(bits, (b, i) => {
-    const h = hex[b >> 4] + hex[b & 0x0f]
-    return [4, 6, 8, 10].includes(i) ? `-${h}` : h
-  }).join('')
-}
+let _uuid: string | null = null
 
 /** Get the current session UUID (lazy-initialized). */
 export function getSessionId(): string {
-  if (!_uuid) _uuid = generateUuid()
+  if (!_uuid) _uuid = randomUUID()
   return _uuid
 }
 

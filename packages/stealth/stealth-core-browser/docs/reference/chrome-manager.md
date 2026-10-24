@@ -1,34 +1,38 @@
-# `/chrome-manager` — Automatic Chrome Lifecycle Management
+# `chromeManager` — Automatic Chrome Lifecycle Management
 
-`ChromeManager` provides auto-start, activity-bumped idle timer, and safety-checked auto-shutdown for the Chrome browser process. It composes the `cdp` layer (`src/lib/cdp/`) (browser lifecycle, idle timer) with domain/storage checks (CDP targets + history DB).
+`ChromeManager` is the Chrome lifecycle of one client process: race-free auto-start, an activity-bumped idle timer, and an idle shutdown that never closes a Chrome someone else is using. It lives in `src/lib/chrome-manager.ts` and is exported as the `chromeManager` namespace.
 
 ## Why a ChromeManager?
 
 In agent-driven automation, Chrome instances accumulate when agents forget to clean up or when sessions end abnormally. `ChromeManager` solves this with:
 
-1. **Auto-start** — Chrome launched on first use if not reachable
-2. **Activity bump** — Every CDP operation resets the idle timer
-3. **Multi-process safety** — Shared heartbeat file so one process doesn't kill Chrome another process is using
-4. **3-tier safety check** — Before shutting down, verifies: (a) heartbeat → (b) CDP active targets → (c) Chrome history for recent activity
-5. **Graceful shutdown** — Closes all page targets, then kills the Chrome process (using port-specific `lsof` — safe)
+1. **Auto-start** — Chrome is launched on first use if it is not reachable.
+2. **Activity bump** — `bump()` (and `withBrowser`) re-arms the idle timer and tells the reaper.
+3. **Multi-process safety** — Every manager holds ONE connection to the *reaper host* of its port. The host keeps the registry of connected clients, so one process never closes a Chrome another process is using.
+4. **3-tier safety check** — Before an idle shutdown the reaper host verifies: (a) sibling client activity, (b) open http(s) pages, (c) recent Chrome history.
+5. **Ordered reap** — The host closes the page targets, then stops the Chrome process group.
+
+There is no shared heartbeat file. A client's connection closes when the client dies, so a dead process can never pin Chrome, and the host outlives every client, so Chrome is never orphaned.
 
 ## Usage
 
 ### Basic lifecycle
 
+Hosts normally read managers through the `lifecycle` seam (`lifecycle.managerFor(host, port)`), which is the one place a manager is constructed. A manager can also be constructed directly:
+
 ```typescript
-import { ChromeManager } from '@adhd/stealth-core-browser/chrome-manager'
+import { chromeManager } from '@adhd/stealth-core-browser'
+const { ChromeManager } = chromeManager
 
 const chrome = new ChromeManager({
-  idleTimeoutMs: 120_000,  // 2 minutes of inactivity
-  checkHistory: true,       // Check Chrome history for recent use
+  idleTimeoutMs: 120_000, // 2 minutes of inactivity
+  checkHistory: true,     // recent Chrome history keeps Chrome alive
 })
 
-// Start Chrome (no-op if already running)
+// Start Chrome (no-op if already running) and register with the reaper
 await chrome.ready()
-// → Chrome running on port 9222
 
-// Bump the timer after every CDP operation
+// Real work happened: re-arm the idle timer and tell the reaper
 chrome.bump()
 
 // Force immediate shutdown
@@ -37,34 +41,28 @@ await chrome.shutdown()
 
 ### Auto-lifecycle with `withBrowser`
 
-The `withBrowser` method ensures Chrome is running for the duration of a function, bumping the timer after completion:
+`withBrowser` ensures Chrome is running for the duration of a function and bumps the timer when it completes or throws:
 
 ```typescript
 await chrome.withBrowser(async () => {
-  const { pageWsUrl } = await createPageTarget('127.0.0.1:9222')
+  const { pageWsUrl } = await cdp.createPageTarget('127.0.0.1:9222')
   // ... use the page ...
-  // Timer is bumped automatically in the finally block
+  // bump() runs in the finally block
 })
 ```
 
-### Full MCP-style integration
+### Long-lived host
 
 ```typescript
 const chrome = new ChromeManager({
-  idleTimeoutMs: 300_000,     // 5 min idle
-  heartbeatPath: '/tmp/stealth-browser-heartbeat',
+  keepAlive: true, // never arm the idle timer
   logger: (msg) => console.error(`[chrome] ${msg}`),
 })
 
-// Start
 await chrome.ready()
 
-// Wrap all tool handlers with activity bumps
-toolHandler.on('beforeEach', () => chrome.bump())
-
-// Shutdown when the server exits
 process.on('SIGTERM', async () => {
-  await chrome.shutdown()
+  await chrome.shutdownIfIdle() // closes Chrome only if nobody else uses it
   process.exit(0)
 })
 ```
@@ -73,208 +71,126 @@ process.on('SIGTERM', async () => {
 
 ### `ChromeManagerOptions`
 
-```typescript
-interface ChromeManagerOptions {
-  /** CDP host. Default: 127.0.0.1:9222 */
-  cdpHost?: string
-  /** Idle timeout in ms. Default: 120_000 (2 min) */
-  idleTimeoutMs?: number
-  /** Path to shared heartbeat file. Default: /tmp/stealth-browser-heartbeat */
-  heartbeatPath?: string
-  /** If true, check Chrome history for recent activity. Default: true */
-  checkHistory?: boolean
-  /** Log function. Default: console.error */
-  logger?: (msg: string) => void
-}
-```
-
 | Option | Default | Description |
 |---|---|---|
-| `cdpHost` | `'127.0.0.1:9222'` | Host:port for the CDP endpoint |
-| `idleTimeoutMs` | `120_000` (2 min) | Inactivity period before auto-shutdown |
-| `heartbeatPath` | `/tmp/stealth-browser-heartbeat` | Path to shared heartbeat file for cross-process coordination |
-| `checkHistory` | `true` | Whether to check Chrome's visit history as an activity signal |
+| `cdpHost` | `'127.0.0.1:9222'` | `host:port` of the CDP endpoint |
+| `idleTimeoutMs` | `120_000` (2 min) | Inactivity period before the soft idle reap |
+| `keepAlive` | `false` | `true` never arms the idle timer; `shutdown()`, `shutdownIfIdle()` and the reaper's own decisions are unchanged |
+| `entryPath` | the bundle this code runs from | The built CommonJS package entry the detached reaper process loads `runChromeReaper` through |
+| `userDataDir` | the dedicated CDP profile | Chrome user data directory this manager launches and may kill |
+| `checkHistory` | `true` | Let a Chrome history visit within 2 minutes keep Chrome alive |
+| `shutdownGraceMs` | `30_000` | Grace after the last client left before the reaper closes Chrome |
+| `orphanWindowMs` | `30_000` | A reaper host nobody uses retires this long after Chrome is gone |
+| `stateDir` | `<os.tmpdir()>/stealth-browser-<uid>-<port>` | Private state directory (lock, ownership record, breaker, reaper socket) |
+| `reaperScope` | `'port-occupant'` | What the reaper may close: the port occupant, or only a Chrome it can prove it launched (`'launched-only'`) |
+| `link` | the service-proxy reaper link of this port | The reaper seam (tests inject a fake) |
 | `logger` | `console.error` | Log function for diagnostics |
 
 ## Methods
 
 ### `ready()`
 
-Ensure Chrome is running. Idempotent — subsequent calls no-op. Starts the idle timer and writes the first heartbeat.
+Ensure Chrome is running and registered with the reaper. Idempotent. When the manager already believes Chrome is up it re-verifies reachability (one `GET /json/version`) and only then takes the fast path, because another process may have killed the shared Chrome. After a launch it hides all windows and starts the idle timer; the fast path never re-hides a window revealed for a human.
 
-```typescript
-await chrome.ready()
-```
+Rejects with a typed lifecycle error when the launch circuit breaker is open, the launch fails, or CDP never answers after the launch. A refusal to attach to a Chrome running on a foreign profile throws `LAUNCH_FAILED` with `detail.reason === 'foreign-profile'` and does not feed the breaker.
 
 ### `bump()`
 
-Reset the idle timer and write a heartbeat timestamp. Call after every CDP operation.
-
-```typescript
-// After any CDP operation:
-chrome.bump()
-```
+Real work happened: re-arm the idle timer and send `activity` to the reaper. Call after every CDP operation. A no-op before `ready()`. If the reaper link is down, `bump()` makes at most one reconnect attempt per 2 s when Chrome is reachable.
 
 ### `shutdown()`
 
-Force immediate shutdown — skips all safety checks, closes page targets, kills Chrome.
+Force immediate shutdown: it cancels the idle timer, closes all page targets, runs `killChrome` for this manager's port (and `userDataDir`, if set), removes the ownership record and leaves the reaper registry. It ignores every safety tier and makes no reaper round-trip. Failures to close targets or kill Chrome are logged, not thrown.
 
-```typescript
-await chrome.shutdown()
-```
+`killChrome` stops the process group of the Chrome this process launched. For a Chrome it did not launch, it acts only on a listener whose command line carries `--user-data-dir=<resolved profile>`; any other listener is skipped with a logged reason. It never kills "whatever owns the port".
+
+### `shutdownIfIdle()`
+
+SOFT shutdown: cancels the idle timer and asks the reaper host whether Chrome is genuinely idle. The host defers to a sibling client, an open http(s) page, or recent history. It never force-kills a Chrome another session or a human's captcha window is using. Safe for process-exit paths. Without an answer from the host it re-arms the timer and closes nothing.
+
+### `release()`
+
+Leave the reaper registry. The process may live on; its next `ready()` re-registers. Never throws.
 
 ### `withBrowser(fn)`
 
-Run a function with automatic Chrome lifecycle management. Ensures Chrome is running before `fn`, bumps the timer after `fn` completes (or fails).
-
-```typescript
-const result = await chrome.withBrowser(async () => {
-  const response = await captureNetworkResponse(pageWsUrl, {
-    navigateUrl: 'https://example.com',
-    urlPattern: /example\.com/,
-  })
-  return response.body
-})
-```
+Runs `ready()`, then `fn`, then `bump()` in a `finally`. Returns `fn`'s result.
 
 ### `isReady`
 
-Check if Chrome has been initialized.
+`true` once `ready()` has verified a running Chrome and until a real shutdown.
+
+### `status()`
 
 ```typescript
-if (chrome.isReady) {
-  console.log('Chrome is running')
+interface ChromeStatus {
+  ready: boolean                    // this manager has a verified, running Chrome
+  owned: boolean                    // this process launched the running Chrome
+  processes: number                 // clients connected to the reaper (0 when unavailable)
+  activeProcesses: number           // clients active within the idle window
+  httpPages: number | 'unreachable' // open http(s) pages
+  reaper: boolean                   // the out-of-process reaper is connected (false = degraded)
+  breaker: { open: boolean; retryAfterMs?: number }
+  siblingWarning: boolean           // many sibling clients are connected (diagnostic only)
 }
 ```
 
 ## 3-Tier Safety Shutdown
 
-When the idle timer expires, `ChromeManager` does NOT immediately kill Chrome. Instead, it runs three safety checks in sequence:
+When the idle timer fires (or `shutdownIfIdle()` is called) the manager asks the reaper host to `reapIfIdle`. The host evaluates three tiers in order:
 
-### Tier 1: Cross-Process Heartbeat
+1. **Sibling activity** — another connected client was active within the idle window.
+2. **Open http(s) pages** — Chrome's `/json/list` shows a non-blank http(s) page. This catches interactive browsing.
+3. **Recent history** — when `checkHistory` is on, a Chrome history visit within 2 minutes keeps Chrome alive. If the history database is unavailable the check is skipped.
 
-Checks `/tmp/stealth-browser-heartbeat` for heartbeats from other processes within the idle timeout window.
+If any tier pins Chrome, the manager logs `Chrome in use (<tier>) — deferring`, re-arms the timer and sends nothing (livelock protection: only genuine use sends `activity`, so idle processes cannot keep each other alive). If no tier pins it, the host performs the ordered reap and the manager resets to not-ready; a later `ready()` relaunches and arms a fresh timer. The soft reap answers within 3 s or the manager defers.
 
-```typescript
-// If another process bumped the heartbeat in the last idleTimeoutMs:
-// → "pid 12345 active 30s ago — deferring"
-// → Resets the timer and returns
-```
+## Degraded mode
 
-The heartbeat file is a simple text file, one `pid:timestamp_ms` per line. Dead PIDs (checked via `process.kill(pid, 0)`) are filtered out.
+When the reaper cannot be started (for example an unsafe state directory), `ready()` still succeeds, `status().reaper` is `false`, exactly one warning is logged, the idle timer still fires but never closes Chrome (it cannot see siblings), and a forced `shutdown()` still works.
 
-### Tier 2: Live CDP Targets
+## Idle Timer
 
-Queries Chrome's `/json/list` for non-blank page targets.
-
-```typescript
-// If there are active pages (not about:blank):
-// → "3 active page(s) found — Chrome in use"
-// → Resets the timer and returns
-```
-
-This catches interactive browsing — if a human has pages open, Chrome won't be killed.
-
-### Tier 3: Chrome History (Optional)
-
-Reads the Chrome-CDP History database for recent visits.
-
-```typescript
-// If the most recent visit is within 2 minutes:
-// → "recent history activity found — Chrome in use"
-// → Resets the timer and returns
-```
-
-Controlled by the `checkHistory` option (default: `true`). If the history DB is unavailable (Chrome not fully started, or using a non-standard profile), this check is silently skipped.
-
-### Shutdown
-
-If all three checks pass (no activity detected), the shutdown proceeds:
-
-1. Close all page targets via `closeAllPageTargets()`
-2. Kill Chrome via `killChrome()` (port-specific `lsof`, never `pkill`)
-3. Set `_ready = false`
-
-## Shared Heartbeat File
-
-The heartbeat file at `/tmp/stealth-browser-heartbeat` enables multi-process coordination. Every process that uses `ChromeManager`:
-
-- Writes its PID + current timestamp on every `bump()`
-- Reads the full heartbeat file on each `bump()`, updating its own entry
-- Before shutdown, checks if ANY other process (with a live PID) has bumped within the idle timeout window
-
-Heartbeat format:
-```
-12345:1689000000000
-12346:1689000012000
-```
-
-Dead PIDs are skipped (checked by `process.kill(pid, 0)` — if the process doesn't exist, it's filtered out). This means stale entries from crashed processes don't prevent shutdown.
-
-## Idle Timer Implementation
-
-The idle timer is driven by `IdleShutdown` from the `cdp` layer:
-
-```typescript
-new IdleShutdown({
-  timeoutMs: opts.idleTimeoutMs,
-  logger: (m) => log(m),
-  onShutdown: () => _doShutdown(false), // non-force shutdown with safety checks
-})
-```
-
-- Timer starts when `ready()` is called
-- `bump()` calls `idle.reset()` to restart the countdown
-- Timer is `unref`'d so it doesn't prevent Node.js from exiting
-- Will not fire again after shutdown (checked via `_fired`)
+The timer is an `IdleShutdown` (`src/lib/cdp/shutdown.ts`) whose `onShutdown` is the soft reap above. It starts at `ready()`, restarts on `bump()`, is `unref`'d so it never keeps Node.js alive, and is cancelled by a real shutdown. A manager created with `keepAlive: true` arms no timer.
 
 ## Error Handling
 
 | Method | Failure mode | Behavior |
 |---|---|---|
-| `ready()` | Chrome launch fails | Throws `Error` with details (binary not found, CDP not reachable after 10s) |
-| `bump()` | Heartbeat write fails | Silently caught (best effort) |
-| `shutdown()` | Target close fails | Silently caught (best effort) |
-| `shutdown()` | `killChrome` fails | Silently caught (best effort) |
-| Safety checks | CDP unreachable, DB unavailable | Check is skipped, proceeds to next tier |
+| `ready()` | Breaker open, launch fails, CDP never answers | Rejects with a typed lifecycle error (`LAUNCH_FAILED`, `CHROME_START_TIMEOUT`, ...) |
+| `bump()` | Reaper unreachable | Logged, never thrown |
+| `shutdown()` | Target close or `killChrome` fails | Logged, never thrown |
+| `release()` | Link error | Logged, never thrown |
+| Soft reap | Reaper unavailable, no answer | Chrome is not closed; the timer re-arms |
 
 ## Complete Example
 
 ```typescript
-import { ChromeManager } from '@adhd/stealth-core-browser/chrome-manager'
-import { createPageTarget, closePageTarget } from '@adhd/stealth-core-browser/cdp'
-import { captureNetworkResponse } from '@adhd/stealth-core-browser/capture'
-import { extractWithXpath } from '@adhd/stealth-core-browser/parsers'
+import { chromeManager, cdp, capture, parsers } from '@adhd/stealth-core-browser'
+const { ChromeManager } = chromeManager
+const { createPageTarget, closePageTarget } = cdp
+const { captureNetworkResponse } = capture
+const { extractWithXpath } = parsers
 
 async function search(query: string) {
   const chrome = new ChromeManager({
-    idleTimeoutMs: 60_000,     // 1 min idle
-    heartbeatPath: '/tmp/my-search-heartbeat',
-    checkHistory: false,        // Don't check history (dedicated Chrome-CDP profile)
+    idleTimeoutMs: 60_000, // 1 min idle
+    checkHistory: false,   // dedicated Chrome-CDP profile
   })
 
-  await chrome.ready()
-
-  try {
+  return chrome.withBrowser(async () => {
     const { targetId, pageWsUrl } = await createPageTarget('127.0.0.1:9222')
-
     try {
       const response = await captureNetworkResponse(pageWsUrl, {
         navigateUrl: `https://www.google.com/search?q=${encodeURIComponent(query)}`,
         urlPattern: /google\.com\/search/,
         timeoutMs: 10_000,
       })
-
-      chrome.bump() // Reset idle timer
-
       return extractWithXpath(response.body)
     } finally {
       await closePageTarget('127.0.0.1:9222', targetId)
     }
-  } finally {
-    // Shutdown when done (force = skip safety checks)
-    await chrome.shutdown()
-  }
+  })
 }
 ```
 
@@ -282,11 +198,9 @@ async function search(query: string) {
 
 | Aspect | `ChromeManager` | Raw `launchChrome` / `ensureChromeRunning` |
 |---|---|---|
-| Auto-start | ✅ On first `ready()` | ✅ Via `ensureChromeRunning()` |
-| Idle timer | ✅ Built-in, configurable | ❌ Manually with `IdleShutdown` |
-| Multi-process safety | ✅ Shared heartbeat file | ❌ Not handled |
-| Safety checks | ✅ 3-tier before shutdown | ❌ Not included |
-| `withBrowser()` | ✅ Automatic lifecycle | ❌ Manual `try/finally` |
-| Force shutdown | ✅ `shutdown()` | ✅ `killChrome()` |
-| Granularity | Process-level | Process-level |
-| Dependencies | cdp + domains + storage | None beyond cdp |
+| Auto-start | On first `ready()` | Via `ensureChromeRunning()` |
+| Idle timer | Built in, configurable | Manually with `IdleShutdown` |
+| Multi-process safety | Reaper host registry | Not handled |
+| Safety checks | 3 tiers before an idle shutdown | Not included |
+| `withBrowser()` | Automatic lifecycle | Manual `try/finally` |
+| Force shutdown | `shutdown()` | `killChrome()` |

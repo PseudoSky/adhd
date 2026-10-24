@@ -178,7 +178,8 @@ describe('8468f7b1 [core-seam.6] killChrome signals only a pid whose command lin
     const probe = probeOf([{ pid: 4242, pgid: 4200, cmd: ownCmd() }])
     await mod.killChrome(PORT, { probe })
     expect(real()[0]).toEqual([-4200, 'SIGTERM'])
-    expect(real()[real().length - 1]).toEqual([-4242, 'SIGKILL'])
+    // the escalation addresses the SAME group the SIGTERM did (the probe's pgid), not the listener's own pid
+    expect(real()[real().length - 1]).toEqual([-4200, 'SIGKILL'])
     expect(logs).toEqual([])
   })
 

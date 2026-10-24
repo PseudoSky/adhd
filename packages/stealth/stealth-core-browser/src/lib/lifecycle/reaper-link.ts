@@ -280,8 +280,13 @@ export function createProxyReaperLink(cfg: ProxyReaperLinkConfig): ReaperLink {
       }
     },
     async reapIfIdle(): Promise<ReapOutcome | null> {
-      const r = await request('reapIfIdle')
-      return isOk(r) ? (r.result as ReapOutcome) : null
+      try {
+        const r = await request('reapIfIdle')
+        return isOk(r) ? (r.result as ReapOutcome) : null
+      } catch (e) {
+        log(`reapIfIdle not answered: ${(e as Error).message}`)
+        return null
+      }
     },
     async release(): Promise<void> {
       const conn = current
@@ -295,8 +300,13 @@ export function createProxyReaperLink(cfg: ProxyReaperLinkConfig): ReaperLink {
       }
     },
     async status(): Promise<ReaperStatus | null> {
-      const r = await request('status')
-      return isOk(r) ? (r.result as ReaperStatus) : null
+      try {
+        const r = await request('status')
+        return isOk(r) ? (r.result as ReaperStatus) : null
+      } catch (e) {
+        log(`status not answered: ${(e as Error).message}`)
+        return null
+      }
     },
     isUp: () => current !== null,
     lastError: () => lastError,

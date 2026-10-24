@@ -21,7 +21,8 @@ Event-driven CDP network capture. Opens a WebSocket to a page, subscribes to `Ne
 **Speed:** Typically ~800ms for static HTML providers.
 
 ```typescript
-import { captureNetworkResponse } from '@adhd/stealth-core-browser/capture'
+import { capture } from '@adhd/stealth-core-browser'
+const { captureNetworkResponse } = capture
 
 const response = await captureNetworkResponse(
   pageWsUrl,                             // From createPageTarget()
@@ -83,26 +84,28 @@ After the first body is captured, the function waits `extraWaitMs` (or 500ms def
 
 1. Prefer the first captured response body
 2. Fallback to the last captured body
-3. Throw `'timeout'` if nothing was captured
+3. Throw `CAPTURE_TIMEOUT` if nothing was captured
 
 ### Ban detection during capture
 
 If `banRules` are provided, the captured response is checked before returning:
 
 ```typescript
-// If any rule matches, captureNetworkResponse throws:
-// Error: Ban detected: captcha
-// Error: Ban detected: banned
-// Error: Ban detected: rate_limited
+// If any rule matches, captureNetworkResponse throws a CaptureError:
+//   code: 'CAPTURE_BAN_DETECTED'
+//   detail: { signal: 'captcha' | 'banned' | 'rate_limited' | ..., url, status }
 ```
 
 ### Error Handling
 
 | Condition | Throws |
 |---|---|
-| No matching request captured after `timeoutMs` | `Error('timeout')` |
-| WebSocket connection fails | `Error('WebSocket error')` |
-| Ban rule matches | `Error('Ban detected: <signal>')` |
+| No matching request captured after `timeoutMs` | `CaptureError` `CAPTURE_TIMEOUT` (or `CAPTURE_NO_MATCH` when responses were captured but none matched) |
+| WebSocket connection fails | `CaptureError` `CAPTURE_CONNECT_FAILED` |
+| Socket closes before a match | `CaptureError` `CAPTURE_SESSION_CLOSED` |
+| Ban rule matches | `CaptureError` `CAPTURE_BAN_DETECTED`, `detail.signal` is the rule's signal |
+
+Every code is documented in [ERRORS.md](../ERRORS.md).
 
 ## `walkDomTree`
 
@@ -111,8 +114,9 @@ Walk the CDP DOM tree of a page to extract results using pattern-based or struct
 **Use this only when network capture can't reach the data (e.g., SPAs that load data via client-side rendering).**
 
 ```typescript
-import { walkDomTree } from '@adhd/stealth-core-browser/capture'
-import { CdpSession } from '@adhd/stealth-core-browser/cdp'
+import { capture, cdp } from '@adhd/stealth-core-browser'
+const { walkDomTree } = capture
+const { CdpSession } = cdp
 
 const page = new CdpSession()
 await page.connect(pageWsUrl)
@@ -203,7 +207,8 @@ The structural walker:
 Check the rendered DOM for common captcha/ban patterns. Uses broad CSS selector matching.
 
 ```typescript
-import { detectBanInPage } from '@adhd/stealth-core-browser/capture'
+import { capture } from '@adhd/stealth-core-browser'
+const { detectBanInPage } = capture
 
 const banSignal = await detectBanInPage(pageSession, docNodeId)
 if (banSignal) {
@@ -219,7 +224,8 @@ if (banSignal) {
 Check a response (URL, status, body) against a set of ban rules.
 
 ```typescript
-import { checkBans, type BanRule, type BanSignal } from '@adhd/stealth-core-browser/capture'
+import { capture, type BanRule, type BanSignal } from '@adhd/stealth-core-browser'
+const { checkBans } = capture
 
 const signal = checkBans(
   [
@@ -270,7 +276,8 @@ The function evaluates rules in order; the first matching rule wins. Each rule c
 Given a response outcome and retry configuration, decide whether to retry and how long to wait. Implements exponential backoff with jitter.
 
 ```typescript
-import { decideRetry, type RetryConfig } from '@adhd/stealth-core-browser/capture'
+import { capture, type RetryConfig } from '@adhd/stealth-core-browser'
+const { decideRetry } = capture
 
 const config: RetryConfig = {
   maxAttempts: 3,
@@ -351,8 +358,9 @@ delay = min(baseDelayMs * multiplier^attempt + random_jitter, 30_000)
 ## Combined Pattern: Network Capture with Retry
 
 ```typescript
-import { CdpSession, createPageTarget, closePageTarget, ensureChromeRunning } from '@adhd/stealth-core-browser/cdp'
-import { captureNetworkResponse, decideRetry } from '@adhd/stealth-core-browser/capture'
+import { cdp, capture, StealthCoreBrowserError } from '@adhd/stealth-core-browser'
+const { CdpSession, createPageTarget, closePageTarget, ensureChromeRunning } = cdp
+const { captureNetworkResponse, decideRetry } = capture
 
 const config = {
   maxAttempts: 3,
@@ -383,11 +391,12 @@ try {
       break // success
 
     } catch (err) {
-      const msg = (err as Error).message
+      if (!(err instanceof StealthCoreBrowserError)) throw err
       let outcome: string
-      if (msg.startsWith('Ban detected: captcha')) outcome = 'captcha'
-      else if (msg.startsWith('Ban detected: rate_limited')) outcome = 'rate_limited'
-      else if (msg.startsWith('Ban detected: banned')) outcome = 'banned'
+      if (err.code === 'CAPTURE_BAN_DETECTED') {
+        const signal = (err.detail as { signal?: string } | undefined)?.signal
+        outcome = signal === 'captcha' || signal === 'rate_limited' || signal === 'banned' ? signal : 'error'
+      } else if (err.code === 'CAPTURE_TIMEOUT') outcome = 'timeout'
       else outcome = 'error'
 
       const decision = decideRetry({ outcome }, attempt, config)

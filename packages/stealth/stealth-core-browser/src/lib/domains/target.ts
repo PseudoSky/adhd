@@ -2,6 +2,7 @@ import type { CdpTargetInfo } from '../types.js'
 import { cdpJson } from '../cdp/targets.js'
 import { StealthCoreBrowserError } from '../../errors.js'
 import { cdpCall } from './transport.js'
+import { isActiveWebTarget } from '../lifecycle/page-tier.js'
 
 /** Target-domain reads and activation. Failures throw a typed StealthCoreBrowserError (see docs/ERRORS.md). */
 export class TargetService {
@@ -25,7 +26,7 @@ export class TargetService {
 
   async countActivePages(): Promise<number> {
     const pages = await this.listPageTargets()
-    return pages.filter((p) => p.url && p.url !== 'about:blank').length
+    return pages.filter((p) => isActiveWebTarget(p.url)).length
   }
 
   /** Throws TARGET_NOT_FOUND when Chrome knows no such target. */

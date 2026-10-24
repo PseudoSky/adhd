@@ -2,7 +2,7 @@
  * Unit spec for src/lib/session.ts.
  * Ticket 8468f7b1 AC2 (behavior-preserving port, unit lane) ·
  * criteria [tests-unit-core.1] [tests-unit-core.2] [tests-unit-core.4].
- * Pure logic: crypto is stubbed, no process, network or profile access.
+ * Pure logic: node:crypto's randomUUID is replaced where a case needs a known id; no process, network or profile access.
  * guards: returns an RFC 4122 v4 UUID
  * tier: S
  * cites: 8468f7b1 [tests-unit-core.1] [tests-unit-core.2] [tests-unit-core.4]
@@ -17,11 +17,20 @@ async function loadFresh(): Promise<SessionModule> {
   return import('../../../src/lib/session.js')
 }
 
+/** Fresh module whose randomUUID yields the given ids in order. */
+async function loadWithUuids(ids: string[]): Promise<{ mod: SessionModule; randomUUID: ReturnType<typeof vi.fn> }> {
+  vi.resetModules()
+  const randomUUID = vi.fn(() => ids.shift() ?? 'exhausted')
+  vi.doMock('node:crypto', () => ({ randomUUID }))
+  return { mod: await import('../../../src/lib/session.js'), randomUUID }
+}
+
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
 
 describe('8468f7b1 AC2 [tests-unit-core.1] getSessionId', () => {
   afterEach(() => {
-    vi.unstubAllGlobals()
+    vi.doUnmock('node:crypto')
+    vi.resetModules()
   })
 
   it('returns an RFC 4122 v4 UUID', async () => {
@@ -30,30 +39,32 @@ describe('8468f7b1 AC2 [tests-unit-core.1] getSessionId', () => {
   })
 
   it('[fs-093] session id is a stable v4 uuid: is lazily generated once and stable across calls', async () => {
-    const getRandomValues = vi.fn(<T extends ArrayBufferView | null>(arr: T): T => arr)
-    vi.stubGlobal('crypto', { getRandomValues })
-    const { getSessionId } = await loadFresh()
-    const first = getSessionId()
-    const second = getSessionId()
+    const { mod, randomUUID } = await loadWithUuids(['11111111-1111-4111-8111-111111111111', '22222222-2222-4222-8222-222222222222'])
+    expect(randomUUID).not.toHaveBeenCalled() // lazy: nothing is generated at import time
+    const first = mod.getSessionId()
+    const second = mod.getSessionId()
+    expect(first).toBe('11111111-1111-4111-8111-111111111111')
     expect(second).toBe(first)
-    expect(getRandomValues).toHaveBeenCalledTimes(1)
+    expect(randomUUID).toHaveBeenCalledTimes(1)
   })
 
-  it('[fs-094] uuid has v4 version and variant bits: stamps the version and variant bits and groups the hex as 8-4-4-4-12', async () => {
-    vi.stubGlobal('crypto', { getRandomValues: <T extends ArrayBufferView | null>(arr: T): T => arr })
-    const { getSessionId } = await loadFresh()
-    expect(getSessionId()).toBe('00000000-0000-4000-8000-000000000000')
+  it('[fs-094] uuid has v4 version and variant bits: every id the real generator yields has them, grouped 8-4-4-4-12', async () => {
+    vi.doUnmock('node:crypto')
+    const seen = new Set<string>()
+    for (let i = 0; i < 25; i++) {
+      vi.resetModules()
+      const id = (await import('../../../src/lib/session.js')).getSessionId()
+      expect(id).toMatch(UUID_V4)
+      seen.add(id)
+    }
+    expect(seen.size).toBe(25) // a fresh module draws a fresh id
   })
 
-  it('masks saturated random bytes into the v4 layout', async () => {
-    vi.stubGlobal('crypto', {
-      getRandomValues: <T extends ArrayBufferView | null>(arr: T): T => {
-        ;(arr as unknown as Uint8Array).fill(0xff)
-        return arr
-      },
-    })
-    const { getSessionId } = await loadFresh()
-    expect(getSessionId()).toBe('ffffffff-ffff-4fff-bfff-ffffffffffff')
+  it('a new process-level module instance draws a new id (the cache is per module)', async () => {
+    const { mod } = await loadWithUuids(['aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'])
+    expect(mod.getSessionId()).toBe('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa')
+    const { mod: other } = await loadWithUuids(['bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'])
+    expect(other.getSessionId()).toBe('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb')
   })
 
   it('does not return a nil or non-v4 id (negative)', async () => {
