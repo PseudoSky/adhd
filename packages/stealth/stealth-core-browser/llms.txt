@@ -1,0 +1,29 @@
+# @adhd/stealth-core-browser
+
+> Node.js library that launches and reads a local Chrome over the Chrome DevTools Protocol. Chrome is started without --enable-automation and pages are read without Runtime.evaluate. Library only; the CLI and MCP server are in @adhd/stealth-search.
+
+Requires Node.js >= 22.5. Single entry (package root), no subpath exports. Version 0.x: the six verbs are the stable surface, namespaces are experimental until 1.0. Verified on macOS; Linux and Windows are untested.
+
+## Docs
+
+- [README](README.md): overview, install, quickstart
+- [Verbs](docs/VERBS.md): input, return shape and errors of each verb
+- [Configuration](docs/CONFIGURATION.md): every default (host 127.0.0.1, port 9222, profile Library/Application Support/Google/Chrome-CDP, state directory), options, platform support
+- [Responsible use](docs/RESPONSIBLE-USE.md): what "stealth" means (two choices), terms of service, robots.txt, rate limits, read-only profile access
+- [Examples](docs/EXAMPLES.md): every runnable file under examples/ with its scenario
+- [Errors](docs/ERRORS.md): StealthCoreBrowserError code registry with exit codes and remediation
+- [Reference](docs/reference/README.md): namespace reference (cdp, storage, capture, parsers, chromeManager)
+- [Changelog](CHANGELOG.md)
+- [Agent notes](AGENTS.md)
+
+## API
+
+- Verbs: chromeStatus, launchChrome, shutdownChrome, listPageTargets, checkChromeActivity, getPageContext
+- Namespaces: cdp, storage, capture, parsers, chromeManager, lifecycle, recording, endpoint
+- Errors: StealthCoreBrowserError, ERROR_CODES, exitCodeFor
+
+## Limits
+
+- Host is loopback-only unless the hosting process calls endpoint.configureEndpointPolicy.
+- Google result-page parsers are provisional (synthetic-fixture verified).
+- Do not connect to port 9222 in tests; examples use port 9333.

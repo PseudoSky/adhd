@@ -1,13 +1,13 @@
 # @adhd/stealth-core-browser
 
-A toolbox for driving Chrome via the Chrome DevTools Protocol (CDP) without triggering bot detection. No `Runtime.evaluate`, no `--enable-automation` — Chrome appears as a normal browser.
+A toolbox for driving Chrome via the Chrome DevTools Protocol (CDP) with a lower footprint than the usual automation drivers. No `Runtime.evaluate`, no `--enable-automation`: those two choices are all that "stealth" means here.
 
 ## Design Philosophy
 
-This package exists because the usual approaches to browser automation — Puppeteer, Playwright, Selenium — all leave detectable fingerprints (`navigator.webdriver`, automation flags, characteristic timing). `@adhd/stealth-core-browser` takes a different approach:
+This package exists because the usual approaches to browser automation — Puppeteer, Playwright, Selenium — set automation flags (such as `--enable-automation`) and inject script into pages. `@adhd/stealth-core-browser` takes a different approach:
 
-- **No `Runtime.evaluate`** — JavaScript injection is detectable. All data extraction is server-side (CDP network capture → parser).
-- **No `--enable-automation`** — Chrome is launched with a clean profile. It looks like a normal user's browser.
+- **No `Runtime.evaluate`** — Injected script runs inside the page. All data extraction is server-side (CDP network capture → parser).
+- **No `--enable-automation`** — Chrome is launched with a dedicated profile and without the automation flag.
 - **Network-first extraction** — capture responses from CDP `Network.loadingFinished` + `Network.getResponseBody`. Gives you the same HTML/JSON/XML the browser rendered, without executing in the page context.
 - **Read-only Chrome data access** — open Chrome's SQLite databases (History, Cookies, Bookmarks) in immutable mode — no file locking, no corruption risk.
 
@@ -34,7 +34,7 @@ pnpm add @adhd/stealth-core-browser
 
 **Prerequisites:**
 - Node.js 22+ (uses `node:sqlite` and `WebSocket`)
-- Chrome or Chromium installed (auto-detected on macOS, Linux, Windows)
+- Chrome or Chromium installed (macOS is the verified platform; see [CONFIGURATION.md](../CONFIGURATION.md))
 - TypeScript 5+
 
 ## Quick Start
@@ -157,7 +157,7 @@ src/lib/
 
 ### Why no `Runtime.evaluate`?
 
-JavaScript injection via CDP `Runtime.evaluate` is detectable by the page through `navigator.webdriver`, stack trace analysis, and timing fingerprinting. Every major search engine and many commercial sites use these signals to block automated access.
+`Runtime.evaluate` executes script in the page's own context, where the page can observe it. This package avoids that call.
 
 Instead, `@adhd/stealth-core-browser` uses network capture to obtain page data without executing anything in the page context. The browser loads the page normally; the tool intercepts the network response and parses it server-side.
 
@@ -168,7 +168,7 @@ The `--enable-automation` flag causes Chrome to:
 - Show "Chrome is being controlled by automated software" banner
 - Change TLS handshake behavior
 
-This package launches Chrome without that flag, using only `--remote-debugging-port` and `--user-data-dir` for a dedicated profile. The browser is indistinguishable from a normal Chrome instance.
+This package launches Chrome without that flag, using only `--remote-debugging-port` and `--user-data-dir` for a dedicated profile. This does not make the browser invisible to a site; see [RESPONSIBLE-USE.md](../RESPONSIBLE-USE.md).
 
 ### Immutable database access
 

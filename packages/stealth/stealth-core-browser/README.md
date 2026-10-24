@@ -1,8 +1,17 @@
 # @adhd/stealth-core-browser
 
-Drive Chrome over the Chrome DevTools Protocol without automation fingerprints: no `Runtime.evaluate`, no `--enable-automation`. Page data comes from network capture and the CDP DOM tree, and is parsed server-side.
+Work with your own logged-in Chrome from Node.js over the Chrome DevTools Protocol, with a lower footprint than the usual automation drivers.
 
-Requires Node.js 22.5 or newer and an installed Chrome or Chromium.
+Requires Node.js 22.5 or newer and an installed Chrome. macOS is the verified platform; see [docs/CONFIGURATION.md](docs/CONFIGURATION.md).
+
+## What "stealth" means here
+
+Exactly two concrete choices, and nothing more:
+
+1. Chrome is launched **without `--enable-automation`**.
+2. Pages are read **without `Runtime.evaluate`**: no script is injected into the page; data comes from network capture and the CDP DOM tree and is parsed in your process.
+
+It does not make a program invisible to a site. Read [docs/RESPONSIBLE-USE.md](docs/RESPONSIBLE-USE.md) before pointing it at a real site.
 
 ## Install
 
@@ -10,12 +19,44 @@ Requires Node.js 22.5 or newer and an installed Chrome or Chromium.
 pnpm add @adhd/stealth-core-browser
 ```
 
-## One entry, namespaced
+## Quickstart
 
-The package root is the only entry; there are no subpath exports. Areas are namespaces, and the chrome-runner verbs and shared types are flat exports.
+Six flat verbs, each taking one plain object. This runs against a dedicated Chrome on port 9333 (the default port is 9222; see [docs/CONFIGURATION.md](docs/CONFIGURATION.md)):
 
 ```ts
-import { cdp, storage, capture, parsers, chromeManager, lifecycle, recording, endpoint, StealthCoreBrowserError } from '@adhd/stealth-core-browser'
+import { launchChrome, chromeStatus, listPageTargets, shutdownChrome } from '@adhd/stealth-core-browser'
+
+await launchChrome({ port: 9333 })
+console.log(await chromeStatus({ port: 9333 }))
+const { targets } = await listPageTargets({ port: 9333 })
+console.log(targets.map((t) => t.url))
+await shutdownChrome({ port: 9333 })
+```
+
+| Verb | What it does |
+|---|---|
+| `chromeStatus` | Whether Chrome answers on the endpoint, its version, and whether this process manages it |
+| `launchChrome` | Start (or reuse) a hidden Chrome on a dedicated port and profile |
+| `shutdownChrome` | Close the managed Chrome only when it is genuinely idle |
+| `listPageTargets` | The open tabs with their target ids and URLs |
+| `checkChromeActivity` | Open web pages and the latest history visit, so you do not disturb a person |
+| `getPageContext` | One open page: URL, title, cookie count for its host, history count (never cookie values) |
+
+## Namespaces
+
+Areas are namespaces on the one package root; there are no subpath exports.
+
+| Namespace | Purpose | Reference |
+|---|---|---|
+| `cdp` | CDP session, targets, browser launch and kill, `CdpClient` domain facade | [docs/reference/cdp.md](docs/reference/cdp.md) |
+| `storage` | Read-only History, Cookies, Bookmarks and Profile readers | [docs/reference/storage.md](docs/reference/storage.md) |
+| `capture` | Network capture, DOM walk, ban detection, retry policy | [docs/reference/capture.md](docs/reference/capture.md) |
+| `parsers` | Server-side HTML and JSON extraction (the Google result parsers are provisional, verified against synthetic fixtures only) | [docs/reference/parsers.md](docs/reference/parsers.md) |
+| `chromeManager` | Auto-start, idle timer, reaper-host safety shutdown | [docs/reference/chrome-manager.md](docs/reference/chrome-manager.md) |
+| `lifecycle`, `recording`, `endpoint` | Manager seam and reaper, redacted network recording, endpoint policy | [docs/reference/README.md](docs/reference/README.md) |
+
+```ts
+import { cdp, capture } from '@adhd/stealth-core-browser'
 const { ensureChromeRunning, createPageTarget, closePageTarget } = cdp
 const { captureNetworkResponse } = capture
 
@@ -33,16 +74,31 @@ try {
 }
 ```
 
-| Namespace | Purpose | Reference |
-|---|---|---|
-| `cdp` | CDP session, targets, browser launch and kill, `CdpClient` domain facade | [docs/reference/cdp.md](docs/reference/cdp.md) |
-| `storage` | Read-only History, Cookies, Bookmarks and Profile readers | [docs/reference/storage.md](docs/reference/storage.md) |
-| `capture` | Network capture, DOM walk, ban detection, retry policy | [docs/reference/capture.md](docs/reference/capture.md) |
-| `parsers` | Server-side HTML and JSON extraction | [docs/reference/parsers.md](docs/reference/parsers.md) |
-| `chromeManager` | Auto-start, idle timer, reaper-host safety shutdown | [docs/reference/chrome-manager.md](docs/reference/chrome-manager.md) |
-| `lifecycle`, `recording`, `endpoint` | Manager seam and reaper, network recording, endpoint policy | [docs/reference/README.md](docs/reference/README.md) |
+## Stability
 
-Every failure is a `StealthCoreBrowserError` with a stable `code`; see [docs/ERRORS.md](docs/ERRORS.md).
+The package is 0.x. The six verbs and their types are the stable surface; the root namespaces (`cdp`, `storage`, `capture`, `parsers`, `chromeManager`) are experimental until 1.0.
+
+## Endpoint policy
+
+Only loopback hosts (`127.0.0.1`, `localhost`, `::1`) are accepted by default; any other host is refused with `CDP_UNREACHABLE` (`detail.reason` `invalid-endpoint`) before a socket is opened. The process that hosts the verbs opts a remote Chrome in once, never a verb input:
+
+```ts
+import { endpoint } from '@adhd/stealth-core-browser'
+
+endpoint.configureEndpointPolicy({ allowHosts: ['chrome.internal'] })
+```
+
+## Documentation
+
+- [docs/VERBS.md](docs/VERBS.md): input, return shape and errors of each verb
+- [docs/CONFIGURATION.md](docs/CONFIGURATION.md): every default (port `9222`, the `Chrome-CDP` profile, the lifecycle state directory), options and platform support
+- [docs/RESPONSIBLE-USE.md](docs/RESPONSIBLE-USE.md): terms of service, robots.txt, rate limits, read-only profile access
+- [docs/EXAMPLES.md](docs/EXAMPLES.md): every runnable file under `examples/` with its scenario
+- [docs/ERRORS.md](docs/ERRORS.md): the `StealthCoreBrowserError` code registry
+- [docs/reference/README.md](docs/reference/README.md): API and protocol reference
+- [CHANGELOG.md](CHANGELOG.md)
+
+The command line and the MCP server are hosted by `@adhd/stealth-search`, not by this package.
 
 ## Development
 
@@ -50,16 +106,3 @@ Every failure is a `StealthCoreBrowserError` with a stable `code`; see [docs/ERR
 nx build stealth-core-browser
 nx test stealth-core-browser
 ```
-
-## Endpoint policy (`endpoint` namespace)
-
-Every verb and the chrome manager address Chrome through the `endpoint` namespace of the package root. By default only loopback hosts (`127.0.0.1`, `localhost`, `::1`) are accepted; any other `host` input is refused with `CDP_UNREACHABLE` (`detail.reason` `invalid-endpoint`) before a socket is opened. The process that hosts the verbs opts a remote Chrome in once, never a verb input:
-
-```ts
-import { endpoint } from '@adhd/stealth-core-browser'
-
-endpoint.configureEndpointPolicy({ allowHosts: ['chrome.internal'] })
-endpoint.resolveEndpoint({ host: 'chrome.internal', port: 9333 }) // { host, port, cdpHost: 'chrome.internal:9333' }
-```
-
-The `stealth-search` host exposes the same opt-in as `--allow-cdp-hosts <comma-separated list>`. Members: `DEFAULT_HOST`, `DEFAULT_PORT`, `allowedHosts`, `assertSameEndpoint`, `configureEndpointPolicy`, `isLoopbackHost`, `portOf`, `resolveEndpoint`. See `docs/reference/README.md` for the full policy.
