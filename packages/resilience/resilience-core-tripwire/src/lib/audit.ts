@@ -147,11 +147,25 @@ export function createAuditLog(o: AuditLogOptions): AuditLog {
     }
   };
 
+  const dirExists = async (dir: string): Promise<boolean> => {
+    try {
+      await fs.stat(dir);
+      return true;
+    } catch (e) {
+      if (errCode(e) === 'ENOENT') return false;
+      throw e;
+    }
+  };
+
   const ensureDir = async (): Promise<void> => {
     if (dirReady) return;
     const dir = dirname(path);
+    // Only a directory this call creates is tightened to 0700: a caller-supplied
+    // path such as /var/log/app/audit.log must not change the mode of a shared
+    // directory that already exists.
+    const existed = await dirExists(dir);
     await fs.mkdir(dir, DIR_MODE);
-    await ignore(fs.chmod(dir, DIR_MODE));
+    if (!existed) await ignore(fs.chmod(dir, DIR_MODE));
     dirReady = true;
   };
 

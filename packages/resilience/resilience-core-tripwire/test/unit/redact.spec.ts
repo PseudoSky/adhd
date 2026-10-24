@@ -58,7 +58,7 @@ describe('[tripwire-core.7] TW7 default redactor', () => {
     expect(big.length).toBeLessThan(2100);
   });
 
-  it('drops responseBody and non-JSON values', () => {
+  it('drops responseBody and responseStatus, and non-JSON values', () => {
     const out = redact({
       responseBody: { secret: 1 },
       responseStatus: 401,
@@ -79,7 +79,8 @@ describe('[tripwire-core.7] TW7 redaction applied by trip', () => {
     const env = makeEnv({
       redact: (ctx) => {
         seen.push(ctx);
-        const { email: _drop, ...rest } = ctx;
+        const rest: Record<string, unknown> = { ...ctx };
+        delete rest['email'];
         return {
           ...rest,
           responseBody: 'sneaky',

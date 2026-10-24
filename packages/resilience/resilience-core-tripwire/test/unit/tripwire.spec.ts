@@ -176,7 +176,7 @@ describe('[tripwire-core.5] TW5 TRIPWIRE_INVALID_KEY before any fs call', () => 
     ];
   for (const key of badKeys) {
     for (const [name, call] of calls) {
-      it(`${name}(${JSON.stringify(key).slice(0, 20)}) is rejected`, async () => {
+      it(`${name}(${JSON.stringify(key)}) is rejected`, async () => {
         const env = makeEnv();
         const err = await rejectionOf(call(env.tw, key));
         expect(isTripwireError(err)).toBe(true);

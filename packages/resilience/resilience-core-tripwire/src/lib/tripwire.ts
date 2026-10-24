@@ -23,7 +23,7 @@ import {
   TripwireIoError,
   TripwireTrippedError,
 } from './errors.js';
-import { composeRedactor, urlWithoutQuery } from './redact.js';
+import { composeRedactor, setOwn, urlWithoutQuery } from './redact.js';
 import {
   assertValidKey,
   createFileStorage,
@@ -65,6 +65,8 @@ interface Snap extends TripwireSnapshot {
   legacyCount: number;
   /** Generation of the lock on disk (scopes its block count). */
   gen?: string;
+  /** The raw lock content this snapshot was read from (disk snapshots of a readable lock). */
+  raw?: string;
 }
 
 interface LatchEntry {
@@ -133,6 +135,11 @@ function parsePriorClear(v: unknown): PriorClear | undefined {
   return out;
 }
 
+/** A persisted block count: a finite number floored and clamped to zero, else 0. */
+function countOf(v: unknown): number {
+  return typeof v === 'number' && Number.isFinite(v) ? Math.max(0, Math.floor(v)) : 0;
+}
+
 /** Parse a lock; null = unreadable (corrupt, empty, wrong shape). */
 export function parseLockRecord(
   raw: string,
@@ -169,11 +176,7 @@ export function parseLockRecord(
       reason: doc['reason'],
       trippedAt: doc['trippedAt'] as string,
       trippedBy: { pid: by['pid'] },
-      blockedCount:
-        typeof doc['blockedCount'] === 'number' &&
-        Number.isFinite(doc['blockedCount']) ?
-          doc['blockedCount'] :
-          0,
+      blockedCount: countOf(doc['blockedCount']),
       context: ctx as TripContext,
     };
     if (typeof by['sessionId'] === 'string') {
@@ -195,9 +198,8 @@ export function parseLockRecord(
   // field other than reason/trippedAt/blockedCount moves into context.
   const context: TripContext = {};
   for (const [k, v] of Object.entries(doc)) {
-    if (!LEGACY_CORE_FIELDS.has(k) && isJson(v)) context[k] = v;
+    if (!LEGACY_CORE_FIELDS.has(k) && isJson(v)) setOwn(context, k, v);
   }
-  const legacyCount = doc['blockedCount'];
   return {
     schema: 1,
     key,
@@ -205,10 +207,7 @@ export function parseLockRecord(
     reason: doc['reason'],
     trippedAt: doc['trippedAt'] as string,
     trippedBy: { pid: 0 },
-    blockedCount:
-      typeof legacyCount === 'number' && Number.isFinite(legacyCount) ?
-        Math.max(0, Math.floor(legacyCount)) :
-        0,
+    blockedCount: countOf(doc['blockedCount']),
     context,
   };
 }
@@ -323,6 +322,12 @@ export function createTripwire<C extends TripContext = TripContext>(
   const expiredRecord = (r: TripwireRecord): boolean =>
     ttlMs !== undefined && clock() - Date.parse(r.trippedAt) > ttlMs;
 
+  /**
+   * When an unreadable lock was first seen, per key, for a lock whose mtime
+   * cannot be read: the timestamp must not change from read to read.
+   */
+  const unreadableSince = new Map<string, number>();
+
   const unreadableRecord = (
     key: string,
     mtimeMs: number,
@@ -332,7 +337,12 @@ export function createTripwire<C extends TripContext = TripContext>(
     key,
     namespace,
     reason: 'unreadable-lock',
-    trippedAt: new Date(mtimeMs > 0 ? mtimeMs : clock()).toISOString(),
+    trippedAt: new Date(
+      mtimeMs > 0 ?
+        mtimeMs :
+        (unreadableSince.get(key) ??
+          unreadableSince.set(key, clock()).get(key) as number),
+    ).toISOString(),
     trippedBy: { pid: 0 },
     blockedCount: 0,
     recoveryHint:
@@ -350,6 +360,7 @@ export function createTripwire<C extends TripContext = TripContext>(
       lock = { error: e instanceof Error ? e : new Error(String(e)) };
     }
     if (lock === 'absent') {
+      unreadableSince.delete(key);
       return {
         status: 'clear',
         record: null,
@@ -373,6 +384,7 @@ export function createTripwire<C extends TripContext = TripContext>(
       status: TripwireStatus,
       r: TripwireRecord,
       expired: boolean,
+      raw?: string,
     ): Snap => {
       const legacyCount = r.blockedCount;
       r.blockedCount += count;
@@ -387,6 +399,7 @@ export function createTripwire<C extends TripContext = TripContext>(
         legacyCount,
       };
       if (gen !== undefined) snap.gen = gen;
+      if (raw !== undefined) snap.raw = raw;
       return snap;
     };
     if ('error' in lock) {
@@ -404,8 +417,9 @@ export function createTripwire<C extends TripContext = TripContext>(
         false,
       );
     }
+    unreadableSince.delete(key);
     const expired = expiredRecord(parsed);
-    return done(expired ? 'expired' : 'tripped', parsed, expired);
+    return done(expired ? 'expired' : 'tripped', parsed, expired, lock.raw);
   };
 
   /** Disk snapshot overlaid with this process's latch. */
@@ -434,34 +448,57 @@ export function createTripwire<C extends TripContext = TripContext>(
     expired: s.expired,
   });
 
-  /** Remove an expired lock; true when this call removed it (audited). */
-  const expire = async (key: string, r: TripwireRecord): Promise<void> => {
-    let removed = false;
+  /**
+   * Remove an expired lock, but only the lock that was read as expired:
+   * `removed` (audited), `gone` (already absent), `replaced` (a clear and a
+   * fresh trip put a different lock in place meanwhile: it is left alone) or
+   * `failed` (the removal itself errored; the lock was expired anyway).
+   */
+  const expire = async (
+    key: string,
+    r: TripwireRecord,
+    raw: string | undefined,
+  ): Promise<'removed' | 'gone' | 'replaced' | 'failed'> => {
+    let res: Awaited<ReturnType<TripwireStorage['removeLock']>>;
     try {
-      removed = (await storage.removeLock(key)).tombstone !== null;
+      res = await storage.removeLock(key, raw);
     } catch (e) {
       warn('expire.remove', e, key);
-      return;
+      return 'failed';
     }
-    if (removed) {
-      await audit({
-        event: 'tripwire-expired',
-        key,
-        reason: EXPIRY_AUDIT_REASON,
-        tripReason: r.reason,
-        trippedAt: r.trippedAt,
-        blockedCount: r.blockedCount,
-        method: 'expired',
-      });
-    }
+    if (res.replaced) return 'replaced';
+    if (res.tombstone === null) return 'gone';
+    await audit({
+      event: 'tripwire-expired',
+      key,
+      reason: EXPIRY_AUDIT_REASON,
+      tripReason: r.reason,
+      trippedAt: r.trippedAt,
+      blockedCount: r.blockedCount,
+      method: 'expired',
+    });
+    return 'removed';
   };
+
+  /** How often a gate re-reads after the lock it saw expire was replaced under it. */
+  const MAX_EXPIRE_RETRIES = 3;
 
   const gate = async (key: string): Promise<{
     open: boolean;
     snapshot: Snap;
   }> => {
     assertValidKey(key);
-    const snap = await snapshot(key);
+    let snap = await snapshot(key);
+    for (
+      let attempt = 0;
+      snap.status === 'expired' && attempt < MAX_EXPIRE_RETRIES;
+      attempt += 1
+    ) {
+      const outcome = await expire(key, snap.record as TripwireRecord, snap.raw);
+      if (outcome !== 'replaced') return { open: true, snapshot: snap };
+      // A fresh trip replaced the expired lock: judge that lock instead.
+      snap = await snapshot(key);
+    }
     if (snap.status === 'clear') {
       return {
         open: true,
@@ -469,13 +506,6 @@ export function createTripwire<C extends TripContext = TripContext>(
       };
     }
     const record = snap.record as TripwireRecord;
-    if (snap.status === 'expired') {
-      await expire(key, record);
-      return {
-        open: true,
-        snapshot: snap,
-      };
-    }
     let count = record.blockedCount + 1;
     const held = latch.get(latchKey(key));
     if (snap.fromLatch && held) {
@@ -563,13 +593,13 @@ export function createTripwire<C extends TripContext = TripContext>(
     if (typeof input.recoveryHint === 'string') {
       record.recoveryHint = input.recoveryHint;
     }
-    // In-memory latch FIRST: this process is blocked from here on.
+    // In-memory latch FIRST: this process is blocked from here on. A record
+    // an earlier trip of this process could not persist is still held: the
+    // first trip wins, so THAT record is the one to persist and to return.
     const lk = latchKey(key);
-    const entry: LatchEntry = {
-      record,
-      blocked: 0,
-    };
-    if (!latch.has(lk)) latch.set(lk, entry);
+    const held = latch.get(lk);
+    if (!held) latch.set(lk, { record, blocked: 0 });
+    const winning: TripwireRecord = held ? held.record : record;
     // Once the disk is authoritative the latch must go, so a break-glass
     // removal of the lock file un-trips this process too.
     const release = (): void => {
@@ -596,25 +626,40 @@ export function createTripwire<C extends TripContext = TripContext>(
     try {
       const current = await readDisk(key);
       if (current.status === 'expired' && current.record) {
-        await expire(key, current.record);
+        await expire(key, current.record, current.raw);
       } else if (current.record) {
         return await retripped(current.record);
       }
       marker = await peekMarker(key);
-      if (marker.prior) record.priorClear = marker.prior;
+      if (marker.prior) winning.priorClear = marker.prior;
       const created = await storage.createLockIfAbsent(
         key,
-        JSON.stringify(record, null, 2) + '\n',
+        JSON.stringify(winning, null, 2) + '\n',
       );
       if (!created) {
-        delete record.priorClear;
-        const winner = await readDisk(key);
-        return await retripped(winner.record ?? record);
+        delete winning.priorClear;
+        const onDisk = await readDisk(key);
+        return await retripped(onDisk.record ?? winning);
       }
     } catch (e) {
       // Not persisted: the latch keeps this process blocked. The marker
       // was only read, so it is still there for the trip that persists.
       warn('trip.persist', e, key);
+      if (held) {
+        // A repeated trip of a key whose persist failed: the held first
+        // record stays, nothing new fired.
+        await audit({
+          event: 'tripwire-retripped',
+          key,
+          reason,
+          trippedAt: held.record.trippedAt,
+        });
+        return {
+          record: held.record,
+          created: false,
+          persisted: false,
+        };
+      }
       await audit({
         event: 'tripwire-fired',
         key,
@@ -639,6 +684,20 @@ export function createTripwire<C extends TripContext = TripContext>(
       }
     }
     release();
+    if (held) {
+      // The held first record is now on disk; this trip created nothing new.
+      await audit({
+        event: 'tripwire-retripped',
+        key,
+        reason,
+        trippedAt: winning.trippedAt,
+      });
+      return {
+        record: winning,
+        created: false,
+        persisted: true,
+      };
+    }
     await audit({
       event: 'tripwire-fired',
       key,
@@ -654,10 +713,15 @@ export function createTripwire<C extends TripContext = TripContext>(
     };
   };
 
-  const clearNow = async (
+  /**
+   * Remove the lock (and the latch) and leave the cleared marker; the
+   * `tripwire-cleared` audit is returned as a thunk so a caller can order
+   * other audit lines before it (resolve writes `tripwire-resolved` first).
+   */
+  const clearLock = async (
     key: string,
     opts: ClearOptions,
-  ): Promise<{ cleared: boolean }> => {
+  ): Promise<{ cleared: boolean; auditCleared: () => Promise<void> }> => {
     const lk = latchKey(key);
     const held = latch.get(lk);
     const before = await readDisk(key);
@@ -670,7 +734,9 @@ export function createTripwire<C extends TripContext = TripContext>(
       }
     }
     if (held) latch.delete(lk);
-    if (!removed && !held) return { cleared: false };
+    if (!removed && !held) {
+      return { cleared: false, auditCleared: async () => undefined };
+    }
     const record = before.record ?? held?.record;
     const actor = actorOf(opts.actor);
     const marker: PriorClear = {
@@ -683,16 +749,27 @@ export function createTripwire<C extends TripContext = TripContext>(
     } catch (e) {
       warn('clear.marker', e, key);
     }
-    await audit({
-      event: 'tripwire-cleared',
-      key,
-      method: opts.method,
-      actor,
-      reason: record?.reason,
-      blockedCount: record?.blockedCount,
-      reverified: opts.reverified === true,
-    });
-    return { cleared: true };
+    return {
+      cleared: true,
+      auditCleared: () => audit({
+        event: 'tripwire-cleared',
+        key,
+        method: opts.method,
+        actor,
+        reason: record?.reason,
+        blockedCount: record?.blockedCount,
+        reverified: opts.reverified === true,
+      }),
+    };
+  };
+
+  const clearNow = async (
+    key: string,
+    opts: ClearOptions,
+  ): Promise<{ cleared: boolean }> => {
+    const res = await clearLock(key, opts);
+    await res.auditCleared();
+    return { cleared: res.cleared };
   };
 
   const clear = async (
@@ -719,6 +796,14 @@ export function createTripwire<C extends TripContext = TripContext>(
     if (snap.status === 'clear' || !snap.record) return;
     const r = snap.record;
     const started = Date.parse(r.trippedAt);
+    const res = await clearLock(key, {
+      method: 'resolved',
+      actor: opts.actor,
+    });
+    // The resolution is recorded only once the lock is really gone (a failed
+    // removal throws before this line; a lock someone else cleared meanwhile
+    // is not resolved by this call). Order stays: resolved, then cleared.
+    if (!res.cleared) return;
     await audit({
       event: 'tripwire-resolved',
       key,
@@ -728,10 +813,7 @@ export function createTripwire<C extends TripContext = TripContext>(
       blockedCount: r.blockedCount,
       actor: actorOf(opts.actor),
     });
-    await clearNow(key, {
-      method: 'resolved',
-      actor: opts.actor,
-    });
+    await res.auditCleared();
   };
 
   const status = async (

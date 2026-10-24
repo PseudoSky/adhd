@@ -3,9 +3,11 @@
  * lock-file protocol, fail-closed reads, an NDJSON audit trail and a
  * break-glass clear. Single entry point (no subpath exports).
  *
- * The runtime surface is exactly the API of the package specification
- * (pinned by test/unit/api-surface.spec.ts), plus `createNodeFs`, the
- * Node `FsPort` a caller needs to run `createFileStorage` on a real disk.
+ * The runtime surface is pinned by test/unit/api-surface.spec.ts: the
+ * tripwire API of the package specification plus the storage, memory-fs
+ * and Node adapters (`createFileStorage`, `createMemoryStorage`,
+ * `createNodeFs`, `createMemoryFs`) a caller needs to run it on a real disk
+ * or in a test.
  * The interactive and CLI surface (interactiveGate, confirmSolved,
  * runUnlockCli, renderStatusText, statusJsonLine) takes an injected
  * `TripwireIo`; nodeTripwireIo is the single Node adapter of it.

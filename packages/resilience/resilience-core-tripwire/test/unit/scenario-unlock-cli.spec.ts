@@ -2,6 +2,8 @@
  * guards: the unlock bin mishandles an exit code or prompt path end to end
  * tier: S
  * cites: ticket 8468f7b1; [tripwire-interactive.4] TW27.
+ * teeth: red: nx run resilience-core-tripwire:test --skip-nx-cache -- test/unit/scenario-unlock-cli.spec.ts -> exit 1; 1 failed | 9 passed; AssertionError: expected +0 to be 1 (mutation: src/lib/cli.ts 'Confirmation mismatch' branch returns 0 instead of 1)
+ * plan: stealth-browser, state resolve-findings, task resolve-findings-implementer, [resolve-findings.2] F56 F57
  * Ticket 8468f7b1 - scenario: the reverse-apis unlock bin, end to end on
  * the memory fs. The bin is the five-line recipe (state dir from
  * TRIPWIRE_DIR or adhdDataDir, a confirm-token tripwire, runUnlockCli)
@@ -106,7 +108,7 @@ describe('[tripwire-interactive.4] TW27 the unlock bin end to end', () => {
     expect(r).toEqual({
       code: 1,
       stdout: '',
-      stderr: 'Usage: pnpm unlock-tripwire <client>\n',
+      stderr: 'Usage: <unlock-command> <key>\n',
     });
   });
 
@@ -178,7 +180,6 @@ describe('[tripwire-interactive.4] TW27 the unlock bin end to end', () => {
     const mfs = await trippedFs();
     const r = await unlockBin(mfs, ['testclient'], { stdin: CONFIRM_TOKEN });
     expect(r.code).toBe(1);
-    expect(r.stderr).toMatch(/No TTY|Confirmation mismatch/);
     expect(r.stderr).toContain('No TTY detected and CONFIRM env var is unset.');
     expect(mfs.exists(LOCK)).toBe(true);
   });
@@ -201,8 +202,11 @@ describe('[tripwire-interactive.4] TW27 the unlock bin end to end', () => {
       env: { CONFIRM: CONFIRM_TOKEN },
     });
     expect(r.code).toBe(0);
-    expect(r.stderr.split('\n')[0]).toBe(
-      `warning: lock at ${LOCK} could not be parsed as JSON: corrupt`,
+    const first = r.stderr.split('\n')[0] ?? '';
+    // the parser's own message text is not part of the contract
+    expect(first.startsWith(`warning: lock at ${LOCK} could not be parsed as JSON: `)).toBe(true);
+    expect(first.length).toBeGreaterThan(
+      `warning: lock at ${LOCK} could not be parsed as JSON: `.length,
     );
     expect(r.stderr).toContain('  reason:          (none)');
     expect(mfs.exists(LOCK)).toBe(false);

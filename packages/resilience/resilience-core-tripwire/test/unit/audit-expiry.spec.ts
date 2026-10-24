@@ -54,7 +54,7 @@ describe('[fix-tripwire.1] 84e1f7a2 audit line of an expired entry', () => {
     ]);
   });
 
-  it('keeps ttl-expired on the audit line whatever the original trip reason was', async () => {
+  it('the expiry line records method expired and no blocks for a never-blocked entry', async () => {
     const env = makeEnv({ expiry: { ttlMs: TTL_MS } });
     await env.tw.trip('k', { reason: 'rate_limited', context: {} });
     env.clock.advance(TTL_MS + 1);
@@ -62,7 +62,7 @@ describe('[fix-tripwire.1] 84e1f7a2 audit line of an expired entry', () => {
     expect(eventsOf(env, 'tripwire-expired')).toEqual([
       expect.objectContaining({
         key: 'k',
-        reason: 'ttl-expired',
+        tripReason: 'rate_limited',
         method: 'expired',
         blockedCount: 0,
       }),

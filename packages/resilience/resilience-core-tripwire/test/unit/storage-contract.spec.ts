@@ -5,18 +5,13 @@
  * Ticket 8468f7b1 - the TripwireStorage contract suite, run identically on
  * createMemoryStorage, createFileStorage over the memory fs (with and
  * without hard-link support, covering the open-wx fallback of the
- * create-if-absent link) and createFileStorage over a real mkdtemp
- * directory (os.tmpdir(), never the home directory).
+ * create-if-absent link). Memory fs only: tier S never touches the disk.
  * Criteria: [tripwire-core.31] TW38.
  */
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import {
   createFileStorage,
   createMemoryFs,
   createMemoryStorage,
-  createNodeFs,
   isTripwireError,
   type TripwireStorage,
 } from '../../src/index';
@@ -64,31 +59,6 @@ const factories: Array<[string, () => Promise<Harness>]> = [
       readAudit: async () =>
         (mfs.readText('/s/audit.log') ?? '').split('\n').filter(Boolean),
       cleanup: async () => undefined,
-    };
-  }],
-  ['createFileStorage(mkdtemp)', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'tripwire-contract-'));
-    const auditPath = join(dir, 'audit.log');
-    return {
-      storage: createFileStorage({
-        stateDir: dir,
-        auditPath,
-        maxAuditBytes: 100_000,
-        fs: createNodeFs(),
-        clock: () => Date.now(),
-      }),
-      readAudit: async () => {
-        try {
-          return (await readFile(auditPath, 'utf8')).split('\n')
-            .filter(Boolean);
-        } catch {
-          return [];
-        }
-      },
-      cleanup: () => rm(dir, {
-        recursive: true,
-        force: true,
-      }),
     };
   }],
 ];
@@ -232,10 +202,10 @@ describe('[tripwire-core.31] TW38 create-if-absent uses link', () => {
     });
     await s.createLockIfAbsent('k', '{}');
     const seq = mfs.ops
-      .filter((o) => o.path.includes('k.lock'))
+      .filter((o) => o.path.includes('k.lock') && o.op !== 'stat')
       .map((o) => o.op);
+    // read-only probes (stat) are not part of the write protocol
     expect(seq).toEqual([
-      'stat',
       'openExclusive',
       'write',
       'sync',

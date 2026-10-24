@@ -14,7 +14,8 @@
  *
  * Every write goes through a unique tmp name (`<path>.<pid>.<random>.tmp`)
  * that is fsynced before it is linked or renamed into place. Files are
- * 0600, directories 0700 (pre-existing directories are chmodded).
+ * 0600, directories 0700 (a directory is chmodded only when this package
+ * created it; an existing caller-supplied directory keeps its mode).
  */
 import { randomBytes } from 'node:crypto';
 import * as nodeFs from 'node:fs/promises';
@@ -42,9 +43,15 @@ export interface TripwireStorage {
   createLockIfAbsent(key: string, raw: string): Promise<boolean>;
   /**
    * Remove the lock and the block count of ITS generation; null tombstone
-   * = was absent.
+   * = nothing was removed. With `expected` (the raw lock the caller read),
+   * the lock is removed only while its content still equals it: a lock
+   * that was cleared and re-tripped meanwhile is a different lock, is left
+   * in place and reported as `replaced`.
    */
-  removeLock(key: string): Promise<{ tombstone: string | null }>;
+  removeLock(
+    key: string,
+    expected?: string,
+  ): Promise<{ tombstone: string | null; replaced?: boolean }>;
   /**
    * Count one block for `generation` without touching the lock. A count
    * whose generation is not the live lock's (the lock was removed or
@@ -212,11 +219,15 @@ export function createFileStorage(o: FileStorageOptions): TripwireStorage {
     }
   };
 
+  // Only directories this call creates are tightened to 0700: a caller-supplied
+  // stateDir such as /var/lib/app that already exists keeps its mode.
   const ensureDir = async (): Promise<void> => {
     if (dirReady) return;
+    const stateExisted = await exists(o.stateDir);
+    const lockExisted = await exists(lockDir);
     await fs.mkdir(lockDir, DIR_MODE);
-    await ignore(fs.chmod(o.stateDir, DIR_MODE));
-    await ignore(fs.chmod(lockDir, DIR_MODE));
+    if (!stateExisted) await ignore(fs.chmod(o.stateDir, DIR_MODE));
+    if (!lockExisted) await ignore(fs.chmod(lockDir, DIR_MODE));
     dirReady = true;
   };
 
@@ -336,7 +347,7 @@ export function createFileStorage(o: FileStorageOptions): TripwireStorage {
       return createIfAbsent(p, raw);
     },
 
-    async removeLock(key) {
+    async removeLock(key, expected) {
       assertValidKey(key);
       const tomb = `${lockPath(key)}.${sfx()}.tomb`;
       try {
@@ -347,10 +358,19 @@ export function createFileStorage(o: FileStorageOptions): TripwireStorage {
       }
       // The tombstone is ours alone: its generation names the dead count.
       let gen: string | undefined;
+      let bytes: Uint8Array | undefined;
       try {
-        gen = lockGeneration(dec.decode(await fs.readFile(tomb)));
+        bytes = await fs.readFile(tomb);
+        gen = lockGeneration(dec.decode(bytes));
       } catch {
         gen = undefined;
+      }
+      if (expected !== undefined && (bytes === undefined || dec.decode(bytes) !== expected)) {
+        // Not the lock the caller read: put it back (a lock written
+        // meanwhile wins, and then this stale one is simply dropped).
+        if (bytes !== undefined) await ignore(createIfAbsent(lockPath(key), bytes));
+        await ignore(fs.unlink(tomb));
+        return { tombstone: null, replaced: true };
       }
       await ignore(fs.unlink(blockedPath(key, gen)));
       await ignore(fs.unlink(tomb));
@@ -487,10 +507,13 @@ export function createMemoryStorage(
       });
       return true;
     },
-    async removeLock(key) {
+    async removeLock(key, expected) {
       assertValidKey(key);
       const l = locks.get(key);
       if (!l) return { tombstone: null };
+      if (expected !== undefined && l.raw !== expected) {
+        return { tombstone: null, replaced: true };
+      }
       locks.delete(key);
       blocked.delete(countKey(key, lockGeneration(l.raw)));
       tombs += 1;

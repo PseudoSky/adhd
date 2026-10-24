@@ -3,8 +3,7 @@
  *
  * A consumer's bin is five lines: build its tripwire, then
  * `process.exitCode = await runUnlockCli(process.argv.slice(2),
- * nodeTripwireIo(), tw)`. Output strings and exit codes are those of the
- * reverse-apis `unlock-tripwire` tool:
+ * nodeTripwireIo(), tw)`. Output strings and exit codes:
  *
  * - 0: unlocked, or no lock present (nothing to do);
  * - 1: usage error, invalid key, missing or mismatched confirmation;
@@ -40,8 +39,8 @@ export interface UnlockCliOptions {
   actor?: string;
 }
 
-/** The usage line of the reverse-apis bin. */
-export const DEFAULT_UNLOCK_USAGE = 'Usage: pnpm unlock-tripwire <client>';
+/** The usage line printed when no key is given and the consumer passes no `usage` of its own. */
+export const DEFAULT_UNLOCK_USAGE = 'Usage: <unlock-command> <key>';
 
 function shown(v: JsonValue | undefined): string {
   if (v === undefined || v === null) return '(none)';

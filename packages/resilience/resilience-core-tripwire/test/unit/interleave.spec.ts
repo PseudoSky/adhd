@@ -2,6 +2,8 @@
  * guards: a legal interleaving of racing tripwire operations violates the latch invariants
  * tier: S
  * cites: ticket 8468f7b1; [tripwire-core.11] TW11 (N interleaved gates give blockedCount === N), [tripwire-core.12] TW12 (a gate racing a clear never recreates the lock), [tripwire-core.29] TW36 (trip/trip, gate/gate, gate/clear, clear/clear, trip/clear and audit rotate/append hold the TW1, TW11, TW12 and TW20 invariants).
+ * teeth: red: nx run resilience-core-tripwire:test --skip-nx-cache -- test/unit/interleave.spec.ts -> exit 1; 3 failed | 11 passed; AssertionError: expected 29 to be +0 (mutation: src/lib/tripwire.ts gate() returns open: true for a tripped key)
+ * plan: stealth-browser, state resolve-findings, task resolve-findings-implementer, [resolve-findings.2] F56 F57
  * Ticket 8468f7b1 - the interleaving suite over the memory-fs scheduler.
  * Every fs operation of the racing tripwire instances is held and released
  * in an order chosen by the explorer (bounded exhaustive enumeration plus
@@ -709,7 +711,9 @@ function phasedPicker(
     if (phase) {
       const j = tags.findIndex((t) => t === phase.tag);
       if (j >= 0) i = j;
-      if (phase.until(pending[i])) phases.shift();
+      const next = pending[i];
+      if (next === undefined) throw new Error(`phasedPicker: no pending op at index ${i}`);
+      if (phase.until(next)) phases.shift();
     }
     tags.splice(i, 1);
     return i;

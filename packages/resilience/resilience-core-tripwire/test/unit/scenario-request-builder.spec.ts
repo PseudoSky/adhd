@@ -2,6 +2,8 @@
  * guards: a tripped client key still lets a send reach the network, or the confirm-token unlock does not reopen it
  * tier: S
  * cites: ticket 8468f7b1; [tripwire-interactive.6] (TW1, TW3, TW10, TW14, TW27).
+ * teeth: red: nx run resilience-core-tripwire:test --skip-nx-cache -- test/unit/scenario-request-builder.spec.ts -> exit 1; 7 failed | 4 passed (mutation: src/lib/tripwire.ts gate() returns open: true for a tripped key)
+ * plan: stealth-browser, state resolve-findings, task resolve-findings-implementer, [resolve-findings.2] F56 F57
  * Ticket 8468f7b1 - scenario: the reverse-apis request-builder consumer,
  * end to end on the memory fs. A miniature `send` mirrors the real
  * pipeline order: the tripwire gate (assertOpen) runs BEFORE pacing and
@@ -106,14 +108,20 @@ describe('[tripwire-interactive.6] request-builder: 4xx trips, sends are ' +
       expect(eventsOf(env, 'tripwire-fired')).toHaveLength(1);
     });
 
-  it('every 4xx trips (400 and 499 inclusive); 5xx never trips', async () => {
+  it('every 4xx trips (400 and 499 inclusive); 3xx and 5xx never trip', async () => {
+    for (const status of [301, 304, 399]) {
+      const env = makeEnv();
+      const rb = requestBuilder(env.tw, scripted([status]));
+      expect((await rb.send('c1', 'op')).status).toBe(status);
+      expect((await env.tw.read('c1')).status).toBe('clear');
+    }
     for (const status of [400, 403, 429, 499]) {
       const env = makeEnv();
       const rb = requestBuilder(env.tw, scripted([status]));
       await rejectionOf(rb.send('c1', 'op'));
       expect((await env.tw.read('c1')).status).toBe('tripped');
     }
-    for (const status of [500, 502, 503]) {
+    for (const status of [500, 502, 503, 599]) {
       const env = makeEnv();
       const rb = requestBuilder(env.tw, scripted([status]));
       expect((await rb.send('c1', 'op')).status).toBe(status);
@@ -233,8 +241,7 @@ describe('[tripwire-interactive.6] request-builder: a second 4xx keeps the ' +
     const first = rejectionOf(rb.send('tinder', 'first'));
     const second = rejectionOf(rb.send('tinder', 'second'));
     // both passed the gate before either response arrived
-    await new Promise((r) => setTimeout(r, 0));
-    expect(rb.calls).toEqual(['first', 'second']);
+    await vi.waitFor(() => expect(rb.calls).toEqual(['first', 'second']));
     pending[0]?.({ status: 401, body: 'a' });
     const e1 = (await first) as TripwireTrippedError;
     pending[1]?.({ status: 403, body: 'b' });

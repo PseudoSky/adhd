@@ -2,6 +2,8 @@
  * guards: the agent-search flow reaches Chrome past a tripped key, or the HITL and expiry paths regress end to end
  * tier: S
  * cites: ticket 8468f7b1; [tripwire-interactive.7] (TW13, TW15, TW18, TW24, TW26).
+ * teeth: red: nx run resilience-core-tripwire:test --skip-nx-cache -- test/unit/scenario-agent-search.spec.ts -> exit 1; 7 failed | 3 passed; AssertionError: expected { outcome: 'ok' } to match object { outcome: 'hitl', locked: true } (mutation: src/lib/tripwire.ts gate() returns open: true for a tripped key)
+ * plan: stealth-browser, state resolve-findings, task resolve-findings-implementer, [resolve-findings.2] F56 F57
  * Ticket 8468f7b1 - scenario: the agent-search consumer, end to end on the
  * memory fs, with its real configuration (clearPolicy 'open', expiry
  * ttlMs 2 h, namespace agent-search). A miniature search mirrors the

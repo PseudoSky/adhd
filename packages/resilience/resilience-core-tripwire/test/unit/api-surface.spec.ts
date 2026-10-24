@@ -76,14 +76,16 @@ describe('[tripwire-core.24] TW30 public surface', () => {
 
   it('no consumer-specific name (provider, client) is exported', () => {
     const src = readFileSync(join(PKG_ROOT, 'src', 'index.ts'), 'utf8');
-    const names = [...src.matchAll(/\b([A-Za-z_$][\w$]*)\b,?\s*$/gm)]
-      .map((m) => m[1]);
-    for (const n of [...names, ...Object.keys(index)]) {
+    // every token of the entry point (any export style, comments removed)
+    const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+    const tokens = code.match(/[A-Za-z_$][\w$]*/g) ?? [];
+    expect(tokens.length).toBeGreaterThan(20);
+    for (const n of [...tokens, ...Object.keys(index)]) {
       expect(n).not.toMatch(/provider|client/i);
     }
   });
 
-  it('the spec types are exported and usable', () => {
+  it('the spec types are exported and usable', async () => {
     const ctx: TripContext = {
       lastStatus: 401,
       nested: [1, 'a', null, { ok: true }],
@@ -112,15 +114,16 @@ describe('[tripwire-core.24] TW30 public surface', () => {
       onWarning: () => undefined,
     };
     const tw: Tripwire = index.createTripwire(options);
-    type Shapes = [
-      TripwireRecord,
-      TripwireSnapshot,
-      TripInput<TripContext>,
-      TripResult<TripContext>,
-      GateResult<TripContext>,
-    ];
-    const shapes: Shapes | undefined = undefined;
-    expect(shapes).toBeUndefined();
+    // each exported shape annotates a real value produced by the API
+    const input: TripInput<TripContext> = { reason: 'captcha', context: ctx };
+    const tripped: TripResult<TripContext> = await tw.trip('k', input);
+    const record: TripwireRecord = tripped.record;
+    const gate: GateResult<TripContext> = await tw.gate('k');
+    const snapshot: TripwireSnapshot = gate.snapshot;
+    expect(tripped.created).toBe(true);
+    expect(record.key).toBe('k');
+    expect(gate.open).toBe(false);
+    expect(snapshot.status).toBe('tripped');
     expect([v, opts, status, warning].length).toBe(4);
     expect(typeof tw.trip).toBe('function');
   });

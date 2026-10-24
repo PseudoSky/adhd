@@ -43,7 +43,7 @@ describe('[tripwire-interactive.4] TW27 runUnlockCli', () => {
     for (const argv of [[], ['']]) {
       const io = fakeIo();
       expect(await runUnlockCli(argv, io, env.tw)).toBe(1);
-      expect(io.errLines).toEqual(['Usage: pnpm unlock-tripwire <client>']);
+      expect(io.errLines).toEqual(['Usage: <unlock-command> <key>']);
       expect(io.outLines).toEqual([]);
     }
     const io = fakeIo();

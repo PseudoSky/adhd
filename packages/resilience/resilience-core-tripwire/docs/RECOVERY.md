@@ -111,9 +111,9 @@ rm "<stateDir>/tripwire/<key>.lock"
 rm "$ADHD_HOME/request-builder/tripwire/tinder.lock"
 ```
 
-The next `gate` on that key sees no lock and opens. A running process that
-latched the trip in memory drops its latch as soon as the lock exists on disk,
-so it also opens at its next `gate`. What a manual `rm` does not do:
+The next `gate` on that key sees no lock and opens. A process whose trip was
+persisted keeps no in-memory latch (the lock file is its only state), so it
+opens at its next `gate` too. What a manual `rm` does not do:
 
 - it writes no `tripwire-cleared` audit line and no `<key>.cleared` marker, so
   the next trip will have no `priorClear`. Write down who removed it and why;

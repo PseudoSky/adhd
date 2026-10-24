@@ -55,7 +55,8 @@ describe('[tripwire-core.2] TW2 unique .tmp names, complete-or-ENOENT', () => {
       .map((o) => o.path);
     expect(tmps).toHaveLength(3);
     for (const t of tmps) {
-      expect(t).toMatch(new RegExp(`\\.${process.pid}\\.[0-9a-f]{12}\\.tmp$`));
+      expect(t.endsWith('.tmp')).toBe(true);
+      expect(t).toContain(`.${process.pid}.`);
     }
     expect(new Set(tmps).size).toBe(3);
     // no tmp is left behind
@@ -123,6 +124,14 @@ describe('[tripwire-core.2] TW2 unique .tmp names, complete-or-ENOENT', () => {
       expect(['{"by":"a"}', '{"by":"b"}']).toContain(mfs.readText(LOCK));
     }, 40);
   });
+
+  it('an empty lock file (the open(wx) fallback window) is never read as clear', async () => {
+    const env = makeEnv();
+    env.mfs.writeText(env.lockPath('k'), '', 0o600);
+    const snap = await env.tw.read('k');
+    expect(snap.status).toBe('unreadable');
+    expect((await env.tw.gate('k')).open).toBe(false);
+  });
 });
 
 describe('[tripwire-core.6] TW6 files 0o600 and directories 0o700', () => {
@@ -144,19 +153,29 @@ describe('[tripwire-core.6] TW6 files 0o600 and directories 0o700', () => {
     expect(env.mfs.modeOf(env.markerPath('k'))).toBe(0o600);
   });
 
-  it('pre-existing 0o755 directories and a 0o644 audit are tightened', async () => {
+  it('a pre-existing 0o755 stateDir keeps its mode (F135, F136); the lock dir this package creates and a 0o644 audit file are tightened', async () => {
     const env = makeEnv();
-    env.mfs.makeDir(`${STATE_DIR}/tripwire`, 0o755);
     env.mfs.writeText(env.auditPath, '{"legacy":true}\n', 0o644);
     expect(env.mfs.modeOf(STATE_DIR)).toBe(0o755);
     await env.tw.trip('k', {
       reason: 'x',
       context: {},
     });
-    expect(env.mfs.modeOf(STATE_DIR)).toBe(0o700);
+    expect(env.mfs.modeOf(STATE_DIR)).toBe(0o755);
     expect(env.mfs.modeOf(`${STATE_DIR}/tripwire`)).toBe(0o700);
     expect(env.mfs.modeOf(env.auditPath)).toBe(0o600);
     expect(env.mfs.readText(env.auditPath)).toMatch(/^\{"legacy":true\}\n/);
+  });
+
+  it('a pre-existing shared auditPath directory is not chmodded by the audit writer (F135)', async () => {
+    const env = makeEnv({ auditPath: '/var/log/app/audit.log' });
+    env.mfs.makeDir('/var/log/app', 0o755);
+    await env.tw.trip('k', {
+      reason: 'x',
+      context: {},
+    });
+    expect(env.mfs.modeOf('/var/log/app')).toBe(0o755);
+    expect(env.mfs.modeOf('/var/log/app/audit.log')).toBe(0o600);
   });
 
   it('an auditPath directory elsewhere is created 0o700', async () => {

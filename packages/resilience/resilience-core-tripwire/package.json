@@ -12,6 +12,7 @@
   },
   "files": [
     "dist",
+    "docs",
     "CHANGELOG.md"
   ],
   "keywords": [
