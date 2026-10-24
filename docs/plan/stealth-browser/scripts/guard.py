@@ -2508,9 +2508,16 @@ def _afx2():
     bad = []
     for r in res.get("resolutions", []):
         if r.get("status") == "fixed":
-            body = git("log", "-1", "--format=%B", r.get("commit", "HEAD_MISSING"))
-            files = git("diff-tree", "--no-commit-id", "--name-only", "-r", r.get("commit", "HEAD_MISSING")).splitlines()
-            if "[psm:audit-fixes]" not in body or fmap.get(r["id"], {}).get("file") not in files:
+            cited = fmap.get(r["id"], {}).get("file") or ""
+            repo = [] if not os.path.isabs(cited) or cited.startswith(TOP + "/") else ["-C", os.path.dirname(cited)]  # a cross-repo citation (the scratch repo) is checked in the repo that holds the file
+            top = subprocess.run(["git", *repo, "rev-parse", "--show-toplevel"], capture_output=True, text=True).stdout.strip() if repo else ""
+            if repo and top:
+                cited = os.path.relpath(cited, top)
+            def _g(*a):
+                return subprocess.run(["git", *repo, *a], capture_output=True, text=True).stdout
+            body = _g("log", "-1", "--format=%B", r.get("commit", "HEAD_MISSING"))
+            files = _g("diff-tree", "--no-commit-id", "--name-only", "-r", r.get("commit", "HEAD_MISSING")).splitlines()
+            if "[psm:audit-fixes]" not in body or cited not in files:
                 bad.append(r["id"])
         elif len(r.get("evidence", "")) < 40 or not r.get("reproduction"):
             bad.append(r["id"])
