@@ -20,7 +20,7 @@ Exit status: 0
 
 ## Summary
 
-blocker: 0, major: 6, minor: 28, nit: 8 (total 42).
+blocker: 0, major: 5, minor: 28, nit: 10 (total 43).
 
 ## Findings
 
@@ -48,11 +48,11 @@ SSRF check resolves the host once in Node and the browser resolves again at conn
 
 Evidence: policy.ts:15-18 states `The browser resolves again at connect time`; fetch.ts:375 `await resolveAndCheck(verdict.url.hostname, deps.resolveHost)` then :409 `deps.settle(session, { navigate: target ...})` navigates by name; pdfBytesDirect fetch.ts:311-312 resolves then `fetchImpl(current)` resolves again. A rebinding name passes the check and reaches loopback or metadata.
 
-### P5 [major] entrypoint/stealth-search/src/server.ts:367
+### P5 [minor] entrypoint/stealth-search/src/server.ts:367
 
-dist/operations.baked.json ships mode 0600 (nodeHostFs.writeFile mode 0o600), so a root-installed package is unreadable by other users and the host silently falls back to the ~13 s extraction (known; verified).
+dist/operations.baked.json is produced with file mode 0600 (nodeHostFs.writeFile mode 0o600) and the npm tarball carries it as 0600 while every other dist file is 0644 (known; verified in the tarball). A 0600 file extracted by a tool that keeps tar modes is unreadable by other users of a shared install and the host then silently falls back to the ~13 s extraction.
 
-Evidence: server.ts:367 `writeFileSync(p, d, { mode: 0o600 })` used by writeOperationsCache for the baked file (bakeOperations :277). `ls -l dist/operations.baked.json` = -rw------- and `npm pack --dry-run --json` lists dist/operations.baked.json mode 0o600 (all other dist files 0o644). server.ts:243-249: an unreadable file makes `present=false`, so no onStale warning is emitted either.
+Evidence: server.ts:367 `writeFileSync(p, d, { mode: 0o600 })` used by writeOperationsCache for the baked file (bakeOperations :277). `npm pack` of entrypoint/stealth-search then `tar -xzf` gives -rw------- for package/dist/operations.baked.json; `npm pack --dry-run --json` lists mode 0o600 for it and 0o644 for the other dist files. Not verified: whether npm's own installer re-adds read bits (pacote extract could not be run offline). server.ts:243-249: an unreadable file makes present=false, so no onStale warning is emitted either. Fix: write the baked file 0644 (it holds no secrets) or chmod in bake-operations.mjs.
 
 ### P6 [nit] entrypoint/stealth-search/test/unit/providers/pypi-dom.spec.ts:27
 
@@ -252,25 +252,31 @@ Event-subscriber exceptions are swallowed with an empty catch, so a failing capt
 
 Evidence: session.ts:90 `try { handler(event.params) } catch { /* a bad subscriber isn't the session's problem */ }`.
 
-### P39 [minor] docs/plan/stealth-browser/README.md:270
+### P39 [minor] packages/resilience/resilience-core-tripwire/src/lib/tripwire.ts:448
 
 Open product defect from the README findings list: the tripwire expiry audit line carries only trippedAt and not the original trip reason, so the audit log cannot say why a lock lapsed.
 
 Evidence: tripwire.ts:446-454 audit({event:'tripwire-expired', reason: EXPIRY_AUDIT_REASON, trippedAt: r.trippedAt, ...}) replaces r.reason; README.md:270 lists it as `for filing`.
 
-### P40 [minor] docs/plan/stealth-browser/README.md:278
+### P40 [nit] packages/stealth/stealth-core-browser/src/lib/capture/dom.ts:218
 
-Open product defect from the README findings list: Google anchors without a heading are skipped, so those results never reach the caller.
+README findings list: Google anchors without an H2/H3 heading are skipped, so those results never reach the caller. The skip is deliberate (comment at dom.ts:215-217) and has no counter or warning, so a Google layout change that drops headings returns an empty page silently.
 
-Evidence: README.md:278 `Heading-less Google anchors are skipped.`; capture/dom.ts:218 `const title = findHeadingText(node)` drives inclusion.
+Evidence: dom.ts:218-219 `const title = findHeadingText(node)` / `if (!title) continue`; comment dom.ts:215-217 `An anchor without a heading is not a result`; findHeadingText :236-246 accepts only H2/H3.
 
-### P41 [minor] docs/plan/stealth-browser/README.md:280
+### P41 [minor] entrypoint/stealth-search/README.md:27
 
 Documentation gap: SearchOutput.omitted / maxResultBytes apply only to engine providers and are in neither the package README nor SPEC-stealth-search.md (README findings list).
 
-Evidence: README.md:280; api.ts:83-84 documents maxResultBytes; entrypoint/stealth-search/README.md has no mention (rg maxResultBytes returns nothing there); search.ts:329-358 shapeFetch does not call boundResults.
+Evidence: plan README.md:280 lists it; api.ts:83-84 documents maxResultBytes; entrypoint/stealth-search/README.md has no mention (rg maxResultBytes returns nothing there); search.ts:329-358 shapeFetch does not call boundResults.
 
-### P42 [minor] /Users/nix/dev/ai/scratch/INDEX.md:18
+### P42 [nit] entrypoint/stealth-search/src/server.ts:6
+
+The module header says buildStealthSearchPackage "inlines $ref", but no code inlines anything: the composed schemas keep `$ref` (the getPageContext output schema holds {"$ref":"#/definitions/CookieSummary"} with definitions present, so it is self-contained, but the comment and the unit coverage claim are wrong).
+
+Evidence: server.ts:5-7 `inlines `$ref` (run-mode dispatch cannot resolve them)`; server.ts:303-345 buildStealthSearchPackage calls buildApigenPackage and requireExplicitInput only; building the package from dist shows getPageContext schema refs = "#/definitions/CookieSummary"; plan README.md:282 notes package.spec.ts has no $ref tests.
+
+### P43 [minor] /Users/nix/dev/ai/scratch/INDEX.md:18
 
 Scratch cutover left INDEX.md describing the retired agent-browser project (21 mentions: cdp-search.ts, server.mjs, search-cli.mjs, fetch-*.ts, docs/cdp ...) as live tools whose files ca1f94d84 deleted; the scratch rule requires INDEX.md updated after every folder change. A tracked agent-browser/metrics.json and untracked dist/ and node_modules/ remain.
 

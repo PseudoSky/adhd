@@ -59,11 +59,11 @@
     },
     {
       "id": "P5",
-      "severity": "major",
+      "severity": "minor",
       "file": "entrypoint/stealth-search/src/server.ts",
       "line": 367,
-      "summary": "dist/operations.baked.json ships mode 0600 (nodeHostFs.writeFile mode 0o600), so a root-installed package is unreadable by other users and the host silently falls back to the ~13 s extraction (known; verified).",
-      "evidence": "server.ts:367 `writeFileSync(p, d, { mode: 0o600 })` used by writeOperationsCache for the baked file (bakeOperations :277). `ls -l dist/operations.baked.json` = -rw------- and `npm pack --dry-run --json` lists dist/operations.baked.json mode 0o600 (all other dist files 0o644). server.ts:243-249: an unreadable file makes `present=false`, so no onStale warning is emitted either."
+      "summary": "dist/operations.baked.json is produced with file mode 0600 (nodeHostFs.writeFile mode 0o600) and the npm tarball carries it as 0600 while every other dist file is 0644 (known; verified in the tarball). A 0600 file extracted by a tool that keeps tar modes is unreadable by other users of a shared install and the host then silently falls back to the ~13 s extraction.",
+      "evidence": "server.ts:367 `writeFileSync(p, d, { mode: 0o600 })` used by writeOperationsCache for the baked file (bakeOperations :277). `npm pack` of entrypoint/stealth-search then `tar -xzf` gives -rw------- for package/dist/operations.baked.json; `npm pack --dry-run --json` lists mode 0o600 for it and 0o644 for the other dist files. Not verified: whether npm's own installer re-adds read bits (pacote extract could not be run offline). server.ts:243-249: an unreadable file makes present=false, so no onStale warning is emitted either. Fix: write the baked file 0644 (it holds no secrets) or chmod in bake-operations.mjs."
     },
     {
       "id": "P6",
@@ -332,35 +332,51 @@
     {
       "id": "P39",
       "severity": "minor",
-      "file": "docs/plan/stealth-browser/README.md",
-      "line": 270,
+      "file": "packages/resilience/resilience-core-tripwire/src/lib/tripwire.ts",
+      "line": 448,
       "summary": "Open product defect from the README findings list: the tripwire expiry audit line carries only trippedAt and not the original trip reason, so the audit log cannot say why a lock lapsed.",
       "evidence": "tripwire.ts:446-454 audit({event:'tripwire-expired', reason: EXPIRY_AUDIT_REASON, trippedAt: r.trippedAt, ...}) replaces r.reason; README.md:270 lists it as `for filing`."
     },
     {
       "id": "P40",
-      "severity": "minor",
-      "file": "docs/plan/stealth-browser/README.md",
-      "line": 278,
-      "summary": "Open product defect from the README findings list: Google anchors without a heading are skipped, so those results never reach the caller.",
-      "evidence": "README.md:278 `Heading-less Google anchors are skipped.`; capture/dom.ts:218 `const title = findHeadingText(node)` drives inclusion."
+      "severity": "nit",
+      "file": "packages/stealth/stealth-core-browser/src/lib/capture/dom.ts",
+      "line": 218,
+      "summary": "README findings list: Google anchors without an H2/H3 heading are skipped, so those results never reach the caller. The skip is deliberate (comment at dom.ts:215-217) and has no counter or warning, so a Google layout change that drops headings returns an empty page silently.",
+      "evidence": "dom.ts:218-219 `const title = findHeadingText(node)` / `if (!title) continue`; comment dom.ts:215-217 `An anchor without a heading is not a result`; findHeadingText :236-246 accepts only H2/H3."
     },
     {
       "id": "P41",
       "severity": "minor",
-      "file": "docs/plan/stealth-browser/README.md",
-      "line": 280,
+      "file": "entrypoint/stealth-search/README.md",
+      "line": 27,
       "summary": "Documentation gap: SearchOutput.omitted / maxResultBytes apply only to engine providers and are in neither the package README nor SPEC-stealth-search.md (README findings list).",
-      "evidence": "README.md:280; api.ts:83-84 documents maxResultBytes; entrypoint/stealth-search/README.md has no mention (rg maxResultBytes returns nothing there); search.ts:329-358 shapeFetch does not call boundResults."
+      "evidence": "plan README.md:280 lists it; api.ts:83-84 documents maxResultBytes; entrypoint/stealth-search/README.md has no mention (rg maxResultBytes returns nothing there); search.ts:329-358 shapeFetch does not call boundResults."
     },
     {
       "id": "P42",
+      "severity": "nit",
+      "file": "entrypoint/stealth-search/src/server.ts",
+      "line": 6,
+      "summary": "The module header says buildStealthSearchPackage \"inlines $ref\", but no code inlines anything: the composed schemas keep `$ref` (the getPageContext output schema holds {\"$ref\":\"#/definitions/CookieSummary\"} with definitions present, so it is self-contained, but the comment and the unit coverage claim are wrong).",
+      "evidence": "server.ts:5-7 `inlines `$ref` (run-mode dispatch cannot resolve them)`; server.ts:303-345 buildStealthSearchPackage calls buildApigenPackage and requireExplicitInput only; building the package from dist shows getPageContext schema refs = \"#/definitions/CookieSummary\"; plan README.md:282 notes package.spec.ts has no $ref tests."
+    },
+    {
+      "id": "P43",
       "severity": "minor",
       "file": "/Users/nix/dev/ai/scratch/INDEX.md",
       "line": 18,
       "summary": "Scratch cutover left INDEX.md describing the retired agent-browser project (21 mentions: cdp-search.ts, server.mjs, search-cli.mjs, fetch-*.ts, docs/cdp ...) as live tools whose files ca1f94d84 deleted; the scratch rule requires INDEX.md updated after every folder change. A tracked agent-browser/metrics.json and untracked dist/ and node_modules/ remain.",
       "evidence": "git -C /Users/nix/dev/ai/scratch show ca1f94d84 --stat: 111 files, 5 insertions and 24712 deletions, INDEX.md not in the list; INDEX.md:18-43 still lists agent-browser rows; bin/scratch-agent-search and bin/scratch-agent-search-serve were removed in the same commit; `ls agent-browser` = dist, metrics.json, node_modules."
     }
+  ],
+  "rejected": [
+    "README known issues 1-5 and 7 (untagged commit, compile-task truncation, plan-scaffold --no-verify, missing add-edge verb, moved test layout, 10-15 min full audit): plan-tooling facts, not product defects.",
+    "README known issue 6 (upstream adhd.op.error twin): documented upstream behaviour kept on purpose; docs/OBSERVABILITY.md describes it accurately.",
+    "Findings list: MemoryFs.schedule setImmediate polling (test infrastructure only, no shipped path), weak reaper-link default-entry test (test quality, no shipped defect), conform-core guards header wording and the stale src/test wording in completed contexts (plan documents), the transcribed pypi fixture (a live capture needs a HITL session; fixture limitation), invalid endpoint being CDP_UNREACHABLE detail.reason invalid-endpoint (documented design, errors.ts:199-205).",
+    "Findings list: core normalizeUrl handling /goto?url= and extractValue testing the container first are intended behaviour; only the URIError path (P27) is a defect.",
+    "Findings list: `baked operations cache is produced by build-bin, not the vite build`: verified not a defect, project.json nx-release-publish dependsOn build, build-bin, test, verify-dist-load, dist-manifest, so a published package always carries the baked file.",
+    "Findings list: expectMcpToolError (test/helpers/hosts/host-harness.ts) checks isError and text only: folded into the MCP error-code finding (P3); the fix there should tighten the helper."
   ],
   "verified_not_defects": [
     "reaper-link.ts no longer uses @ts-ignore or import.meta (rg finds no ts-ignore/ts-expect-error/eslint-disable in the three src trees; currentModuleUrl uses __filename and a stack frame): the scheduled item is already resolved.",
