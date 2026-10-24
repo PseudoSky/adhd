@@ -536,11 +536,11 @@
       "end_ref": "de35d528611fbf2c6d2dec4b51aff9eb15fe3568"
     },
     "fix-search-build": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-10-24T00:43:50.786Z",
-      "done_at": null,
+      "done_at": "2026-10-24T01:07:44.693Z",
       "start_ref": "1d647d0bb4f2d81fbf2c6005028659a54dfe3cb6",
-      "end_ref": null
+      "end_ref": "f62af06f62226b3776abb24720e61c33a7cb4c3d"
     },
     "search-tracing-fixes": {
       "status": "pending",
@@ -1308,6 +1308,18 @@
       "audit_criteria_total": 7,
       "by": "pseudosky",
       "note": "commit de35d5286; guard 7/7 rc=0"
+    },
+    {
+      "ts": "2026-10-24T01:07:44.693Z",
+      "from": "fix-search-build",
+      "to": "fix-search-build",
+      "start_ref": "1d647d0bb4f2d81fbf2c6005028659a54dfe3cb6",
+      "end_ref": "f62af06f62226b3776abb24720e61c33a7cb4c3d",
+      "audit_exit": 0,
+      "audit_criteria_passed": 5,
+      "audit_criteria_total": 5,
+      "by": "pseudosky",
+      "note": "commit f62af06f6; guard 5/5 rc=0"
     }
   ],
   "amendment_log": [
@@ -2085,7 +2097,7 @@
     "version": "0.8.35",
     "hash": "0b6bc1f3d70e"
   },
-  "current_state": "fix-search-build",
+  "current_state": "search-tracing-fixes",
   "dod_provenance": {
     "confirmed_at": "2026-10-12T23:49:38.410Z",
     "by": "pseudosky",
