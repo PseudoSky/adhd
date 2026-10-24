@@ -431,10 +431,10 @@
       "end_ref": "efb0087501c503188eb63dda9350f2a23396e278"
     },
     "tracing-log-validation": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-10-24T02:09:40.441Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "6f38faffcb024c7682c6791291df8d50a7084d89",
       "end_ref": null
     },
     "search-cutover": {
