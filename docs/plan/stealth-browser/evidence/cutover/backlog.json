@@ -1,0 +1,80 @@
+{
+  "items": [
+    {
+      "id": "B-028",
+      "graph_uid": "a5d639a2-5832-49c8-afb2-0671c03152fb",
+      "status": "resolved",
+      "citation": "packages/stealth/stealth-core-browser/src/lib/capture/network.ts, packages/stealth/stealth-core-browser/src/lib/recording/network-recorder.ts",
+      "detail": "one capture pipeline: captureNetworkResponse in capture/network.ts is a thin wrapper over NetworkRecorder (recording/network-recorder.ts); the duplicate network-capture.ts and its diverged debounce default no longer exist",
+      "note": "BACKLOG.md-only row filed into the graph at disposition time"
+    },
+    {
+      "id": "B-029",
+      "graph_uid": "f96e04a5-2637-418c-840d-d9ab61a3d822",
+      "status": "resolved",
+      "citation": "packages/stealth/stealth-core-browser/src/lib/recording/network-recorder.ts, packages/stealth/stealth-core-browser/src/lib/recording/types.ts",
+      "detail": "NetworkRecorder records request headers and postData (types.ts postData; getRequestPostData fetch for hasPostData)",
+      "note": "BACKLOG.md-only row filed into the graph at disposition time"
+    },
+    {
+      "id": "B-030",
+      "graph_uid": "4db9afb0-3a1f-4121-9c58-df213331b0de",
+      "status": "resolved",
+      "citation": "packages/stealth/stealth-core-browser/src/lib/recording/network-recorder.ts",
+      "detail": "NetworkRecorder subscribes Network.responseReceived (line 192) and records the real status and response headers",
+      "note": "BACKLOG.md-only row filed into the graph at disposition time"
+    },
+    {
+      "id": "B-031",
+      "graph_uid": "40877d16-ce47-4d80-90b9-65ae818fcc0f",
+      "status": "resolved",
+      "citation": "packages/stealth/stealth-core-browser/src/lib/recording/network-recorder.ts",
+      "detail": "NetworkRecorder subscribes Network.requestWillBeSentExtraInfo and Network.responseReceivedExtraInfo (lines 191, 193) and merges them",
+      "note": "BACKLOG.md-only row filed into the graph at disposition time"
+    },
+    {
+      "id": "B-032",
+      "graph_uid": "cfd2fa1a-3b31-47d8-811e-1dfd14a8cc6a",
+      "status": "resolved",
+      "citation": "packages/stealth/stealth-core-browser/src/lib/cdp/session.ts, packages/stealth/stealth-core-browser/src/lib/capture/network.ts",
+      "detail": "capture runs over the shared CdpSession (the only new WebSocket( under src/lib is cdp/session.ts line 46)",
+      "note": "BACKLOG.md-only row filed into the graph at disposition time"
+    },
+    {
+      "id": "B-033",
+      "graph_uid": "f3752601-33c3-4d79-ac33-78083474e974",
+      "status": "resolved",
+      "citation": "packages/stealth/stealth-core-browser/src/lib/capture/network.ts, packages/stealth/stealth-core-browser/src/lib/recording/network-recorder.ts",
+      "detail": "the single capture pipeline is consumed through the core public API; the dead duplicate module was not carried over",
+      "note": "BACKLOG.md-only row filed into the graph at disposition time"
+    },
+    {
+      "id": "B-034",
+      "graph_uid": "9f48e026-e7fb-4e3b-b51d-57d4ab81bd44",
+      "status": "resolved",
+      "citation": "entrypoint/stealth-search/src/lib/search.ts",
+      "detail": "search opens its page with cdp.createIsolatedPageTarget (search.ts lines 133-134) and disposes it in finally; createPageTarget is no longer on the search path",
+      "note": "BACKLOG.md-only row filed into the graph at disposition time"
+    },
+    {
+      "id": "B-035",
+      "graph_uid": "aec2fa1e-af64-4fcd-ae04-d7167557745e",
+      "status": "resolved",
+      "citation": "entrypoint/stealth-search/src/lib/search.ts",
+      "detail": "search.ts wraps every opened page in an idempotent dispose, and the outer catch disposes a leaked context (inventory row I-14)",
+      "note": "BACKLOG.md-only row filed into the graph at disposition time"
+    },
+    {
+      "id": "19dfb641",
+      "graph_uid": "19dfb641-516f-445d-8fb1-28afbaa9b566",
+      "status": "superseded",
+      "graph_status": "SUPERSEDED",
+      "citation": "packages/stealth/stealth-core-browser/src/lib/lifecycle/sp.ts, packages/stealth/stealth-core-browser/src/lib/lifecycle/reaper-link.ts",
+      "detail": "Chrome process management moved into @adhd/stealth-core-browser lifecycle over the sox-service-proxy funnel (lifecycle/sp.ts, lifecycle/reaper-link.ts); the scratch agent-browser Chrome manager it described is retired",
+      "relation": "6ba3731d-2484-40d9-b974-7d4313975fac (stealth-browser: chrome-lifecycle plan ticket) SUPERSEDES 19dfb641"
+    }
+  ],
+  "by": "agent:search-cutover-executor",
+  "tool": "adhd-backlog backlog create/transition (graph); BACKLOG.md never edited",
+  "store_check": "adhd-backlog store-check ok:true"
+}
