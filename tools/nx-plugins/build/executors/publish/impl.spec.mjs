@@ -313,6 +313,46 @@ test('--dryRun: never writes the cache, even on a "successful" (dry) npm publish
   }
 });
 
+// 8468f7b1 [release-gate-fixes.8]: a same-version/different-content package under `release:dry`.
+async function differsFixture(t, options, envValue) {
+  const rootDir = mkdtempSync(join(tmpdir(), 'publish-impl-'));
+  const prevEnv = process.env.ADHD_NX_VERSION_DRY_RUN;
+  if (envValue === undefined) delete process.env.ADHD_NX_VERSION_DRY_RUN;
+  else process.env.ADHD_NX_VERSION_DRY_RUN = envValue;
+  try {
+    const distPkg = { name: '@adhd/pkg-d', version: '1.0.0' };
+    const { context } = makeProject({ rootDir, name: 'pkg-d', projectRoot: 'packages/pkg-d', distPkg });
+    writePublishedState(rootDir, { '@adhd/pkg-d': { version: '1.0.0', normalizedHash: 'not-the-local-hash', publishedIntegrity: 'sha512-x' } });
+    const state = newState();
+    t.mock.method(child_process, 'spawnSync', makeSpawnSyncMock(state));
+    const result = await loadFreshImpl()(options, context);
+    return { result, state };
+  } finally {
+    if (prevEnv === undefined) delete process.env.ADHD_NX_VERSION_DRY_RUN;
+    else process.env.ADHD_NX_VERSION_DRY_RUN = prevEnv;
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+}
+
+test('8468f7b1 [release-gate-fixes.8] (a) dryRun + ADHD_NX_VERSION_DRY_RUN=1: content differs at the same version => success, dry-run outcome, no npm call', async (t) => {
+  const { result, state } = await differsFixture(t, { dryRun: true }, '1');
+  assert.equal(result.success, true);
+  assert.deepEqual(result.outcome, { status: 'dry-run', name: '@adhd/pkg-d', version: '1.0.0' });
+  assert.deepEqual(state.calls, [], '[release-gate-fixes.8] a pending bump must not reach npm');
+});
+
+test('8468f7b1 [release-gate-fixes.8] (b) dryRun without the env var: content differs at the same version still FAILS', async (t) => {
+  const { result } = await differsFixture(t, { dryRun: true }, undefined);
+  assert.equal(result.success, false);
+  assert.equal(result.outcome.status, 'failed');
+});
+
+test('8468f7b1 [release-gate-fixes.8] (c) non-dry publish with the env var set: content differs at the same version still FAILS', async (t) => {
+  const { result } = await differsFixture(t, {}, '1');
+  assert.equal(result.success, false);
+  assert.equal(result.outcome.status, 'failed');
+});
+
 test('DEBT-002 #2: defaults --access from the dist manifest\'s publishConfig.access when no explicit task option is given', async (t) => {
   const rootDir = mkdtempSync(join(tmpdir(), 'publish-impl-'));
   try {

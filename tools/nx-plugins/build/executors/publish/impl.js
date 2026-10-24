@@ -391,6 +391,20 @@ async function run(options, context) {
       }
       // Same version, different build, no bump: never silently skipped. `version`
       // owns source + changelog writes, so publish names the one-line fix.
+      //
+      // DRY RUN (8468f7b1 [release-gate-fixes.8]): under `release:dry` the whole chain
+      // runs with ADHD_NX_VERSION_DRY_RUN=1, so `version` is read-only and cannot have
+      // bumped. The bump is then merely PENDING, not missing — report it and succeed.
+      // Requires BOTH `--dryRun` and the env var; a real publish, or a plain
+      // `--dryRun` with `version` genuinely skipped, still fails below.
+      if (options.dryRun && process.env.ADHD_NX_VERSION_DRY_RUN === '1') {
+        console.error(
+          `publish: ${name}@${version} is already on npm but the built content DIFFERS from it; ` +
+            `dry run: a version bump would be required before a real publish ` +
+            `(npx nx run ${context.projectName}:version). Nothing published.`
+        );
+        return { success: true, outcome: outcome('dry-run', { name, version }) };
+      }
       console.error(
         `publish: ${name}@${version} is already on npm but the built content DIFFERS from it and the version was not ` +
           `bumped (is \`version\` being skipped, e.g. ADHD_NX_VERSION_DRY_RUN=1 or --excludeTaskDependencies?). ` +
