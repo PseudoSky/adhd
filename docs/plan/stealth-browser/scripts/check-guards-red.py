@@ -49,6 +49,10 @@ STATES = [k for k in STATES if k in PENDING or k not in _st]
 print("skipped (not pending in state.json): " + ", ".join(SKIPPED))
 # Inventory-fully-pinned criteria guard a standing invariant ([inv:no-features-removed]): they are green once the inventories are pinned, which the guard sweep did ahead of the audit states.
 REGRESSION_GUARDS = {"audit-fixes.6", "review-prep.5", "audit-final.4", "audit-final.12"}
+# gates-rerun.7 and audit-final.13 run the tripwire gates on the current tree behind the `resolve-findings` precondition (review/RESOLUTION.json): red while that file is absent, and legitimately green on a green tree once resolve-findings has produced it.
+import os
+if os.path.exists(f"{TOP}/docs/plan/stealth-browser/review/RESOLUTION.json"):
+    REGRESSION_GUARDS |= {"gates-rerun.7", "audit-final.13"}
 problems, n = [], 0
 for slug, ids in FOLDED.items():
     for i in ids:
