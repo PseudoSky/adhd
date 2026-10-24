@@ -4307,7 +4307,11 @@ def _twc30():
 @check("tripwire-core", 31)
 def _twc31():
     """TW38 the storage contract suite (storage-contract.spec.ts) runs identically on `createMemoryStorage`, `createFileStorage` over the memory fs and `createFileStorage` over a real `mkdtemp` directory; create-if-absent uses link with an `open wx` fallback (a memory fs that rejects `link` is covered)."""
-    return tw_spec("storage-contract.spec.ts", "tripwire-core.31", ("TW38", "createMemoryStorage", "createFileStorage", "mkdtemp", "link"))
+    unit = tw_spec("storage-contract.spec.ts", "tripwire-core.31", ("TW38", "createMemoryStorage", "createFileStorage", "link"))
+    # the real-directory (mkdtemp) run lives at the tier that may touch disk (resolve-findings F61): the same shared contract cases, run through the node fs
+    e2e = read(f"{TW}/test/e2e/storage-contract.e2e.ts")
+    real = TICKET in e2e and "[tripwire-core.31]" in e2e and "mkdtemp" in e2e and "createFileStorage" in e2e and "defineStorageContract" in e2e
+    return unit[0] and real, f"{unit[1]}; real-disk e2e contract run={real}"
 
 
 @check("tripwire-core", 32)
