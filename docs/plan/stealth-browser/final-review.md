@@ -41,3 +41,20 @@ Guards and audits:
 Hand off:
 [x] Dispatch decision made - plan-orchestrator execute stealth-browser, printed in README `## Dispatch`
 ```
+
+## Final audit (2026-10-24)
+
+AUDITOR: audit_dod.py (script-only)
+
+```text
+[dod.1] PASS three generator-built packages (stealth-core-browser, stealth-search, resilience-core-tripwire), sibling-structure parity
+[dod.2] PASS use-case unit suites (library scenarios in the core, CLI and MCP scenarios in the search entrypoint, against the in-process fake CDP server) pass
+[dod.3] PASS tracing namespace is adhd, never apigen (configuration pins + the validating agent's read of the logs written by the built CLI and MCP hosts)
+[dod.4] PASS behavior-preserving port (exports, similarity, tokens)
+[dod.5] PASS agent-search source untouched up to the first cutover commit
+[dod.6] PASS one blind review, one implementer, gates re-run green
+[dod.7] PASS docs marketing run PASS and receipts-backed README
+[dod.8] PASS branch committed, main node_modules untouched
+```
+
+EXIT: 0
