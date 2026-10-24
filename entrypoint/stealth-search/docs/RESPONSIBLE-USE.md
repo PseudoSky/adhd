@@ -29,7 +29,7 @@ Keep the request rate low. The package carries guards for this reason, not as a 
 
 Do not lower these values to push more traffic at a site that is already limiting you.
 
-## No CAPTCHA or ban evasion
+## No CAPTCHA or ban circumvention
 
 The tool does not solve CAPTCHAs, rotate identities, spoof fingerprints or retry its way past a block. When a challenge appears, the outcome is `captcha` or `hitl`: a human solves it in the visible browser window, or you stop and pick another provider. A ban is reported as `banned` and respected until the cooldown ends. Do not use the tool to continue after a site has asked you to stop.
 

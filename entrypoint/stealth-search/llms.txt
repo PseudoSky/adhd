@@ -9,7 +9,7 @@
 - [Errors](docs/ERRORS.md): the 13 typed error codes, exit statuses, MCP rendering.
 - [Observability](docs/OBSERVABILITY.md): `adhd.<op>.start|finish|error` records, `--verbose`, stdout rules.
 - [Examples](docs/EXAMPLES.md): every file under `examples/` with its scenario.
-- [Responsible use](docs/RESPONSIBLE-USE.md): terms of service, robots.txt, rate limits, no CAPTCHA or ban evasion, own profile only.
+- [Responsible use](docs/RESPONSIBLE-USE.md): terms of service, robots.txt, rate limits, no CAPTCHA or ban circumvention, own profile only.
 - [Changelog](CHANGELOG.md)
 - [Agent notes](AGENTS.md)
 

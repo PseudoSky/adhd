@@ -45,14 +45,14 @@ Any code outside this table (for example a core `CDP_*` code) keeps the core's e
 CLI: one line on stderr, `<CODE>: <message>`, then the process exits with `exitCodeFor(code)`.
 
 ```
-$ stealth-search search --provider nope "query"
-UNKNOWN_PROVIDER: provider "nope" is not registered — Use one of the registered provider ids ...
+$ stealth-search search --provider nope --query "query"
+UNKNOWN_PROVIDER: Unknown provider "nope". Available: duckduckgo, google, arxiv, npm, github, maven, wikipedia, crates, pypi, mdn, stackoverflow, fetch — Use one of the registered provider ids (see the providers list), then retry.
 $ echo $?
 70
 ```
 
-MCP: a typed failure (a `StealthSearchError`, or any core `StealthCoreBrowserError` that reaches the search host) is a tool result with `isError: true` (apigen ADR-0018), never a JSON-RPC rejection. The text is `<canonical>: <CODE>: <message>`: `<canonical>` is the apigen code (`invalid_argument` for `UNKNOWN_PROVIDER`, `HOST_FLAG_INVALID` and `FETCH_URL_REFUSED`, `internal` for every other typed code), `<CODE>` is the stable code of this table and `<message>` the message with its remediation. `_meta['adhd/error']` carries the canonical code. A thrown value that is not a typed error, an unknown tool name and a malformed request stay JSON-RPC protocol errors. A request the host schema rejects, such as `extraArgs` on `launchChrome`, answers with `invalid_argument` and no library code.
+MCP: every tool takes its input wrapped as `{ "data": { ...fields } }` (see `tools/list`). A typed failure (a `StealthSearchError`, or any core `StealthCoreBrowserError` that reaches the search host) is a tool result with `isError: true` (apigen ADR-0018), never a JSON-RPC rejection. The text is `<canonical>: <CODE>: <message>`: `<canonical>` is the apigen code (`invalid_argument` for `UNKNOWN_PROVIDER`, `HOST_FLAG_INVALID` and `FETCH_URL_REFUSED`, `internal` for every other typed code), `<CODE>` is the stable code of this table and `<message>` the message with its remediation. `_meta['adhd/error']` carries the canonical code. A thrown value that is not a typed error, an unknown tool name and a malformed request stay JSON-RPC protocol errors. A request the host schema rejects, such as `extraArgs` on `launchChrome`, answers with `invalid_argument` and no library code.
 
 ```json
-{ "isError": true, "content": [{ "type": "text", "text": "invalid_argument: UNKNOWN_PROVIDER: provider \"nope\" is not registered — Use one of the registered provider ids ..." }], "_meta": { "adhd/error": { "code": "invalid_argument" } } }
+{ "isError": true, "content": [{ "type": "text", "text": "invalid_argument: UNKNOWN_PROVIDER: Unknown provider \"nope\". Available: duckduckgo, google, arxiv, npm, github, maven, wikipedia, crates, pypi, mdn, stackoverflow, fetch — Use one of the registered provider ids (see the providers list), then retry." }], "_meta": { "adhd/error": { "code": "invalid_argument" } } }
 ```
