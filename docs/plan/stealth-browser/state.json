@@ -200,11 +200,11 @@
       "end_ref": "097412a5121ec9e82964026b0d97bb686ab64117"
     },
     "audit-pre-review": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-10-24T07:35:25.946Z",
-      "done_at": null,
+      "done_at": "2026-10-24T08:44:36.747Z",
       "start_ref": "15f4e6824fe01af8332620edbbbe96b37d47c652",
-      "end_ref": null
+      "end_ref": "81c96f1e763feb3ccf90ecf877f75149267fe2b8"
     },
     "audit-fixes": {
       "status": "pending",
@@ -1399,6 +1399,18 @@
       "audit_criteria_total": 6,
       "by": "pseudosky",
       "note": "6 gates exit 0 on local-main base, release order + approvals recorded, guard 6/6"
+    },
+    {
+      "ts": "2026-10-24T08:44:36.748Z",
+      "from": "audit-pre-review",
+      "to": "audit-pre-review",
+      "start_ref": "15f4e6824fe01af8332620edbbbe96b37d47c652",
+      "end_ref": "81c96f1e763feb3ccf90ecf877f75149267fe2b8",
+      "audit_exit": 0,
+      "audit_criteria_passed": 521,
+      "audit_criteria_total": 521,
+      "by": "pseudosky",
+      "note": "pre-review audit: 43 findings (0 blocker, 5 major), inventory 209/209 pinned, guard 5/5"
     }
   ],
   "amendment_log": [
@@ -2176,7 +2188,7 @@
     "version": "0.8.35",
     "hash": "0b6bc1f3d70e"
   },
-  "current_state": "audit-pre-review",
+  "current_state": "audit-fixes",
   "dod_provenance": {
     "confirmed_at": "2026-10-12T23:49:38.410Z",
     "by": "pseudosky",
