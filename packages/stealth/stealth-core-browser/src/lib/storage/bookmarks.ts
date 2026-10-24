@@ -3,6 +3,17 @@ import { join } from 'node:path'
 import { chromeProfileDir } from '../helpers.js'
 import type { BookmarkNode } from '../types.js'
 
+/** Shape of a node in Chrome's on-disk `Bookmarks` JSON (all fields optional on disk). */
+interface RawBookmarkNode {
+  id?: string | number
+  name?: string
+  type?: string
+  url?: string
+  date_added?: string | number
+  date_modified?: string | number
+  children?: RawBookmarkNode[]
+}
+
 export class BookmarkClient {
   private readonly defaultDir: string
 
@@ -16,7 +27,7 @@ export class BookmarkClient {
     try {
       const raw = readFileSync(this._bookmarksPath(), 'utf8')
       const data = JSON.parse(raw)
-      const roots = data.roots as Record<string, any> ?? {}
+      const roots = (data.roots ?? {}) as Record<string, RawBookmarkNode | undefined>
       const nodes: BookmarkNode[] = []
       for (const key of ['bookmark_bar', 'other', 'synced', 'managed'] as const) {
         if (roots[key]) nodes.push(this._parseBookmarkNode(roots[key]))
@@ -25,7 +36,7 @@ export class BookmarkClient {
     } catch { return [] }
   }
 
-  private _parseBookmarkNode(raw: any): BookmarkNode {
+  private _parseBookmarkNode(raw: RawBookmarkNode): BookmarkNode {
     const node: BookmarkNode = {
       id: String(raw.id ?? ''),
       name: String(raw.name ?? ''),
@@ -35,7 +46,7 @@ export class BookmarkClient {
     }
     if (raw.type === 'url' || raw.url) node.url = String(raw.url ?? '')
     if (raw.children && Array.isArray(raw.children)) {
-      node.children = raw.children.map((c: any) => this._parseBookmarkNode(c))
+      node.children = raw.children.map((c) => this._parseBookmarkNode(c))
     }
     return node
   }

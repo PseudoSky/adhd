@@ -135,7 +135,7 @@ export function extractResultsFromJson(body: string, capture: CaptureConfig): Pa
  *    - `_snippet` — extracts first line from the `snippets[0].lines` array
  *    - Fields starting with `_url_` — constructs a GitHub blob URL from repo_nwo/ref_name/path */
 export function extractResultsFromEmbeddedJson(body: string, capture: CaptureConfig): ParseResult[] {
-  const dataTarget = (capture as any).dataTarget ?? 'react-app.embeddedData'
+  const dataTarget = capture.dataTarget ?? 'react-app.embeddedData'
   const pattern = new RegExp(`<script\\s+type="application/json"\\s+data-target="${escapeRe(dataTarget)}">(.*?)<\\/script>`, 's')
   const match = pattern.exec(body)
   if (!match) return []
@@ -151,7 +151,7 @@ export function extractResultsFromEmbeddedJson(body: string, capture: CaptureCon
     // Snippet: extract lines from snippets[0].lines, stripped of HTML
     let snippet = ''
     const snippets = resolvePath(itemObj, 'snippets') as Array<{ lines?: string[] }> | undefined
-    const maxLines = (capture as any).snippetLines ?? 1
+    const maxLines = capture.snippetLines ?? 1
     if (Array.isArray(snippets) && snippets[0]?.lines?.length) {
       snippet = snippets[0].lines.slice(0, maxLines)
         .map((l) => stripHtml(l).trim())
