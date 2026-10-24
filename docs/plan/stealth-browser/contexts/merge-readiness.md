@@ -49,7 +49,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 ## Reservations
 
 ```text
-read_only:  ["PUBLISHING.md"]
+read_only:  []
 mutates:    ["docs/plan/stealth-browser/RELEASE-DECISION.md"]
 ```
 
