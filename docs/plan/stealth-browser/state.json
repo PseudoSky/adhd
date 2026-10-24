@@ -522,11 +522,11 @@
       "end_ref": "18bb98872a5f3e8407cc807d9d65a9df4ae54e96"
     },
     "fix-search-output": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-10-23T22:57:27.253Z",
-      "done_at": null,
+      "done_at": "2026-10-24T00:07:54.449Z",
       "start_ref": "c95b92b46632440376cd87dd72583c9de58bbc85",
-      "end_ref": null
+      "end_ref": "f193d55fb179001597a4f69489f4cde4b7aed10b"
     },
     "search-mcp-iserror": {
       "status": "pending",
@@ -1270,6 +1270,18 @@
       "audit_exit": 0,
       "audit_criteria_passed": 6,
       "audit_criteria_total": 6,
+      "by": "pseudosky",
+      "note": "orchestrator-verified; guard re-run"
+    },
+    {
+      "ts": "2026-10-24T00:07:54.449Z",
+      "from": "search-mcp-iserror",
+      "to": "fix-search-output",
+      "start_ref": "c95b92b46632440376cd87dd72583c9de58bbc85",
+      "end_ref": "f193d55fb179001597a4f69489f4cde4b7aed10b",
+      "audit_exit": 0,
+      "audit_criteria_passed": 5,
+      "audit_criteria_total": 5,
       "by": "pseudosky",
       "note": "orchestrator-verified; guard re-run"
     }
