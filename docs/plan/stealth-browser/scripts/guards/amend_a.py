@@ -427,7 +427,8 @@ def am_rgf_dry(slug, p):
         if f in snap:
             with open(f, "wb") as fh:
                 fh.write(snap[f])
-    vacuous = "nothing to version/publish" in out or not re.search(r"dry-?run|would (write|publish)", out, re.I)
+    body = "\n".join(ln for ln in out.splitlines() if not ln.lstrip().startswith(">"))  # pnpm echoes the script text (it contains the no-op phrase) on `>` lines
+    vacuous = "nothing to version/publish" in body or not re.search(r"dry-?run|would (write|publish)", body, re.I)
     clean = not new and not changed
     with open(RGF_DRY_CACHE, "w", encoding="utf8") as fh:
         json.dump({"key": key, "rc": rc, "clean": clean, "vacuous": vacuous, "dirtied": new + changed, "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "tail": out[-400:]}, fh, indent=1)
