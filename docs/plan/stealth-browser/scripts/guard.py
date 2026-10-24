@@ -1534,9 +1534,11 @@ def _rp1():
 
 @check("review-prep", 2)
 def _rp2():
-    """review/INPUT.sha256 equals sha256(migration.diff) and the diff contains no docs/plan or pnpm-lock paths (reviewer sees the migration only)."""
+    """review/INPUT.sha256 equals sha256(migration.diff) and the diff contains no docs/plan or pnpm-lock paths (reviewer sees the migration only). The scope test inspects file PATHS (the `diff --git`, `---` and `+++` header lines), not content: a source comment that merely mentions a docs/plan path is part of the real migration and must stay in an unfiltered git diff."""
     d = read(f"{REVIEW}/migration.diff")
-    return hashlib.sha256(d.encode()).hexdigest() == read(f"{REVIEW}/INPUT.sha256").strip() and "docs/plan/" not in d and "pnpm-lock" not in d, "sha + scope"
+    hdr = [l for l in d.splitlines() if l.startswith(("diff --git ", "--- ", "+++ "))]
+    bad = [l for l in hdr if "docs/plan/" in l or "pnpm-lock" in l]
+    return hashlib.sha256(d.encode()).hexdigest() == read(f"{REVIEW}/INPUT.sha256").strip() and not bad, f"sha + scope (header paths in scope violation: {len(bad)})"
 
 
 @check("review-prep", 3)
