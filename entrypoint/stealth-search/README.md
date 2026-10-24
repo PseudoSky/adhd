@@ -113,6 +113,11 @@ The bare form without an operation name (`stealth-search duckduckgo "query"`) is
 | `--listen-port <n>` | `3100` | Port the `sse` and `streaming-http` transports bind |
 | `--data-dir <path>` | `~/.adhd/reverse/data` | Tripwire, cooldown and audit state |
 
+Two safe defaults have explicit opt-ins:
+
+- **Chrome host.** The `host` input of the Chrome operations and of `search` accepts loopback only (`127.0.0.1`, `localhost`, `::1`). `--allow-cdp-hosts <list>` takes comma-separated non-loopback hosts a tool call may then address. A non-default `--cdp-host` is allowed for that run.
+- **Network listener.** A non-loopback `--listen-host` is refused unless you also pass `--allow-remote-listen`. The flag is needed because `sse` and `streaming-http` have no authentication.
+
 `sse` and `streaming-http` carry no authentication and expose `launchChrome` and `shutdownChrome`. Keep them on loopback or behind your own authenticating proxy. Run `stealth-search --help` for the full table, and see [docs/CONFIGURATION.md](docs/CONFIGURATION.md).
 
 **`search` inputs.** All but `provider` and `query` are optional.
@@ -127,6 +132,8 @@ The bare form without an operation name (`stealth-search duckduckgo "query"`) is
 | `offset`, `maxContentSize` | Window start (default 0) and size in bytes (default 20000; 0 = unbounded). |
 | `timeoutMs`, `maxAttempts` | One deadline for the call (default 30000); attempts on a transient failure (at most 3). |
 | `visibility` | `offscreen` (default) or `foreground`, to solve a challenge by hand. |
+
+**Result size.** A search over an engine provider (`duckduckgo`, `google`, `github`, ...) bounds the serialized result list with `maxResultBytes` (default 8192, a positive integer). Whole results are dropped from the tail, never cut, and `omitted` counts the dropped ones. The field is absent when nothing was dropped, so a result with `omitted` set is a truncated list. The `fetch` provider does not use `maxResultBytes` or `omitted`: its document is windowed by `content`, `offset` and `maxContentSize`, and `nextOffset` says where to continue.
 
 **Typed errors reach MCP clients as `isError` tool results.** The text is `<canonical>: <CODE>: <message>` and `_meta["adhd/error"].code` is the code.
 
