@@ -137,11 +137,11 @@
       "end_ref": "9410d766bc8b230b0ebaf3fa35a92a3c7fe28327"
     },
     "resolve-findings": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-10-24T14:50:34.743Z",
-      "done_at": null,
+      "done_at": "2026-10-24T18:02:55.414Z",
       "start_ref": "372c8d5b51b5a2b1025810fa64e79b1705e8f49f",
-      "end_ref": null
+      "end_ref": "a8245098ef6b9222cd7be6e80de0680f18ebaa4c"
     },
     "gates-rerun": {
       "status": "pending",
@@ -1459,6 +1459,18 @@
       "audit_criteria_total": 548,
       "by": "pseudosky",
       "note": "one sharded blind review round recorded: 5 slices then 14 chunks; reviewers saw only the diff slice and the word Review"
+    },
+    {
+      "ts": "2026-10-24T18:02:55.414Z",
+      "from": "resolve-findings",
+      "to": "resolve-findings",
+      "start_ref": "372c8d5b51b5a2b1025810fa64e79b1705e8f49f",
+      "end_ref": "a8245098ef6b9222cd7be6e80de0680f18ebaa4c",
+      "audit_exit": 0,
+      "audit_criteria_passed": 4,
+      "audit_criteria_total": 4,
+      "by": "pseudosky",
+      "note": "159 findings resolved by one implementer: 155 fixed, 4 rejected (F55 F66 F82 F99) with evidence; all package gates, sweep of 70 completed states and resolve-findings guard green"
     }
   ],
   "amendment_log": [
@@ -2236,7 +2248,7 @@
     "version": "0.8.35",
     "hash": "0b6bc1f3d70e"
   },
-  "current_state": "resolve-findings",
+  "current_state": "gates-rerun",
   "dod_provenance": {
     "confirmed_at": "2026-10-12T23:49:38.410Z",
     "by": "pseudosky",
