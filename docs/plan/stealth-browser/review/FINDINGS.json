@@ -1,0 +1,1440 @@
+{
+ "review_round": 1,
+ "reviewer_input_sha256": "3b96f30a90f4126efa4f807a7838ec0c04c7bd62407d8c546f437658ab6e807f",
+ "reviewer_prompt": "Review",
+ "mode": "sharded blind review: 5 slices (core-src, core-test, search-src, search-test, tripwire) then 14 source chunks; each reviewer received only its diff slice and the word Review",
+ "note": "line numbers are as cited by the reviewers; for chunked slices they are diff-slice coordinates, not file lines. Verbatim ledger: scratchpad blind/FINDINGS.md",
+ "findings": [
+  {
+   "id": "F1",
+   "severity": "major",
+   "file": "packages/stealth/stealth-core-browser/docs/reference/cdp-connection.md",
+   "line": 24,
+   "summary": "quick start calls Runtime.evaluate, which the package forbids.",
+   "evidence": "packages/stealth/stealth-core-browser/docs/reference/cdp-connection.md:24 \u2014 quick start calls Runtime.evaluate, which the package forbids.",
+   "reviewer": "core-src"
+  },
+  {
+   "id": "F2",
+   "severity": "major",
+   "file": "packages/stealth/stealth-core-browser/docs/reference/capture.md",
+   "line": 104,
+   "summary": "error table documents untyped errors (Error('timeout'), Error('WebSocket error'), Error('Ban detected: <signal>')); ERRORS.md says none escape; lists CAPTURE_TIMEOUT, CAPTURE_CONNECT_FAILED, CAPTURE_BAN_DETECTED.",
+   "evidence": "docs/reference/capture.md:104 \u2014 error table documents untyped errors (Error('timeout'), Error('WebSocket error'), Error('Ban detected: <signal>')); ERRORS.md says none escape; lists CAPTURE_TIMEOUT, CAPTURE_CONNECT_FAILED, CAPTURE_BAN_DETECTED.",
+   "reviewer": "core-src"
+  },
+  {
+   "id": "F3",
+   "severity": "major",
+   "file": "packages/stealth/stealth-core-browser/docs/reference/capture.md",
+   "line": 389,
+   "summary": "retry example classifies by err.message prefixes instead of error.code.",
+   "evidence": "docs/reference/capture.md:389 \u2014 retry example classifies by err.message prefixes instead of error.code.",
+   "reviewer": "core-src"
+  },
+  {
+   "id": "F4",
+   "severity": "major",
+   "file": "packages/stealth/stealth-core-browser/docs/reference/README.md",
+   "line": 19,
+   "summary": "entrypoint table tells readers to import subpaths (/cdp /storage /capture /parsers /chrome-manager); package is root-import library with `endpoint` namespace.",
+   "evidence": "docs/reference/README.md:19 \u2014 entrypoint table tells readers to import subpaths (/cdp /storage /capture /parsers /chrome-manager); package is root-import library with `endpoint` namespace.",
+   "reviewer": "core-src"
+  },
+  {
+   "id": "F5",
+   "severity": "major",
+   "file": "packages/stealth/stealth-core-browser/docs/reference/cdp.md",
+   "line": 139,
+   "summary": "killChrome documented as lsof -ti:<port> kill of whatever listens; README says it signals only the Chrome this process launched; AGENTS.md says never kill developer's Chrome on 9222.",
+   "evidence": "docs/reference/cdp.md:139 \u2014 killChrome documented as lsof -ti:<port> kill of whatever listens; README says it signals only the Chrome this process launched; AGENTS.md says never kill developer's Chrome on 9222.",
+   "reviewer": "core-src"
+  },
+  {
+   "id": "F6",
+   "severity": "minor",
+   "file": "packages/stealth/stealth-core-browser/docs/reference/cdp.md",
+   "line": 64,
+   "summary": "(and ~601) \u2014 Page.loadEventFired is an event, sent with session.send.",
+   "evidence": "docs/reference/cdp.md:64 (and ~601) \u2014 Page.loadEventFired is an event, sent with session.send.",
+   "reviewer": "core-src"
+  },
+  {
+   "id": "F7",
+   "severity": "minor",
+   "file": "packages/stealth/stealth-core-browser/docs/reference/cdp.md",
+   "line": 322,
+   "summary": "PageService/NetworkService/SystemService documented as stubs returning null/empty; conflicts with no-silent-stub policy; CHANGELOG removes only getOpenTabs.",
+   "evidence": "docs/reference/cdp.md:322 \u2014 PageService/NetworkService/SystemService documented as stubs returning null/empty; conflicts with no-silent-stub policy; CHANGELOG removes only getOpenTabs.",
+   "reviewer": "core-src"
+  },
+  {
+   "id": "F8",
+   "severity": "minor",
+   "file": "packages/stealth/stealth-core-browser/docs/reference/cdp/README.md",
+   "line": 1,
+   "summary": "and api-reference.md:1 \u2014 heading/body still say agent-browser; unqualified paths src/session.ts, src/targets.ts instead of src/lib/cdp/.",
+   "evidence": "docs/reference/cdp/README.md:1 and api-reference.md:1 \u2014 heading/body still say agent-browser; unqualified paths src/session.ts, src/targets.ts instead of src/lib/cdp/.",
+   "reviewer": "core-src"
+  },
+  {
+   "id": "F9",
+   "severity": "minor",
+   "file": "packages/stealth/stealth-core-browser/docs/reference/cdp-connection.md",
+   "line": 33,
+   "summary": "module paths contradict Architecture tree (src/lib/cdp/session.ts).",
+   "evidence": "docs/reference/cdp-connection.md:33 \u2014 module paths contradict Architecture tree (src/lib/cdp/session.ts).",
+   "reviewer": "core-src"
+  },
+  {
+   "id": "F10",
+   "severity": "minor",
+   "file": "packages/stealth/stealth-core-browser/docs/reference/cdp/api-reference.md",
+   "line": 1,
+   "summary": "\"Multi-Process Idle Detection Strategy (Proposed)\" design-history content, calls search() (not in this library).",
+   "evidence": "docs/reference/cdp/api-reference.md:1 \u2014 \"Multi-Process Idle Detection Strategy (Proposed)\" design-history content, calls search() (not in this library).",
+   "reviewer": "core-src"
+  },
+  {
+   "id": "F11",
+   "severity": "nit",
+   "file": "packages/stealth/stealth-core-browser/README.md",
+   "line": 3,
+   "summary": "generic Nx stub.",
+   "evidence": "packages/stealth/stealth-core-browser/README.md:3 \u2014 generic Nx stub.",
+   "reviewer": "core-src"
+  },
+  {
+   "id": "F12",
+   "severity": "nit",
+   "file": "packages/stealth/stealth-core-browser/docs/reference/cdp.md",
+   "line": 273,
+   "summary": "\ud83d\udd34 emoji status markers.",
+   "evidence": "docs/reference/cdp.md:273 \u2014 \ud83d\udd34 emoji status markers.",
+   "reviewer": "core-src"
+  },
+  {
+   "id": "F13",
+   "severity": "minor",
+   "file": "packages/stealth/stealth-core-browser/docs/reference/cdp/history-db.md",
+   "line": null,
+   "summary": "history database doc: path table lists same path for \"Default\" and \"Chrome-CDP\" (no anchor). (severity not stated by reviewer; recorded as minor)",
+   "evidence": "history database doc: path table lists same path for \"Default\" and \"Chrome-CDP\" (no anchor). (severity not stated by reviewer; recorded as minor)",
+   "reviewer": "core-src"
+  },
+  {
+   "id": "F14",
+   "severity": "major",
+   "file": "packages/resilience/resilience-core-tripwire/src/lib/tripwire.ts",
+   "line": null,
+   "summary": "expire(): removeLock(key) on stale snapshot without checking it is still the expired lock; a concurrent clear+fresh trip between readDisk and removeLock gets deleted and audited tripwire-expired (fail-open race in a kill switch). Fix: re-read and compare generation before removing / remove only the matching tombstone; add interleaving test.",
+   "evidence": "src/lib/tripwire.ts expire(): removeLock(key) on stale snapshot without checking it is still the expired lock; a concurrent clear+fresh trip between readDisk and removeLock gets deleted and audited tripwire-expired (fail-open race in a kill switch). Fix: re-read and compare generation before removing / remove only the matching tombstone; add interleaving test.",
+   "reviewer": "tripwire"
+  },
+  {
+   "id": "F15",
+   "severity": "minor",
+   "file": "packages/resilience/resilience-core-tripwire/src/lib/tripwire.ts",
+   "line": null,
+   "summary": "~3730 \u2014 latch: second trip that also fails to persist returns its own new record with created:true while held first record stays; breaks \"first trip wins\" in the in-memory fallback.",
+   "evidence": "tripwire.ts ~3730 \u2014 latch: second trip that also fails to persist returns its own new record with created:true while held first record stays; breaks \"first trip wins\" in the in-memory fallback.",
+   "reviewer": "tripwire"
+  },
+  {
+   "id": "F16",
+   "severity": "minor",
+   "file": "packages/resilience/resilience-core-tripwire/src/lib/tripwire.ts",
+   "line": null,
+   "summary": "~3553 \u2014 unreadable lock gets trippedAt=clock() on every read (mtimeMs passed 0); unstable.",
+   "evidence": "tripwire.ts ~3553 \u2014 unreadable lock gets trippedAt=clock() on every read (mtimeMs passed 0); unstable.",
+   "reviewer": "tripwire"
+  },
+  {
+   "id": "F17",
+   "severity": "minor",
+   "file": "packages/resilience/resilience-core-tripwire/src/lib/redact.ts",
+   "line": null,
+   "summary": "~2517 \u2014 cleanObject/parseLockRecord assign out[k] for attacker-controlled keys; __proto__ key sets prototype and drops value; use Object.create(null)/defineProperty.",
+   "evidence": "src/lib/redact.ts ~2517 \u2014 cleanObject/parseLockRecord assign out[k] for attacker-controlled keys; __proto__ key sets prototype and drops value; use Object.create(null)/defineProperty.",
+   "reviewer": "tripwire"
+  },
+  {
+   "id": "F18",
+   "severity": "minor",
+   "file": "packages/resilience/resilience-core-tripwire/src/lib/redact.ts",
+   "line": null,
+   "summary": "~2402 \u2014 REDACT_KEY_PATTERN / SECRET_PARAM_PATTERN unanchored substring matches drop benign keys (tokenCount, design, signal).",
+   "evidence": "redact.ts ~2402 \u2014 REDACT_KEY_PATTERN / SECRET_PARAM_PATTERN unanchored substring matches drop benign keys (tokenCount, design, signal).",
+   "reviewer": "tripwire"
+  },
+  {
+   "id": "F19",
+   "severity": "minor",
+   "file": "packages/resilience/resilience-core-tripwire/package.json",
+   "line": null,
+   "summary": "`files` ships only dist and CHANGELOG.md but README links docs/ERRORS.md and docs/RECOVERY.md.",
+   "evidence": "package.json \u2014 `files` ships only dist and CHANGELOG.md but README links docs/ERRORS.md and docs/RECOVERY.md.",
+   "reviewer": "tripwire"
+  },
+  {
+   "id": "F20",
+   "severity": "nit",
+   "file": "packages/resilience/resilience-core-tripwire/src/lib/cli.ts",
+   "line": null,
+   "summary": "~1194 \u2014 DEFAULT_UNLOCK_USAGE hard-codes reverse-apis tool name `pnpm unlock-tripwire <client>` in a generic package.",
+   "evidence": "src/lib/cli.ts ~1194 \u2014 DEFAULT_UNLOCK_USAGE hard-codes reverse-apis tool name `pnpm unlock-tripwire <client>` in a generic package.",
+   "reviewer": "tripwire"
+  },
+  {
+   "id": "F21",
+   "severity": "nit",
+   "file": "packages/resilience/resilience-core-tripwire/tsconfig.lib.json",
+   "line": null,
+   "summary": "vite.config.ts listed twice in exclude.",
+   "evidence": "tsconfig.lib.json \u2014 vite.config.ts listed twice in exclude.",
+   "reviewer": "tripwire"
+  },
+  {
+   "id": "F22",
+   "severity": "nit",
+   "file": "packages/resilience/resilience-core-tripwire/src/index.ts",
+   "line": null,
+   "summary": "~788 \u2014 header claims runtime surface is exactly the spec API but lists extra exports (createNodeFs, createMemoryFs, ...).",
+   "evidence": "src/index.ts ~788 \u2014 header claims runtime surface is exactly the spec API but lists extra exports (createNodeFs, createMemoryFs, ...).",
+   "reviewer": "tripwire"
+  },
+  {
+   "id": "F23",
+   "severity": "minor",
+   "file": "packages/stealth/stealth-core-browser/test/helpers/capture/capture-kit.ts",
+   "line": 33,
+   "summary": "useFixture uses beforeEach/afterEach/vi with no vitest import (relies on globals).",
+   "evidence": "test/helpers/capture/capture-kit.ts:33,41 \u2014 useFixture uses beforeEach/afterEach/vi with no vitest import (relies on globals).",
+   "reviewer": "core-test"
+  },
+  {
+   "id": "F24",
+   "severity": "minor",
+   "file": "packages/stealth/stealth-core-browser/test/helpers/lifecycle/manager-world.ts",
+   "line": 159,
+   "summary": "killProcessGroup double ignores world.failKill while killChrome (156) and manager-clients.ts honour it.",
+   "evidence": "test/helpers/lifecycle/manager-world.ts:159 \u2014 killProcessGroup double ignores world.failKill while killChrome (156) and manager-clients.ts honour it.",
+   "reviewer": "core-test"
+  },
+  {
+   "id": "F25",
+   "severity": "minor",
+   "file": "packages/stealth/stealth-core-browser/test/unit/capture-parsers/network.spec.ts",
+   "line": 62,
+   "summary": "base64 expectation computed with the same Buffer decode the implementation uses; use a literal.",
+   "evidence": "test/unit/capture-parsers/network.spec.ts:62 \u2014 base64 expectation computed with the same Buffer decode the implementation uses; use a literal.",
+   "reviewer": "core-test"
+  },
+  {
+   "id": "F26",
+   "severity": "minor",
+   "file": "packages/stealth/stealth-core-browser/test/unit/capture-parsers/dom.spec.ts",
+   "line": 275,
+   "summary": "hard-coded call count 6 ties test to ban selector count.",
+   "evidence": "test/unit/capture-parsers/dom.spec.ts:275 \u2014 hard-coded call count 6 ties test to ban selector count.",
+   "reviewer": "core-test"
+  },
+  {
+   "id": "F27",
+   "severity": "minor",
+   "file": "packages/stealth/stealth-core-browser/test/unit/use-cases/keep-chrome-open-while-a-person-is-browsing.spec.ts",
+   "line": 84,
+   "summary": "toBeGreaterThanOrEqual(2) lower bound only; no upper bound.",
+   "evidence": "test/unit/use-cases/keep-chrome-open-while-a-person-is-browsing.spec.ts:84 \u2014 toBeGreaterThanOrEqual(2) lower bound only; no upper bound.",
+   "reviewer": "core-test"
+  },
+  {
+   "id": "F28",
+   "severity": "minor",
+   "file": "packages/stealth/stealth-core-browser/test/unit/lifecycle/idle-tiers.spec.ts",
+   "line": 133,
+   "summary": "pins exact log wording incl. em dash.",
+   "evidence": "test/unit/lifecycle/idle-tiers.spec.ts:133 \u2014 pins exact log wording incl. em dash.",
+   "reviewer": "core-test"
+  },
+  {
+   "id": "F29",
+   "severity": "minor",
+   "file": "packages/stealth/stealth-core-browser/test/unit/support/fake-cdp.spec.ts",
+   "line": 115,
+   "summary": "two bare `await Promise.resolve()` ticks; use flushMicrotasks from capture-kit.",
+   "evidence": "test/unit/support/fake-cdp.spec.ts:115 \u2014 two bare `await Promise.resolve()` ticks; use flushMicrotasks from capture-kit.",
+   "reviewer": "core-test"
+  },
+  {
+   "id": "F30",
+   "severity": "minor",
+   "file": "packages/stealth/stealth-core-browser/test/unit/docs/agents-md.spec.ts",
+   "line": 43,
+   "summary": "asserts no bin directory; should check AGENTS.md against filesystem, not pin filesystem.",
+   "evidence": "test/unit/docs/agents-md.spec.ts:43 \u2014 asserts no bin directory; should check AGENTS.md against filesystem, not pin filesystem.",
+   "reviewer": "core-test"
+  },
+  {
+   "id": "F31",
+   "severity": "nit",
+   "file": "packages/stealth/stealth-core-browser/test/unit/support/fake-cdp.spec.ts",
+   "line": 193,
+   "summary": "pins fixture dir to exactly fourteen names.",
+   "evidence": "fake-cdp.spec.ts:193 \u2014 pins fixture dir to exactly fourteen names.",
+   "reviewer": "core-test"
+  },
+  {
+   "id": "F32",
+   "severity": "nit",
+   "file": "packages/stealth/stealth-core-browser/test/helpers/use-cases/scenario-kit.ts",
+   "line": 117,
+   "summary": "imports mid-file.",
+   "evidence": "test/helpers/use-cases/scenario-kit.ts:117,174 \u2014 imports mid-file.",
+   "reviewer": "core-test"
+  },
+  {
+   "id": "F33",
+   "severity": "nit",
+   "file": "packages/stealth/stealth-core-browser/test/helpers/domains-storage/profile-fixture.ts",
+   "line": 11,
+   "summary": "vs test/helpers/profile-fixtures.ts:18 \u2014 duplicate chromeMicros.",
+   "evidence": "test/helpers/domains-storage/profile-fixture.ts:11 vs test/helpers/profile-fixtures.ts:18 \u2014 duplicate chromeMicros.",
+   "reviewer": "core-test"
+  },
+  {
+   "id": "F34",
+   "severity": "nit",
+   "file": "packages/stealth/stealth-core-browser/test/helpers/fake-cdp.ts",
+   "line": 16,
+   "summary": "garbled header comment (\"them\" has no referent).",
+   "evidence": "test/helpers/fake-cdp.ts:16 \u2014 garbled header comment (\"them\" has no referent).",
+   "reviewer": "core-test"
+  },
+  {
+   "id": "F35",
+   "severity": "minor",
+   "file": "entrypoint/stealth-search/test/unit/guards/tripwire-status.spec.ts",
+   "line": 41,
+   "summary": "researcher-flow tests drive a local search() helper that re-implements gate/cooldown/outcome bookkeeping, not the product service.",
+   "evidence": "entrypoint/stealth-search/test/unit/guards/tripwire-status.spec.ts:41 \u2014 researcher-flow tests drive a local search() helper that re-implements gate/cooldown/outcome bookkeeping, not the product service.",
+   "reviewer": "search-test"
+  },
+  {
+   "id": "F36",
+   "severity": "minor",
+   "file": "entrypoint/stealth-search/test/unit/build/baked-operations.spec.ts",
+   "line": 92,
+   "summary": "compares only constants (15000 - 13000 <= 2000 cannot fail independently).",
+   "evidence": "test/unit/build/baked-operations.spec.ts:92 \u2014 compares only constants (15000 - 13000 <= 2000 cannot fail independently).",
+   "reviewer": "search-test"
+  },
+  {
+   "id": "F37",
+   "severity": "minor",
+   "file": "entrypoint/stealth-search/test/unit/build/baked-operations.spec.ts",
+   "line": 162,
+   "summary": "regex-matches server.ts source text.",
+   "evidence": "test/unit/build/baked-operations.spec.ts:162 \u2014 regex-matches server.ts source text.",
+   "reviewer": "search-test"
+  },
+  {
+   "id": "F38",
+   "severity": "minor",
+   "file": "entrypoint/stealth-search/test/unit/hosts/package.spec.ts",
+   "line": 25,
+   "summary": "shared `let built` assigned only in first it; later tests depend on it.",
+   "evidence": "test/unit/hosts/package.spec.ts:25 \u2014 shared `let built` assigned only in first it; later tests depend on it.",
+   "reviewer": "search-test"
+  },
+  {
+   "id": "F39",
+   "severity": "minor",
+   "file": "entrypoint/stealth-search/test/unit/hosts/mcp-boot.spec.ts",
+   "line": 483,
+   "summary": "title promises logger level info but asserts logLevel undefined.",
+   "evidence": "test/unit/hosts/mcp-boot.spec.ts:483 \u2014 title promises logger level info but asserts logLevel undefined.",
+   "reviewer": "search-test"
+  },
+  {
+   "id": "F40",
+   "severity": "minor",
+   "file": "entrypoint/stealth-search/test/unit/use-cases/fetch.spec.ts",
+   "line": 61,
+   "summary": "\"corrupt pdf is a typed outcome\" asserts only outcome==='error'; 27-byte pdf may fail the <1 KiB completeness check before PDF_EXTRACT_FAILED; assert the typed code like fetch-page.spec.ts.",
+   "evidence": "test/unit/use-cases/fetch.spec.ts:61 \u2014 \"corrupt pdf is a typed outcome\" asserts only outcome==='error'; 27-byte pdf may fail the <1 KiB completeness check before PDF_EXTRACT_FAILED; assert the typed code like fetch-page.spec.ts.",
+   "reviewer": "search-test"
+  },
+  {
+   "id": "F41",
+   "severity": "minor",
+   "file": "entrypoint/stealth-search/test/unit/fetch/fetch-pdf.spec.ts",
+   "line": 107,
+   "summary": "pins line distance of `new Function(` after nativeImportViaFunction.",
+   "evidence": "test/unit/fetch/fetch-pdf.spec.ts:107 \u2014 pins line distance of `new Function(` after nativeImportViaFunction.",
+   "reviewer": "search-test"
+  },
+  {
+   "id": "F42",
+   "severity": "nit",
+   "file": "entrypoint/stealth-search/test/helpers/hosts/host-harness.ts",
+   "line": 44,
+   "summary": "comment says harness imports no test runner but imports expect from vitest at line 18.",
+   "evidence": "test/helpers/hosts/host-harness.ts:44 \u2014 comment says harness imports no test runner but imports expect from vitest at line 18.",
+   "reviewer": "search-test"
+  },
+  {
+   "id": "F43",
+   "severity": "nit",
+   "file": "entrypoint/stealth-search/test/unit/hosts/search-tracing-unknown-provider.spec.ts",
+   "line": 152,
+   "summary": "obscure schema-path reduce.",
+   "evidence": "test/unit/hosts/search-tracing-unknown-provider.spec.ts:152 \u2014 obscure schema-path reduce.",
+   "reviewer": "search-test"
+  },
+  {
+   "id": "F44",
+   "severity": "nit",
+   "file": "entrypoint/stealth-search/test/unit/hosts/mcp-inprocess.spec.ts",
+   "line": 41,
+   "summary": "vs use-cases/hosts.spec.ts:48 \u2014 expectInvalidArgument duplicated; move to host-harness.ts.",
+   "evidence": "mcp-inprocess.spec.ts:41 vs use-cases/hosts.spec.ts:48 \u2014 expectInvalidArgument duplicated; move to host-harness.ts.",
+   "reviewer": "search-test"
+  },
+  {
+   "id": "F45",
+   "severity": "minor",
+   "file": "entrypoint/stealth-search/src/lib/fetch/fetch.ts",
+   "line": 420,
+   "summary": "browser-side SSRF check skips Document responses with no remoteIPAddress; detect-after-connect not prevention; README states FETCH_URL_REFUSED without caveat.",
+   "evidence": "src/lib/fetch/fetch.ts:420 \u2014 browser-side SSRF check skips Document responses with no remoteIPAddress; detect-after-connect not prevention; README states FETCH_URL_REFUSED without caveat.",
+   "reviewer": "search-src"
+  },
+  {
+   "id": "F46",
+   "severity": "minor",
+   "file": "entrypoint/stealth-search/src/lib/search.ts",
+   "line": 742,
+   "summary": "on deadline, withSearchConcurrency frees slot while abandoned work keeps running; fetchPage never checks state.aborted; maxConcurrent can be exceeded after timeouts.",
+   "evidence": "src/lib/search.ts:742 \u2014 on deadline, withSearchConcurrency frees slot while abandoned work keeps running; fetchPage never checks state.aborted; maxConcurrent can be exceeded after timeouts.",
+   "reviewer": "search-src"
+  },
+  {
+   "id": "F47",
+   "severity": "minor",
+   "file": "entrypoint/stealth-search/src/lib/fetch/pinned.ts",
+   "line": 80,
+   "summary": "bracketed IPv6 literal hostname makes net.isIP 0 so servername set to bracketed string; TLS handshake fails for IPv6-literal PDF fetch.",
+   "evidence": "src/lib/fetch/pinned.ts:80 \u2014 bracketed IPv6 literal hostname makes net.isIP 0 so servername set to bracketed string; TLS handshake fails for IPv6-literal PDF fetch.",
+   "reviewer": "search-src"
+  },
+  {
+   "id": "F48",
+   "severity": "minor",
+   "file": "entrypoint/stealth-search/src/cli.ts",
+   "line": 608,
+   "summary": "and src/host-flags.ts:268 \u2014 any argv token -h/--help treated as help even as a flag value (search --query -h).",
+   "evidence": "src/cli.ts:608 and src/host-flags.ts:268 \u2014 any argv token -h/--help treated as help even as a flag value (search --query -h).",
+   "reviewer": "search-src"
+  },
+  {
+   "id": "F49",
+   "severity": "minor",
+   "file": "entrypoint/stealth-search/src/server.ts",
+   "line": 659,
+   "summary": "uncaughtException/unhandledRejection listeners attached before exit hooks; server keeps running after uncaught error if installHooks injected/fails.",
+   "evidence": "src/server.ts:659 \u2014 uncaughtException/unhandledRejection listeners attached before exit hooks; server keeps running after uncaught error if installHooks injected/fails.",
+   "reviewer": "search-src"
+  },
+  {
+   "id": "F50",
+   "severity": "minor",
+   "file": "entrypoint/stealth-search/src/server.ts",
+   "line": 488,
+   "summary": "pid registry treats any integer as sibling; 0 or negative makes process.kill signal a process group.",
+   "evidence": "src/server.ts:488 \u2014 pid registry treats any integer as sibling; 0 or negative makes process.kill signal a process group.",
+   "reviewer": "search-src"
+  },
+  {
+   "id": "F51",
+   "severity": "minor",
+   "file": "entrypoint/stealth-search/bin/mcp.ts",
+   "line": 22,
+   "summary": "mcpMain(...).then has no rejection handler (bin/cli.ts writes typed HOST_BOOT_FAILED).",
+   "evidence": "bin/mcp.ts:22 \u2014 mcpMain(...).then has no rejection handler (bin/cli.ts writes typed HOST_BOOT_FAILED).",
+   "reviewer": "search-src"
+  },
+  {
+   "id": "F52",
+   "severity": "minor",
+   "file": "entrypoint/stealth-search/eslint.config.mjs",
+   "line": 17,
+   "summary": "every runtime dependency in ignoredDependencies (\"declared up front for later states\"); dependency-checks cannot flag undeclared/unused.",
+   "evidence": "eslint.config.mjs:17 \u2014 every runtime dependency in ignoredDependencies (\"declared up front for later states\"); dependency-checks cannot flag undeclared/unused.",
+   "reviewer": "search-src"
+  },
+  {
+   "id": "F53",
+   "severity": "minor",
+   "file": "entrypoint/stealth-search/project.json",
+   "line": 100,
+   "summary": "typecheck-spec ratchet baselines \"pre-existing spec errors\" for a brand-new package (stealth-search.baseline.json).",
+   "evidence": "project.json:100 \u2014 typecheck-spec ratchet baselines \"pre-existing spec errors\" for a brand-new package (stealth-search.baseline.json).",
+   "reviewer": "search-src"
+  },
+  {
+   "id": "F54",
+   "severity": "nit",
+   "file": "entrypoint/stealth-search/src/lib/fetch/pdf.ts",
+   "line": 66,
+   "summary": "Function-constructor dynamic import is eval-class code (guarded, constant specifier).",
+   "evidence": "src/lib/fetch/pdf.ts:66 \u2014 Function-constructor dynamic import is eval-class code (guarded, constant specifier).",
+   "reviewer": "search-src"
+  },
+  {
+   "id": "F55",
+   "severity": "nit",
+   "file": "entrypoint/stealth-search/README.md",
+   "line": 5,
+   "summary": "README says every block verified by test/unit/examples/examples.spec.ts (absent from the src slice; not a defect by itself).",
+   "evidence": "README.md:5 \u2014 README says every block verified by test/unit/examples/examples.spec.ts (absent from the src slice; not a defect by itself).",
+   "reviewer": "search-src"
+  },
+  {
+   "id": "F56",
+   "severity": "major",
+   "file": "packages/resilience/resilience-core-tripwire/test/unit/scenario-unlock-cli.spec.ts",
+   "line": 1,
+   "summary": "no recorded red run on a failed assertion for the four spec files; teeth unproven (SR.2 \u00a76.5). (reviewer notes fidelity-gap statement applies to tiers P/H/X not S)",
+   "evidence": "packages/resilience/resilience-core-tripwire/test/unit/scenario-unlock-cli.spec.ts:1 \u2014 no recorded red run on a failed assertion for the four spec files; teeth unproven (SR.2 \u00a76.5). (reviewer notes fidelity-gap statement applies to tiers P/H/X not S)",
+   "reviewer": "tripwire chunk 4"
+  },
+  {
+   "id": "F57",
+   "severity": "major",
+   "file": "packages/resilience/resilience-core-tripwire/test/unit/scenario-unlock-cli.spec.ts",
+   "line": 1,
+   "summary": "planning record (plan/task) not in the diff; headers cite only ticket id and criteria tags (SR.4 G12).",
+   "evidence": "scenario-unlock-cli.spec.ts:1 \u2014 planning record (plan/task) not in the diff; headers cite only ticket id and criteria tags (SR.4 G12).",
+   "reviewer": "tripwire chunk 4"
+  },
+  {
+   "id": "F58",
+   "severity": "minor",
+   "file": "packages/resilience/resilience-core-tripwire/test/unit/scenario-unlock-cli.spec.ts",
+   "line": 187,
+   "summary": "regex /No TTY|Confirmation mismatch/ redundant with next assertion; lets unrelated mismatch pass.",
+   "evidence": "scenario-unlock-cli.spec.ts:187 \u2014 regex /No TTY|Confirmation mismatch/ redundant with next assertion; lets unrelated mismatch pass.",
+   "reviewer": "tripwire chunk 4"
+  },
+  {
+   "id": "F59",
+   "severity": "minor",
+   "file": "packages/resilience/resilience-core-tripwire/test/unit/scenario-unlock-cli.spec.ts",
+   "line": 211,
+   "summary": "asserts parser-specific \"corrupt\" in warning text.",
+   "evidence": "scenario-unlock-cli.spec.ts:211 \u2014 asserts parser-specific \"corrupt\" in warning text.",
+   "reviewer": "tripwire chunk 4"
+  },
+  {
+   "id": "F60",
+   "severity": "minor",
+   "file": "packages/resilience/resilience-core-tripwire/test/unit/storage-contract.spec.ts",
+   "line": 468,
+   "summary": "pins exact fs op sequence including leading stat.",
+   "evidence": "storage-contract.spec.ts:468 \u2014 pins exact fs op sequence including leading stat.",
+   "reviewer": "tripwire chunk 4"
+  },
+  {
+   "id": "F61",
+   "severity": "minor",
+   "file": "packages/resilience/resilience-core-tripwire/test/unit/storage-contract.spec.ts",
+   "line": 303,
+   "summary": "tier S test uses real-disk mkdtemp.",
+   "evidence": "storage-contract.spec.ts:303 \u2014 tier S test uses real-disk mkdtemp.",
+   "reviewer": "tripwire chunk 4"
+  },
+  {
+   "id": "F62",
+   "severity": "minor",
+   "file": "packages/resilience/resilience-core-tripwire/test/unit/storage.spec.ts",
+   "line": 628,
+   "summary": "accepts empty string as legal observed lock state; cannot detect empty-file window in open(wx) fallback.",
+   "evidence": "storage.spec.ts:628 \u2014 accepts empty string as legal observed lock state; cannot detect empty-file window in open(wx) fallback.",
+   "reviewer": "tripwire chunk 4"
+  },
+  {
+   "id": "F63",
+   "severity": "minor",
+   "file": "packages/resilience/resilience-core-tripwire/test/unit/storage.spec.ts",
+   "line": 564,
+   "summary": "regex hard-codes tmp-name format (pid + 12 hex).",
+   "evidence": "storage.spec.ts:564 \u2014 regex hard-codes tmp-name format (pid + 12 hex).",
+   "reviewer": "tripwire chunk 4"
+  },
+  {
+   "id": "F64",
+   "severity": "minor",
+   "file": "packages/resilience/resilience-core-tripwire/tsconfig.lib.json",
+   "line": 1129,
+   "summary": "vite.config.ts listed twice in exclude (same as earlier tripwire finding).",
+   "evidence": "tsconfig.lib.json:1129 \u2014 vite.config.ts listed twice in exclude (same as earlier tripwire finding).",
+   "reviewer": "tripwire chunk 4"
+  },
+  {
+   "id": "F65",
+   "severity": "nit",
+   "file": "packages/resilience/resilience-core-tripwire/test/unit/tripwire.spec.ts",
+   "line": 862,
+   "summary": "generated test name truncates JSON key to 20 chars.",
+   "evidence": "tripwire.spec.ts:862 \u2014 generated test name truncates JSON key to 20 chars.",
+   "reviewer": "tripwire chunk 4"
+  },
+  {
+   "id": "F66",
+   "severity": "nit",
+   "file": "packages/resilience/resilience-core-tripwire/vite.config.ts",
+   "line": 1236,
+   "summary": "rolldownOptions where rollupOptions is conventional.",
+   "evidence": "vite.config.ts:1236 \u2014 rolldownOptions where rollupOptions is conventional.",
+   "reviewer": "tripwire chunk 4"
+  },
+  {
+   "id": "F67",
+   "severity": "major",
+   "file": "packages/stealth/stealth-core-browser/src/lib/storage/helpers.ts",
+   "line": 7,
+   "summary": "openDb readBigInts:true; toUnixTimeSql integer-divides in SQL (drops sub-second) while history.ts:671,694 divide Number(last_visit_time)/1000 (float): inconsistent time conversions.",
+   "evidence": "src/lib/storage/helpers.ts:7 \u2014 openDb readBigInts:true; toUnixTimeSql integer-divides in SQL (drops sub-second) while history.ts:671,694 divide Number(last_visit_time)/1000 (float): inconsistent time conversions.",
+   "reviewer": "core-src chunk 6"
+  },
+  {
+   "id": "F68",
+   "severity": "major",
+   "file": "packages/stealth/stealth-core-browser/src/lib/storage/helpers.ts",
+   "line": 6,
+   "summary": "DB path interpolated into file: URI without percent-encoding; ?, #, % in profile dir misparse / open wrong file (silently breaks bookmarks/history).",
+   "evidence": "src/lib/storage/helpers.ts:6 \u2014 DB path interpolated into file: URI without percent-encoding; ?, #, % in profile dir misparse / open wrong file (silently breaks bookmarks/history).",
+   "reviewer": "core-src chunk 6"
+  },
+  {
+   "id": "F69",
+   "severity": "major",
+   "file": "packages/stealth/stealth-core-browser/src/lib/storage/cookies.ts",
+   "line": 499,
+   "summary": "cookie value returned in clear for every cookie, no redaction option (autofill has redactValues).",
+   "evidence": "src/lib/storage/cookies.ts:499 \u2014 cookie value returned in clear for every cookie, no redaction option (autofill has redactValues).",
+   "reviewer": "core-src chunk 6"
+  },
+  {
+   "id": "F70",
+   "severity": "minor",
+   "file": "packages/stealth/stealth-core-browser/src/lib/storage/cookies.ts",
+   "line": 478,
+   "summary": "getCookies(hostFilter) exact host_key IN (?) misses .example.com domain cookies; getCookiesByDomain inherits.",
+   "evidence": "cookies.ts:478 \u2014 getCookies(hostFilter) exact host_key IN (?) misses .example.com domain cookies; getCookiesByDomain inherits.",
+   "reviewer": "core-src chunk 6"
+  },
+  {
+   "id": "F71",
+   "severity": "minor",
+   "file": "packages/stealth/stealth-core-browser/src/lib/storage/cookies.ts",
+   "line": 502,
+   "summary": "creation_unix etc. Number(x)*1000 with unset 0 yields year 1601; no guard.",
+   "evidence": "cookies.ts:502 \u2014 creation_unix etc. Number(x)*1000 with unset 0 yields year 1601; no guard.",
+   "reviewer": "core-src chunk 6"
+  },
+  {
+   "id": "F72",
+   "severity": "minor",
+   "file": "packages/stealth/stealth-core-browser/src/lib/storage/history.ts",
+   "line": 704,
+   "summary": "getVisitStats returns transitionBreakdown {} always; filters on 0x20000000 bit while getTransitionBreakdown does not (stats disagree).",
+   "evidence": "history.ts:704 \u2014 getVisitStats returns transitionBreakdown {} always; filters on 0x20000000 bit while getTransitionBreakdown does not (stats disagree).",
+   "reviewer": "core-src chunk 6"
+  },
+  {
+   "id": "F73",
+   "severity": "minor",
+   "file": "packages/stealth/stealth-core-browser/src/lib/storage/history.ts",
+   "line": 684,
+   "summary": "LIKE query doesn't escape % and _.",
+   "evidence": "history.ts:684 \u2014 LIKE query doesn't escape % and _.",
+   "reviewer": "core-src chunk 6"
+  },
+  {
+   "id": "F74",
+   "severity": "minor",
+   "file": "packages/stealth/stealth-core-browser/src/lib/storage/bookmarks.ts",
+   "line": 408,
+   "summary": "date_added WebKit \u00b5s since 1601 divided by 1000 only, no 11644473600000 offset \u2192 1601 dates.",
+   "evidence": "bookmarks.ts:408 \u2014 date_added WebKit \u00b5s since 1601 divided by 1000 only, no 11644473600000 offset \u2192 1601 dates.",
+   "reviewer": "core-src chunk 6"
+  },
+  {
+   "id": "F75",
+   "severity": "minor",
+   "file": "packages/stealth/stealth-core-browser/src/lib/recording/store-sink.ts",
+   "line": 149,
+   "summary": "closed check only looks at closePromise; writeBatch past the check races close(); empty envelopes still opens a write transaction.",
+   "evidence": "recording/store-sink.ts:149 \u2014 closed check only looks at closePromise; writeBatch past the check races close(); empty envelopes still opens a write transaction.",
+   "reviewer": "core-src chunk 6"
+  },
+  {
+   "id": "F76",
+   "severity": "minor",
+   "file": "packages/stealth/stealth-core-browser/src/lib/recording/store-sink.ts",
+   "line": 133,
+   "summary": "initPromise caches a rejected promise forever (transient init failure permanently disables sink).",
+   "evidence": "store-sink.ts:133 \u2014 initPromise caches a rejected promise forever (transient init failure permanently disables sink).",
+   "reviewer": "core-src chunk 6"
+  },
+  {
+   "id": "F77",
+   "severity": "minor",
+   "file": "packages/stealth/stealth-core-browser/src/lib/recording/store-sink.ts",
+   "line": 97,
+   "summary": "headers and request.postData stored unredacted (redaction lives in recorder, not enforced); recording_schema version only upserted, never checked.",
+   "evidence": "store-sink.ts:97 \u2014 headers and request.postData stored unredacted (redaction lives in recorder, not enforced); recording_schema version only upserted, never checked.",
+   "reviewer": "core-src chunk 6"
+  },
+  {
+   "id": "F78",
+   "severity": "minor",
+   "file": "packages/stealth/stealth-core-browser/tsconfig.json",
+   "line": 5,
+   "summary": "module commonjs + ignoreDeprecations 6.0; tsconfig.lib.json no moduleResolution; tsconfig.spec.json includes only test/** and src/**/*.d.ts so any src/**/*.test.ts would be typechecked by neither project.",
+   "evidence": "tsconfig.json:5 \u2014 module commonjs + ignoreDeprecations 6.0; tsconfig.lib.json no moduleResolution; tsconfig.spec.json includes only test/** and src/**/*.d.ts so any src/**/*.test.ts would be typechecked by neither project.",
+   "reviewer": "core-src chunk 6"
+  },
+  {
+   "id": "F79",
+   "severity": "nit",
+   "file": "packages/stealth/stealth-core-browser/src/lib/storage/history.ts",
+   "line": 659,
+   "summary": "UrlInfo mapping duplicated in getUrlInfo and searchUrls.",
+   "evidence": "history.ts:659 \u2014 UrlInfo mapping duplicated in getUrlInfo and searchUrls.",
+   "reviewer": "core-src chunk 6"
+  },
+  {
+   "id": "F80",
+   "severity": "nit",
+   "file": "packages/stealth/stealth-core-browser/src/lib/runtime-deps.ts",
+   "line": 304,
+   "summary": "comment says lazy import() only, store-sink imports statically (type-only).",
+   "evidence": "runtime-deps.ts:304 \u2014 comment says lazy import() only, store-sink imports statically (type-only).",
+   "reviewer": "core-src chunk 6"
+  },
+  {
+   "id": "F81",
+   "severity": "nit",
+   "file": "packages/stealth/stealth-core-browser/src/lib/session.ts",
+   "line": 329,
+   "summary": "hand-rolled UUID generator; crypto.randomUUID().",
+   "evidence": "session.ts:329 \u2014 hand-rolled UUID generator; crypto.randomUUID().",
+   "reviewer": "core-src chunk 6"
+  },
+  {
+   "id": "F82",
+   "severity": "major",
+   "file": "entrypoint/stealth-search/src/server.ts",
+   "line": 315,
+   "summary": "default apiSource and baked-file default resolved from packageRoot() (parent of __dirname). In bundled dist/index.js __dirname is dist, so defaults point at <root>/api.d.ts and <root>/operations.baked.json, not dist/: baked cache misses \u2192 ~13 s extraction or bootFailed. VERIFY against the built package.",
+   "evidence": "src/server.ts:315,320 \u2014 default apiSource and baked-file default resolved from packageRoot() (parent of __dirname). In bundled dist/index.js __dirname is dist, so defaults point at <root>/api.d.ts and <root>/operations.baked.json, not dist/: baked cache misses \u2192 ~13 s extraction or bootFailed. VERIFY against the built package.",
+   "reviewer": "search-src chunk 4"
+  },
+  {
+   "id": "F83",
+   "severity": "minor",
+   "file": "entrypoint/stealth-search/src/server.ts",
+   "line": 177,
+   "summary": "packageVersionOf swallows every resolution failure and returns ''; cache key stops depending on versions \u2192 stale baked operations after core upgrade.",
+   "evidence": "server.ts:177 \u2014 packageVersionOf swallows every resolution failure and returns ''; cache key stops depending on versions \u2192 stale baked operations after core upgrade.",
+   "reviewer": "search-src chunk 4"
+  },
+  {
+   "id": "F84",
+   "severity": "minor",
+   "file": "entrypoint/stealth-search/src/server.ts",
+   "line": 700,
+   "summary": "after installHooks/registerPid, `await build(...)` can throw and nothing calls uninstall()/registration.unregister(); listeners and pid leak on in-process retry.",
+   "evidence": "server.ts:700 \u2014 after installHooks/registerPid, `await build(...)` can throw and nothing calls uninstall()/registration.unregister(); listeners and pid leak on in-process retry.",
+   "reviewer": "search-src chunk 4"
+  },
+  {
+   "id": "F85",
+   "severity": "minor",
+   "file": "entrypoint/stealth-search/src/server.ts",
+   "line": 659,
+   "summary": "(dup of search-src finding) uncaughtException/unhandledRejection listeners registered before core exit hooks.",
+   "evidence": "server.ts:659 \u2014 (dup of search-src finding) uncaughtException/unhandledRejection listeners registered before core exit hooks.",
+   "reviewer": "search-src chunk 4"
+  },
+  {
+   "id": "F86",
+   "severity": "nit",
+   "file": "entrypoint/stealth-search/vite.config.ts",
+   "line": 43,
+   "summary": "dts comment says test/ excluded; exclude lists only bin/**.",
+   "evidence": "vite.config.ts:43 \u2014 dts comment says test/ excluded; exclude lists only bin/**.",
+   "reviewer": "search-src chunk 4"
+  },
+  {
+   "id": "F87",
+   "severity": "minor",
+   "file": "entrypoint/stealth-search/bin/mcp.ts",
+   "line": 22,
+   "summary": "mcpMain .then without rejection handler (dup).",
+   "evidence": "bin/mcp.ts:22 \u2014 mcpMain .then without rejection handler (dup).",
+   "reviewer": "search-src chunk 1"
+  },
+  {
+   "id": "F88",
+   "severity": "minor",
+   "file": "entrypoint/stealth-search/src/cli.ts",
+   "line": 518,
+   "summary": "hitlAbortDocument builds hitl with only reason/pageUrl/provider/query; SearchHitl also requires trippedAt and strategy; omits tookMs required by SearchOutput.",
+   "evidence": "src/cli.ts:518 \u2014 hitlAbortDocument builds hitl with only reason/pageUrl/provider/query; SearchHitl also requires trippedAt and strategy; omits tookMs required by SearchOutput.",
+   "reviewer": "search-src chunk 1"
+  },
+  {
+   "id": "F89",
+   "severity": "nit",
+   "file": "entrypoint/stealth-search/examples/tripwire.ts",
+   "line": 16,
+   "summary": "needless `as SearchProvider` cast + unused type import.",
+   "evidence": "examples/tripwire.ts:16 \u2014 needless `as SearchProvider` cast + unused type import.",
+   "reviewer": "search-src chunk 1"
+  },
+  {
+   "id": "F90",
+   "severity": "nit",
+   "file": "entrypoint/stealth-search/eslint.config.mjs",
+   "line": 15,
+   "summary": "stale \"later states\" comment (dup).",
+   "evidence": "eslint.config.mjs:15 \u2014 stale \"later states\" comment (dup).",
+   "reviewer": "search-src chunk 1"
+  },
+  {
+   "id": "F91",
+   "severity": "nit",
+   "file": "entrypoint/stealth-search/src/cli.ts",
+   "line": 134,
+   "summary": "prompter methods repeat the TTY/closed-stdin precheck readAnswer already performs.",
+   "evidence": "src/cli.ts:134 \u2014 prompter methods repeat the TTY/closed-stdin precheck readAnswer already performs.",
+   "reviewer": "search-src chunk 1"
+  },
+  {
+   "id": "F92",
+   "severity": "major",
+   "file": "packages/stealth/stealth-core-browser/docs/reference/storage.md",
+   "line": 5,
+   "summary": "says immutable=1 is safe while Chrome writes; immutable=1 ignores WAL and takes no locks so live reads can be stale/inconsistent.",
+   "evidence": "docs/reference/storage.md:5,391 \u2014 says immutable=1 is safe while Chrome writes; immutable=1 ignores WAL and takes no locks so live reads can be stale/inconsistent.",
+   "reviewer": "core-src chunk 2"
+  },
+  {
+   "id": "F93",
+   "severity": "major",
+   "file": "packages/stealth/stealth-core-browser/docs/reference/cdp/history-db.md",
+   "line": 669,
+   "summary": "contradicts itself: \"always set PRAGMA journal_mode=WAL before reading\" vs CLI example immutable=1 (ignores WAL); line 625 says query_only while snippets set journal_mode=WAL on mode=ro.",
+   "evidence": "docs/reference/cdp/history-db.md:669 \u2014 contradicts itself: \"always set PRAGMA journal_mode=WAL before reading\" vs CLI example immutable=1 (ignores WAL); line 625 says query_only while snippets set journal_mode=WAL on mode=ro.",
+   "reviewer": "core-src chunk 2"
+  },
+  {
+   "id": "F94",
+   "severity": "major",
+   "file": "packages/stealth/stealth-core-browser/docs/reference/chrome-manager.md",
+   "line": 77,
+   "summary": "documented ChromeManagerOptions (heartbeatPath, checkHistory, heartbeat file, chrome.bump(), /tmp/stealth-browser-heartbeat, 3-tier) do not match examples/namespaces/chromeManager.ts (keepAlive, stateDir, manager.status(), lifecycle.decideReap with clients/pin/grace).",
+   "evidence": "docs/reference/chrome-manager.md:77 \u2014 documented ChromeManagerOptions (heartbeatPath, checkHistory, heartbeat file, chrome.bump(), /tmp/stealth-browser-heartbeat, 3-tier) do not match examples/namespaces/chromeManager.ts (keepAlive, stateDir, manager.status(), lifecycle.decideReap with clients/pin/grace).",
+   "reviewer": "core-src chunk 2"
+  },
+  {
+   "id": "F95",
+   "severity": "major",
+   "file": "packages/stealth/stealth-core-browser/examples/namespaces/storage.ts",
+   "line": 38,
+   "summary": "uses bookmarks.searchBookmarks(topic), documented in storage.md as an unimplemented stub returning [], so the example's bookmarks output is always empty.",
+   "evidence": "examples/namespaces/storage.ts:38 \u2014 uses bookmarks.searchBookmarks(topic), documented in storage.md as an unimplemented stub returning [], so the example's bookmarks output is always empty.",
+   "reviewer": "core-src chunk 2"
+  },
+  {
+   "id": "F96",
+   "severity": "minor",
+   "file": "packages/stealth/stealth-core-browser/docs/reference/cdp/history-db.md",
+   "line": 12,
+   "summary": "Chrome-CDP profile row has same path as Default; storage.md says Google/Chrome-CDP.",
+   "evidence": "docs/reference/cdp/history-db.md:12 \u2014 Chrome-CDP profile row has same path as Default; storage.md says Google/Chrome-CDP.",
+   "reviewer": "core-src chunk 2"
+  },
+  {
+   "id": "F97",
+   "severity": "minor",
+   "file": "packages/stealth/stealth-core-browser/docs/reference/cdp/usage.md",
+   "line": 1,
+   "summary": "still titled/worded agent-browser.",
+   "evidence": "docs/reference/cdp/usage.md:1 \u2014 still titled/worded agent-browser.",
+   "reviewer": "core-src chunk 2"
+  },
+  {
+   "id": "F98",
+   "severity": "minor",
+   "file": "packages/stealth/stealth-core-browser/docs/reference/cdp/target-timing.md",
+   "line": 1263,
+   "summary": "Browser.getHistogram \"recent activity\" heuristic (bucket high<5000) unverified vs monitoring.md.",
+   "evidence": "docs/reference/cdp/target-timing.md:1263 \u2014 Browser.getHistogram \"recent activity\" heuristic (bucket high<5000) unverified vs monitoring.md.",
+   "reviewer": "core-src chunk 2"
+  },
+  {
+   "id": "F99",
+   "severity": "minor",
+   "file": "packages/stealth/stealth-core-browser/examples/namespaces/parsers.ts",
+   "line": 1,
+   "summary": "new examples (namespaces/*, verbs/*) have no test or recorded run per this chunk (G12).",
+   "evidence": "examples/namespaces/parsers.ts:1 \u2014 new examples (namespaces/*, verbs/*) have no test or recorded run per this chunk (G12).",
+   "reviewer": "core-src chunk 2"
+  },
+  {
+   "id": "F100",
+   "severity": "nit",
+   "file": "packages/stealth/stealth-core-browser/docs/reference/chrome-manager.md",
+   "line": 1,
+   "summary": "describes old src/lib/cdp layout and killChrome via lsof.",
+   "evidence": "docs/reference/chrome-manager.md:1 \u2014 describes old src/lib/cdp layout and killChrome via lsof.",
+   "reviewer": "core-src chunk 2"
+  },
+  {
+   "id": "F101",
+   "severity": "minor",
+   "file": "packages/resilience/resilience-core-tripwire/test/unit/scenario-request-builder.spec.ts",
+   "line": 110,
+   "summary": "4xx loop never probes lower boundary (399/300 mutation passes).",
+   "evidence": "scenario-request-builder.spec.ts:110 \u2014 4xx loop never probes lower boundary (399/300 mutation passes).",
+   "reviewer": "tripwire chunk 3"
+  },
+  {
+   "id": "F102",
+   "severity": "minor",
+   "file": "packages/resilience/resilience-core-tripwire/test/unit/scenario-request-builder.spec.ts",
+   "line": 236,
+   "summary": "setTimeout(0) wait for two in-flight sends may flake.",
+   "evidence": "scenario-request-builder.spec.ts:236 \u2014 setTimeout(0) wait for two in-flight sends may flake.",
+   "reviewer": "tripwire chunk 3"
+  },
+  {
+   "id": "F103",
+   "severity": "minor",
+   "file": "packages/resilience/resilience-core-tripwire/test/unit/redact.spec.ts",
+   "line": 65,
+   "summary": "title says drops responseBody and non-JSON values but also asserts responseStatus dropped.",
+   "evidence": "redact.spec.ts:65 \u2014 title says drops responseBody and non-JSON values but also asserts responseStatus dropped.",
+   "reviewer": "tripwire chunk 3"
+  },
+  {
+   "id": "F104",
+   "severity": "nit",
+   "file": "packages/resilience/resilience-core-tripwire/test/unit/redact.spec.ts",
+   "line": 82,
+   "summary": "unused _drop binding.",
+   "evidence": "redact.spec.ts:82 \u2014 unused _drop binding.",
+   "reviewer": "tripwire chunk 3"
+  },
+  {
+   "id": "F105",
+   "severity": "nit",
+   "file": "packages/resilience/resilience-core-tripwire/test/unit/interleave.spec.ts",
+   "line": 1055,
+   "summary": "phasedPicker pending[i] may be undefined \u2192 TypeError.",
+   "evidence": "interleave.spec.ts:1055 \u2014 phasedPicker pending[i] may be undefined \u2192 TypeError.",
+   "reviewer": "tripwire chunk 3"
+  },
+  {
+   "id": "F106",
+   "severity": "major",
+   "file": "packages/stealth/stealth-core-browser/docs/reference/cdp-connection.md",
+   "line": 23,
+   "summary": "Runtime.evaluate quick start; capture.md:104 untyped errors; capture.md:389 message-prefix retry; cdp.md:138 lsof killChrome; reference/README.md:16 subpath imports.",
+   "evidence": "cdp-connection.md:23 Runtime.evaluate quick start; capture.md:104 untyped errors; capture.md:389 message-prefix retry; cdp.md:138 lsof killChrome; reference/README.md:16 subpath imports.",
+   "reviewer": "core-src chunk 1"
+  },
+  {
+   "id": "F107",
+   "severity": "minor",
+   "file": "packages/stealth/stealth-core-browser/docs/reference/cdp.md",
+   "line": 63,
+   "summary": "Page.loadEventFired sent as command; cdp/README.md:1, api-reference.md:1 agent-browser titles + inconsistent source paths; cdp-connection.md:5 claims consumed by CLI and MCP surfaces (library only); core README.md:3 Nx scaffold text.",
+   "evidence": "cdp.md:63,600 Page.loadEventFired sent as command; cdp/README.md:1, api-reference.md:1 agent-browser titles + inconsistent source paths; cdp-connection.md:5 claims consumed by CLI and MCP surfaces (library only); core README.md:3 Nx scaffold text.",
+   "reviewer": "core-src chunk 1"
+  },
+  {
+   "id": "F108",
+   "severity": "nit",
+   "file": "packages/stealth/stealth-core-browser/docs/reference/cdp/domains.md",
+   "line": 134,
+   "summary": "duplicate method names in Network and Runtime lists.",
+   "evidence": "cdp/domains.md:134,178 duplicate method names in Network and Runtime lists.",
+   "reviewer": "core-src chunk 1"
+  },
+  {
+   "id": "F109",
+   "severity": "major",
+   "file": "packages/resilience/resilience-core-tripwire/src/lib/tripwire.ts",
+   "line": 572,
+   "summary": "repeated trip on a key whose persist failed breaks first-trip-wins: latch keeps first entry but trip returns the new record created:true persisted:false and emits a second tripwire-fired; same-process no-persist path should return the held record with created:false.",
+   "evidence": "src/lib/tripwire.ts:572 \u2014 repeated trip on a key whose persist failed breaks first-trip-wins: latch keeps first entry but trip returns the new record created:true persisted:false and emits a second tripwire-fired; same-process no-persist path should return the held record with created:false.",
+   "reviewer": "tripwire chunk 2"
+  },
+  {
+   "id": "F110",
+   "severity": "minor",
+   "file": "packages/resilience/resilience-core-tripwire/src/lib/tripwire.ts",
+   "line": 172,
+   "summary": "schema-1 parse accepts any finite blockedCount incl. negative/fractional (legacy path clamps).",
+   "evidence": "tripwire.ts:172 \u2014 schema-1 parse accepts any finite blockedCount incl. negative/fractional (legacy path clamps).",
+   "reviewer": "tripwire chunk 2"
+  },
+  {
+   "id": "F111",
+   "severity": "minor",
+   "file": "packages/resilience/resilience-core-tripwire/src/lib/tripwire.ts",
+   "line": 714,
+   "summary": "resolve writes tripwire-resolved audit before clearNow and ignores clearNow's result.",
+   "evidence": "tripwire.ts:714 \u2014 resolve writes tripwire-resolved audit before clearNow and ignores clearNow's result.",
+   "reviewer": "tripwire chunk 2"
+  },
+  {
+   "id": "F112",
+   "severity": "minor",
+   "file": "packages/resilience/resilience-core-tripwire/test/unit/api-surface.spec.ts",
+   "line": 122,
+   "summary": "type-export check is a runtime no-op (`shapes` undefined asserted undefined).",
+   "evidence": "test/unit/api-surface.spec.ts:122 \u2014 type-export check is a runtime no-op (`shapes` undefined asserted undefined).",
+   "reviewer": "tripwire chunk 2"
+  },
+  {
+   "id": "F113",
+   "severity": "minor",
+   "file": "packages/resilience/resilience-core-tripwire/test/unit/api-surface.spec.ts",
+   "line": 78,
+   "summary": "\"no consumer-specific name\" regex over index.ts matches nothing for many export styles.",
+   "evidence": "api-surface.spec.ts:78 \u2014 \"no consumer-specific name\" regex over index.ts matches nothing for many export styles.",
+   "reviewer": "tripwire chunk 2"
+  },
+  {
+   "id": "F114",
+   "severity": "nit",
+   "file": "packages/resilience/resilience-core-tripwire/test/unit/audit-expiry.spec.ts",
+   "line": 47,
+   "summary": "last test repeats first test's ttl-expired assertion.",
+   "evidence": "audit-expiry.spec.ts:47 \u2014 last test repeats first test's ttl-expired assertion.",
+   "reviewer": "tripwire chunk 2"
+  },
+  {
+   "id": "F115",
+   "severity": "major",
+   "file": "entrypoint/stealth-search/src/host-projection.ts",
+   "line": 36,
+   "summary": "redactCookieValues strips `value` only under a `cookies` key or as property value; cookie-shaped objects as array elements under other keys, or the root value, pass through walk unredacted \u2192 cookie values leak despite the \"whatever the core returns\" claim.",
+   "evidence": "src/host-projection.ts:36 \u2014 redactCookieValues strips `value` only under a `cookies` key or as property value; cookie-shaped objects as array elements under other keys, or the root value, pass through walk unredacted \u2192 cookie values leak despite the \"whatever the core returns\" claim.",
+   "reviewer": "search-src chunk 2"
+  },
+  {
+   "id": "F116",
+   "severity": "minor",
+   "file": "entrypoint/stealth-search/src/host-projection.ts",
+   "line": 17,
+   "summary": "wrong comment on VALUE_KEY.",
+   "evidence": "host-projection.ts:17 \u2014 wrong comment on VALUE_KEY.",
+   "reviewer": "search-src chunk 2"
+  },
+  {
+   "id": "F117",
+   "severity": "minor",
+   "file": "entrypoint/stealth-search/src/lib/dom.ts",
+   "line": 241,
+   "summary": "decodeURIComponent throws on malformed percent sequence; whole search fails with error instead of dropping that URL.",
+   "evidence": "src/lib/dom.ts:241 \u2014 decodeURIComponent throws on malformed percent sequence; whole search fails with error instead of dropping that URL.",
+   "reviewer": "search-src chunk 2"
+  },
+  {
+   "id": "F118",
+   "severity": "minor",
+   "file": "entrypoint/stealth-search/src/lib/fetch/fetch.ts",
+   "line": 327,
+   "summary": "pdfBytesDirect returns body of any non-3xx without checking status \u2192 misleading PDF_EXTRACT_FAILED for 403/500.",
+   "evidence": "src/lib/fetch/fetch.ts:327 \u2014 pdfBytesDirect returns body of any non-3xx without checking status \u2192 misleading PDF_EXTRACT_FAILED for 403/500.",
+   "reviewer": "search-src chunk 2"
+  },
+  {
+   "id": "F119",
+   "severity": "minor",
+   "file": "entrypoint/stealth-search/src/lib/fetch/fetch.ts",
+   "line": 42,
+   "summary": "vs host-flags.ts \u2014 DEFAULT_CDP_HOST 'host:port' vs 'host' same name different semantics.",
+   "evidence": "fetch.ts:42 vs host-flags.ts \u2014 DEFAULT_CDP_HOST 'host:port' vs 'host' same name different semantics.",
+   "reviewer": "search-src chunk 2"
+  },
+  {
+   "id": "F120",
+   "severity": "nit",
+   "file": "entrypoint/stealth-search/src/lib/fetch/fetch.ts",
+   "line": 557,
+   "summary": "status>=400 branch calls finish without markdown truncated flag.",
+   "evidence": "fetch.ts:557 \u2014 status>=400 branch calls finish without markdown truncated flag.",
+   "reviewer": "search-src chunk 2"
+  },
+  {
+   "id": "F121",
+   "severity": "major",
+   "file": "packages/stealth/stealth-core-browser/src/lib/capture/dom.ts",
+   "line": 46,
+   "summary": "Page.loadEventFired sent as command; CDP_REMOTE_ERROR swallowed by .catch \u2192 \"wait for load\" never waits; timeoutMs not applied.",
+   "evidence": "src/lib/capture/dom.ts:46 \u2014 Page.loadEventFired sent as command; CDP_REMOTE_ERROR swallowed by .catch \u2192 \"wait for load\" never waits; timeoutMs not applied.",
+   "reviewer": "core-src chunk 3"
+  },
+  {
+   "id": "F122",
+   "severity": "minor",
+   "file": "packages/stealth/stealth-core-browser/src/lib/capture/dom.ts",
+   "line": 157,
+   "summary": "normalizeUrl rewrites any non-http href with q= (relative /search?q=foo \u2192 foo).",
+   "evidence": "capture/dom.ts:157 \u2014 normalizeUrl rewrites any non-http href with q= (relative /search?q=foo \u2192 foo).",
+   "reviewer": "core-src chunk 3"
+  },
+  {
+   "id": "F123",
+   "severity": "minor",
+   "file": "packages/stealth/stealth-core-browser/src/lib/cdp/browser.ts",
+   "line": 437,
+   "summary": "5s fallback timer in killProcessGroup never cleared; holds event loop up to 5s.",
+   "evidence": "cdp/browser.ts:437 \u2014 5s fallback timer in killProcessGroup never cleared; holds event loop up to 5s.",
+   "reviewer": "core-src chunk 3"
+  },
+  {
+   "id": "F124",
+   "severity": "minor",
+   "file": "packages/stealth/stealth-core-browser/src/lib/cdp/browser.ts",
+   "line": 495,
+   "summary": "killChrome final SIGKILL to -firstPid while SIGTERM used probe.groupOf(pid) ?? pid; disagree when listener isn't group leader.",
+   "evidence": "cdp/browser.ts:495 \u2014 killChrome final SIGKILL to -firstPid while SIGTERM used probe.groupOf(pid) ?? pid; disagree when listener isn't group leader.",
+   "reviewer": "core-src chunk 3"
+  },
+  {
+   "id": "F125",
+   "severity": "minor",
+   "file": "packages/stealth/stealth-core-browser/src/api.ts",
+   "line": 203,
+   "summary": "shutdownChrome TSDoc says never throws, but resolveEndpoint (outside try) throws invalidEndpoint.",
+   "evidence": "src/api.ts:203 \u2014 shutdownChrome TSDoc says never throws, but resolveEndpoint (outside try) throws invalidEndpoint.",
+   "reviewer": "core-src chunk 3"
+  },
+  {
+   "id": "F126",
+   "severity": "nit",
+   "file": "packages/stealth/stealth-core-browser/src/api.ts",
+   "line": 247,
+   "summary": "`input ?? {}` dead code for required param.",
+   "evidence": "api.ts:247 \u2014 `input ?? {}` dead code for required param.",
+   "reviewer": "core-src chunk 3"
+  },
+  {
+   "id": "F127",
+   "severity": "nit",
+   "file": "packages/stealth/stealth-core-browser/src/lib/capture/bans.ts",
+   "line": 127,
+   "summary": "checkBans .test on caller RegExp with g/y flags keeps lastIndex.",
+   "evidence": "capture/bans.ts:127 \u2014 checkBans .test on caller RegExp with g/y flags keeps lastIndex.",
+   "reviewer": "core-src chunk 3"
+  },
+  {
+   "id": "F128",
+   "severity": "minor",
+   "file": "packages/stealth/stealth-core-browser/src/lib/lifecycle/reaper-host.ts",
+   "line": 581,
+   "summary": "evaluate returns in-flight `reaping` promise to every caller; reapIfIdle (graceMs 0, caller excluded) arriving during a host tick gets the tick's decision; breaks \"caller excluded, graceMs 0\" contract.",
+   "evidence": "src/lib/lifecycle/reaper-host.ts:581 \u2014 evaluate returns in-flight `reaping` promise to every caller; reapIfIdle (graceMs 0, caller excluded) arriving during a host tick gets the tick's decision; breaks \"caller excluded, graceMs 0\" contract.",
+   "reviewer": "core-src chunk 5"
+  },
+  {
+   "id": "F129",
+   "severity": "minor",
+   "file": "packages/stealth/stealth-core-browser/src/lib/lifecycle/reaper-link.ts",
+   "line": 976,
+   "summary": "reapIfIdle and status don't catch rejection from conn.send (only release wraps try/catch) though interface says null when link down.",
+   "evidence": "lifecycle/reaper-link.ts:976 \u2014 reapIfIdle and status don't catch rejection from conn.send (only release wraps try/catch) though interface says null when link down.",
+   "reviewer": "core-src chunk 5"
+  },
+  {
+   "id": "F130",
+   "severity": "minor",
+   "file": "packages/stealth/stealth-core-browser/src/lib/recording/network-recorder.ts",
+   "line": 2294,
+   "summary": "tracked drafts never removed from this.drafts; unbounded growth.",
+   "evidence": "recording/network-recorder.ts:2294 \u2014 tracked drafts never removed from this.drafts; unbounded growth.",
+   "reviewer": "core-src chunk 5"
+  },
+  {
+   "id": "F131",
+   "severity": "minor",
+   "file": "packages/stealth/stealth-core-browser/src/lib/queries/activity.ts",
+   "line": 1706,
+   "summary": "checkChromeActivity counts every page not about:blank as active incl. chrome://newtab/; disagrees with reaper's isActiveWebTarget.",
+   "evidence": "queries/activity.ts:1706 \u2014 checkChromeActivity counts every page not about:blank as active incl. chrome://newtab/; disagrees with reaper's isActiveWebTarget.",
+   "reviewer": "core-src chunk 5"
+  },
+  {
+   "id": "F132",
+   "severity": "minor",
+   "file": "packages/stealth/stealth-core-browser/src/lib/parsers.ts",
+   "line": 1360,
+   "summary": "embedded-JSON regex requires type= before data-target= in fixed order/whitespace/double quotes; reordering silently yields [].",
+   "evidence": "parsers.ts:1360 \u2014 embedded-JSON regex requires type= before data-target= in fixed order/whitespace/double quotes; reordering silently yields [].",
+   "reviewer": "core-src chunk 5"
+  },
+  {
+   "id": "F133",
+   "severity": "minor",
+   "file": "packages/stealth/stealth-core-browser/src/lib/parsers.ts",
+   "line": 1381,
+   "summary": "snippets[0].lines only stripHtml'd (no entity decode) while titles go through cleanText.",
+   "evidence": "parsers.ts:1381 \u2014 snippets[0].lines only stripHtml'd (no entity decode) while titles go through cleanText.",
+   "reviewer": "core-src chunk 5"
+  },
+  {
+   "id": "F134",
+   "severity": "nit",
+   "file": "packages/stealth/stealth-core-browser/src/lib/recording/network-recorder.ts",
+   "line": 1941,
+   "summary": "mid-file import type; recording/errors.ts:1826 duplicate errorMessage helper (also in reaper-entry import); parsers.ts:1238 import type semicolon/interleaved imports.",
+   "evidence": "recording/network-recorder.ts:1941 mid-file import type; recording/errors.ts:1826 duplicate errorMessage helper (also in reaper-entry import); parsers.ts:1238 import type semicolon/interleaved imports.",
+   "reviewer": "core-src chunk 5"
+  },
+  {
+   "id": "F135",
+   "severity": "major",
+   "file": "packages/resilience/resilience-core-tripwire/src/lib/audit.ts",
+   "line": 154,
+   "summary": "audit writer chmods dirname(auditPath) to 0700 on first append; caller-configurable path (e.g. /var/log/app.audit) would tighten a shared directory. Only chmod a directory the package created.",
+   "evidence": "src/lib/audit.ts:154 \u2014 audit writer chmods dirname(auditPath) to 0700 on first append; caller-configurable path (e.g. /var/log/app.audit) would tighten a shared directory. Only chmod a directory the package created.",
+   "reviewer": "tripwire chunk 1"
+  },
+  {
+   "id": "F136",
+   "severity": "minor",
+   "file": "packages/resilience/resilience-core-tripwire/src/lib/storage.ts",
+   "line": 218,
+   "summary": "ensureDir chmods caller-supplied stateDir to 0700 even if it existed (README example stateDir '/var/lib/app').",
+   "evidence": "src/lib/storage.ts:218 \u2014 ensureDir chmods caller-supplied stateDir to 0700 even if it existed (README example stateDir '/var/lib/app').",
+   "reviewer": "tripwire chunk 1"
+  },
+  {
+   "id": "F137",
+   "severity": "minor",
+   "file": "packages/resilience/resilience-core-tripwire/src/lib/redact.ts",
+   "line": 13,
+   "summary": "key-drop pattern narrower than query-param pattern (omits api[-_]?key, session, jwt, bearer, credential, passw/pwd); {apiKey:'sk-...'} persisted; URL fragment never stripped (#access_token=... stays in stored pageUrl).",
+   "evidence": "src/lib/redact.ts:13 \u2014 key-drop pattern narrower than query-param pattern (omits api[-_]?key, session, jwt, bearer, credential, passw/pwd); {apiKey:'sk-...'} persisted; URL fragment never stripped (#access_token=... stays in stored pageUrl).",
+   "reviewer": "tripwire chunk 1"
+  },
+  {
+   "id": "F138",
+   "severity": "minor",
+   "file": "packages/resilience/resilience-core-tripwire/docs/RECOVERY.md",
+   "line": 115,
+   "summary": "break-glass section says process drops in-memory latch \"as soon as the lock exists on disk\" (reads backwards for rm runbook; conflicts with \"needs a restart\" paragraph).",
+   "evidence": "docs/RECOVERY.md:115 \u2014 break-glass section says process drops in-memory latch \"as soon as the lock exists on disk\" (reads backwards for rm runbook; conflicts with \"needs a restart\" paragraph).",
+   "reviewer": "tripwire chunk 1"
+  },
+  {
+   "id": "F139",
+   "severity": "minor",
+   "file": "packages/resilience/resilience-core-tripwire/package.json",
+   "line": 13,
+   "summary": "files omits docs (dup).",
+   "evidence": "package.json:13 \u2014 files omits docs (dup).",
+   "reviewer": "tripwire chunk 1"
+  },
+  {
+   "id": "F140",
+   "severity": "nit",
+   "file": "packages/resilience/resilience-core-tripwire/src/lib/cli.ts",
+   "line": 44,
+   "summary": "DEFAULT_UNLOCK_USAGE repo-specific (dup).",
+   "evidence": "src/lib/cli.ts:44 \u2014 DEFAULT_UNLOCK_USAGE repo-specific (dup).",
+   "reviewer": "tripwire chunk 1"
+  },
+  {
+   "id": "F141",
+   "severity": "minor",
+   "file": "entrypoint/stealth-search/src/lib/network.ts",
+   "line": 257,
+   "summary": "networkSearch documented never-throws but parseBody and deps.checkBans run outside try/catch.",
+   "evidence": "src/lib/network.ts:257 \u2014 networkSearch documented never-throws but parseBody and deps.checkBans run outside try/catch.",
+   "reviewer": "search-src chunk 3"
+  },
+  {
+   "id": "F142",
+   "severity": "minor",
+   "file": "entrypoint/stealth-search/src/lib/network.ts",
+   "line": 322,
+   "summary": "directFetchSearch treats every non-json parser as HTML; embedded-json provider would silently return empty.",
+   "evidence": "network.ts:322 \u2014 directFetchSearch treats every non-json parser as HTML; embedded-json provider would silently return empty.",
+   "reviewer": "search-src chunk 3"
+  },
+  {
+   "id": "F143",
+   "severity": "minor",
+   "file": "entrypoint/stealth-search/src/lib/search.ts",
+   "line": 590,
+   "summary": "login_required hitl with no interaction port (MCP) writes no tripwire/cooldown but keeps page open and adds to state.kept; windows accumulate.",
+   "evidence": "search.ts:590 \u2014 login_required hitl with no interaction port (MCP) writes no tripwire/cooldown but keeps page open and adds to state.kept; windows accumulate.",
+   "reviewer": "search-src chunk 3"
+  },
+  {
+   "id": "F144",
+   "severity": "minor",
+   "file": "entrypoint/stealth-search/src/lib/providers.ts",
+   "line": 170,
+   "summary": "npm DOM fallback depends on build-hashed CSS class `._9d3f0e0e`.",
+   "evidence": "providers.ts:170 \u2014 npm DOM fallback depends on build-hashed CSS class `._9d3f0e0e`.",
+   "reviewer": "search-src chunk 3"
+  },
+  {
+   "id": "F145",
+   "severity": "nit",
+   "file": "entrypoint/stealth-search/src/lib/providers.ts",
+   "line": 184,
+   "summary": "stale GitHub comment; providers.ts:327 PyPI comment says JSON API but config uses html parser; search.ts:530 `null as SearchPage | null`; network.ts:129 selectCandidate decodes bodies repeatedly.",
+   "evidence": "providers.ts:184 stale GitHub comment; providers.ts:327 PyPI comment says JSON API but config uses html parser; search.ts:530 `null as SearchPage | null`; network.ts:129 selectCandidate decodes bodies repeatedly.",
+   "reviewer": "search-src chunk 3"
+  },
+  {
+   "id": "F146",
+   "severity": "blocker",
+   "file": "packages/stealth/stealth-core-browser/src/lib/domains/page.ts",
+   "line": 7,
+   "summary": "every Page.* call (getNavigationHistory, getFrameTree, getResourceTree, getLayoutMetrics, captureScreenshot, getMetrics) goes via cdpCall on the browser-level WebSocket with {targetId} as a command param; Page commands aren't served there and take no targetId; need a page session / Target.attachToTarget sessionId. cdpCall swallows errors \u2192 null/empty with no signal.",
+   "evidence": "src/lib/domains/page.ts:7 \u2014 every Page.* call (getNavigationHistory, getFrameTree, getResourceTree, getLayoutMetrics, captureScreenshot, getMetrics) goes via cdpCall on the browser-level WebSocket with {targetId} as a command param; Page commands aren't served there and take no targetId; need a page session / Target.attachToTarget sessionId. cdpCall swallows errors \u2192 null/empty with no signal.",
+   "reviewer": "core-src chunk 4"
+  },
+  {
+   "id": "F147",
+   "severity": "blocker",
+   "file": "packages/stealth/stealth-core-browser/src/lib/domains/browser.ts",
+   "line": 34,
+   "summary": "Browser.getWindowBounds takes windowId not targetId; can never succeed, silently null.",
+   "evidence": "src/lib/domains/browser.ts:34 \u2014 Browser.getWindowBounds takes windowId not targetId; can never succeed, silently null.",
+   "reviewer": "core-src chunk 4"
+  },
+  {
+   "id": "F148",
+   "severity": "major",
+   "file": "packages/stealth/stealth-core-browser/src/lib/domains/network.ts",
+   "line": 13,
+   "summary": "Network.getAllCookies/getCookies sent browser-level without a page session; failure swallowed into [] (looks like \"no cookies\").",
+   "evidence": "src/lib/domains/network.ts:13 \u2014 Network.getAllCookies/getCookies sent browser-level without a page session; failure swallowed into [] (looks like \"no cookies\").",
+   "reviewer": "core-src chunk 4"
+  },
+  {
+   "id": "F149",
+   "severity": "major",
+   "file": "packages/stealth/stealth-core-browser/src/lib/cdp/settle.ts",
+   "line": 336,
+   "summary": "inflight++ on every Network.requestWillBeSent; redirect re-emits for same requestId with one loadingFinished \u2192 inflight never returns to 0, inflight-zero rung can never fire; not scoped to loaderId.",
+   "evidence": "src/lib/cdp/settle.ts:336 \u2014 inflight++ on every Network.requestWillBeSent; redirect re-emits for same requestId with one loadingFinished \u2192 inflight never returns to 0, inflight-zero rung can never fire; not scoped to loaderId.",
+   "reviewer": "core-src chunk 4"
+  },
+  {
+   "id": "F150",
+   "severity": "major",
+   "file": "packages/stealth/stealth-core-browser/src/lib/domains/transport.ts",
+   "line": 25,
+   "summary": "cdpCall connects to webSocketDebuggerUrl from /json/version without assertSameEndpoint (targets.ts enforces it); endpoint hardening bypassed.",
+   "evidence": "src/lib/domains/transport.ts:25 \u2014 cdpCall connects to webSocketDebuggerUrl from /json/version without assertSameEndpoint (targets.ts enforces it); endpoint hardening bypassed.",
+   "reviewer": "core-src chunk 4"
+  },
+  {
+   "id": "F151",
+   "severity": "major",
+   "file": "packages/stealth/stealth-core-browser/src/lib/cdp/targets.ts",
+   "line": 322,
+   "summary": "poll loop in createIsolatedPageTarget: if listPageTargets throws, new browser context/target never disposed (leak); createPageTarget same without the context.",
+   "evidence": "src/lib/cdp/targets.ts:322 \u2014 poll loop in createIsolatedPageTarget: if listPageTargets throws, new browser context/target never disposed (leak); createPageTarget same without the context.",
+   "reviewer": "core-src chunk 4"
+  },
+  {
+   "id": "F152",
+   "severity": "minor",
+   "file": "packages/stealth/stealth-core-browser/src/lib/domains/transport.ts",
+   "line": 23,
+   "summary": "(+browser.ts:9 getVersion, target.ts:6 listPageTargets) \u2014 /json/version fetch has no timeout and no res.ok check.",
+   "evidence": "domains/transport.ts:23 (+browser.ts:9 getVersion, target.ts:6 listPageTargets) \u2014 /json/version fetch has no timeout and no res.ok check.",
+   "reviewer": "core-src chunk 4"
+  },
+  {
+   "id": "F153",
+   "severity": "minor",
+   "file": "packages/stealth/stealth-core-browser/src/lib/cdp/settle.ts",
+   "line": 285,
+   "summary": "(+437,440) \u2014 abort / navigate-failure paths set done but never clear settleTimer/graceTimer/inflightTimer/uiTimer; abort listener not removed on normal finish.",
+   "evidence": "cdp/settle.ts:285 (+437,440) \u2014 abort / navigate-failure paths set done but never clear settleTimer/graceTimer/inflightTimer/uiTimer; abort listener not removed on normal finish.",
+   "reviewer": "core-src chunk 4"
+  },
+  {
+   "id": "F154",
+   "severity": "minor",
+   "file": "packages/stealth/stealth-core-browser/src/lib/cdp/settle.ts",
+   "line": 438,
+   "summary": "Page.navigate loaderId overwrites frameNavigated's newer loader; same-document navigation (no loaderId) leaves loaderId undefined and ignores all lifecycle events until deadline.",
+   "evidence": "settle.ts:438 \u2014 Page.navigate loaderId overwrites frameNavigated's newer loader; same-document navigation (no loaderId) leaves loaderId undefined and ignores all lifecycle events until deadline.",
+   "reviewer": "core-src chunk 4"
+  },
+  {
+   "id": "F155",
+   "severity": "minor",
+   "file": "packages/stealth/stealth-core-browser/src/lib/cdp/shutdown.ts",
+   "line": 97,
+   "summary": "createPageTargetIdleShutdown replaces opts.onShutdown; only calls it when shutDownChrome true; documented \"called when idle timeout expires\".",
+   "evidence": "cdp/shutdown.ts:97 \u2014 createPageTargetIdleShutdown replaces opts.onShutdown; only calls it when shutDownChrome true; documented \"called when idle timeout expires\".",
+   "reviewer": "core-src chunk 4"
+  },
+  {
+   "id": "F156",
+   "severity": "minor",
+   "file": "packages/stealth/stealth-core-browser/src/lib/cdp/targets.ts",
+   "line": 346,
+   "summary": "(+hideAllWindows 367) \u2014 session.close() not in finally; socket leaks if Target.closeTarget rejects / listPageTargetsOnly throws.",
+   "evidence": "cdp/targets.ts:346 (+hideAllWindows 367) \u2014 session.close() not in finally; socket leaks if Target.closeTarget rejects / listPageTargetsOnly throws.",
+   "reviewer": "core-src chunk 4"
+  },
+  {
+   "id": "F157",
+   "severity": "minor",
+   "file": "packages/stealth/stealth-core-browser/src/lib/helpers.ts",
+   "line": 71,
+   "summary": "SQL integer division visit_time/1000000 truncates sub-second; hydrateVisit visitTime sub-second always zero (same family as storage/helpers.ts finding).",
+   "evidence": "src/lib/helpers.ts:71 \u2014 SQL integer division visit_time/1000000 truncates sub-second; hydrateVisit visitTime sub-second always zero (same family as storage/helpers.ts finding).",
+   "reviewer": "core-src chunk 4"
+  },
+  {
+   "id": "F158",
+   "severity": "nit",
+   "file": "packages/stealth/stealth-core-browser/src/lib/cdp/settle.ts",
+   "line": 127,
+   "summary": "SettleSignal includes 'load' but no path resolves with it.",
+   "evidence": "settle.ts:127 \u2014 SettleSignal includes 'load' but no path resolves with it.",
+   "reviewer": "core-src chunk 4"
+  },
+  {
+   "id": "F159",
+   "severity": "nit",
+   "file": "packages/stealth/stealth-core-browser/src/lib/helpers.ts",
+   "line": 24,
+   "summary": "chromeProfileDir/defaultChromeDir hardcode macOS Library/Application Support.",
+   "evidence": "helpers.ts:24 \u2014 chromeProfileDir/defaultChromeDir hardcode macOS Library/Application Support.",
+   "reviewer": "core-src chunk 4"
+  }
+ ]
+}
