@@ -240,6 +240,153 @@
       "reproduction": "rg -n 'FakeCdpServer' packages/stealth/stealth-core-browser/test/helpers/fake-cdp.ts | head -3"
     },
     {
+      "id": "F35",
+      "status": "fixed",
+      "commit": "2ecb99268143749f26f55503f239a761f67e0da9",
+      "evidence": "tripwire-status.spec researcher flow now drives the product SearchService (makeWorld: scripted hitl engine, real guard and tripwire) instead of a local search() helper; mutation disabling the service tripwire gate turns it red",
+      "reproduction": "cd entrypoint/stealth-search && npx vitest run test/unit/guards/tripwire-status.spec.ts"
+    },
+    {
+      "id": "F36",
+      "status": "fixed",
+      "commit": "2ecb99268143749f26f55503f239a761f67e0da9",
+      "evidence": "baked-operations.spec: the constants-only control is now a behavior test (cold start extracts once and the runtime cache spares the next start); the server.ts source regex is replaced by a default-location test through buildStealthSearchPackage; removing the default bakedFile turns it red",
+      "reproduction": "cd entrypoint/stealth-search && npx vitest run test/unit/build/baked-operations.spec.ts"
+    },
+    {
+      "id": "F37",
+      "status": "fixed",
+      "commit": "2ecb99268143749f26f55503f239a761f67e0da9",
+      "evidence": "baked-operations.spec: the constants-only control is now a behavior test (cold start extracts once and the runtime cache spares the next start); the server.ts source regex is replaced by a default-location test through buildStealthSearchPackage; removing the default bakedFile turns it red",
+      "reproduction": "cd entrypoint/stealth-search && npx vitest run test/unit/build/baked-operations.spec.ts"
+    },
+    {
+      "id": "F38",
+      "status": "fixed",
+      "commit": "2ecb99268143749f26f55503f239a761f67e0da9",
+      "evidence": "package.spec builds the shared package in beforeAll so each test passes in isolation; verified by running one later test alone (-t) and by removing the beforeAll build (red)",
+      "reproduction": "cd entrypoint/stealth-search && npx vitest run test/unit/hosts/package.spec.ts -t 'P1: the launchChrome input'"
+    },
+    {
+      "id": "F39",
+      "status": "fixed",
+      "commit": "2ecb99268143749f26f55503f239a761f67e0da9",
+      "evidence": "mcp-boot defaults test title now says no explicit log level (the host then logs at info), matching the logLevel undefined assertion; defaulting logLevel to debug turns it red",
+      "reproduction": "cd entrypoint/stealth-search && npx vitest run test/unit/hosts/mcp-boot.spec.ts"
+    },
+    {
+      "id": "F40",
+      "status": "fixed",
+      "commit": "2ecb99268143749f26f55503f239a761f67e0da9",
+      "evidence": "fetch.spec corrupt pdf uses a >1 KiB corrupt body and asserts the PDF_EXTRACT_FAILED prefix; changing the extractor code to SEARCH_FAILED turns it red",
+      "reproduction": "cd entrypoint/stealth-search && npx vitest run test/unit/use-cases/fetch.spec.ts"
+    },
+    {
+      "id": "F41",
+      "status": "fixed",
+      "commit": "2ecb99268143749f26f55503f239a761f67e0da9",
+      "evidence": "fetch-pdf.spec no longer pins the line distance of new Function; it brace-matches the function body and asserts the specifier is a parameter (committed with the stealth-search fixes)",
+      "reproduction": "cd entrypoint/stealth-search && npx vitest run test/unit/fetch/fetch-pdf.spec.ts"
+    },
+    {
+      "id": "F42",
+      "status": "fixed",
+      "commit": "2ecb99268143749f26f55503f239a761f67e0da9",
+      "evidence": "host-harness comment now states the harness takes spies from the spec and imports only expect from the runner",
+      "reproduction": "rg -n 'imports only .expect.' entrypoint/stealth-search/test/helpers/hosts/host-harness.ts"
+    },
+    {
+      "id": "F43",
+      "status": "fixed",
+      "commit": "2ecb99268143749f26f55503f239a761f67e0da9",
+      "evidence": "the schema-path reduce is replaced by a named providerSchemaOf helper walking the explicit key path; walking to a missing key turns the no-enum test red",
+      "reproduction": "cd entrypoint/stealth-search && npx vitest run test/unit/hosts/search-tracing-unknown-provider.spec.ts"
+    },
+    {
+      "id": "F44",
+      "status": "fixed",
+      "commit": "2ecb99268143749f26f55503f239a761f67e0da9",
+      "evidence": "expectInvalidArgument moved into host-harness.ts and imported by mcp-inprocess.spec and use-cases/hosts.spec; the shared helper checking another code turns both red",
+      "reproduction": "cd entrypoint/stealth-search && npx vitest run test/unit/hosts/mcp-inprocess.spec.ts test/unit/use-cases/hosts.spec.ts"
+    },
+    {
+      "id": "F45",
+      "status": "fixed",
+      "commit": "2ecb99268143749f26f55503f239a761f67e0da9",
+      "evidence": "README and a fetch.ts comment now state that the browser-side SSRF check detects after connect, does not prevent the connection, and skips responses with no remoteIPAddress",
+      "reproduction": "rg -n 'detects a forbidden connection' entrypoint/stealth-search/README.md"
+    },
+    {
+      "id": "F46",
+      "status": "fixed",
+      "commit": "2ecb99268143749f26f55503f239a761f67e0da9",
+      "evidence": "search withSearchConcurrency holds the slot until abandoned work settles or ABANDONED_WORK_GRACE_MS passes after the deadline; mutation-verified timeout-deadline.spec",
+      "reproduction": "cd entrypoint/stealth-search && npx vitest run test/unit/verbs/timeout-deadline.spec.ts"
+    },
+    {
+      "id": "F47",
+      "status": "fixed",
+      "commit": "2ecb99268143749f26f55503f239a761f67e0da9",
+      "evidence": "pinned.ts dials a bracketed IPv6 literal by its bare address and sets no TLS servername; fetch-fixes.spec F47 drives it",
+      "reproduction": "cd entrypoint/stealth-search && npx vitest run test/unit/fetch/fetch-fixes.spec.ts"
+    },
+    {
+      "id": "F48",
+      "status": "fixed",
+      "commit": "2ecb99268143749f26f55503f239a761f67e0da9",
+      "evidence": "host-flags takes valueFlags so -h/--help as a flag value is not help (help-as-value.spec); the prompter prechecks share one unanswerable() helper that readAnswer also uses",
+      "reproduction": "cd entrypoint/stealth-search && npx vitest run test/unit/hosts/help-as-value.spec.ts"
+    },
+    {
+      "id": "F49",
+      "status": "fixed",
+      "commit": "2ecb99268143749f26f55503f239a761f67e0da9",
+      "evidence": "startMcpHost attaches crash listeners after the exit hooks and unwinds them when boot fails (server-hardening.spec)",
+      "reproduction": "cd entrypoint/stealth-search && npx vitest run test/unit/hosts/server-hardening.spec.ts"
+    },
+    {
+      "id": "F50",
+      "status": "fixed",
+      "commit": "2ecb99268143749f26f55503f239a761f67e0da9",
+      "evidence": "registerPid ignores pid values that are not positive integers so process.kill never signals a process group (server-hardening.spec)",
+      "reproduction": "cd entrypoint/stealth-search && npx vitest run test/unit/hosts/server-hardening.spec.ts"
+    },
+    {
+      "id": "F51",
+      "status": "fixed",
+      "commit": "2ecb99268143749f26f55503f239a761f67e0da9",
+      "evidence": "bin/mcp.ts handles a rejected mcpMain with one typed HOST_BOOT_FAILED stderr line and exit 79; bins.spec asserts it and goes red with exit 1",
+      "reproduction": "cd entrypoint/stealth-search && npx vitest run test/unit/hosts/bins.spec.ts"
+    },
+    {
+      "id": "F52",
+      "status": "fixed",
+      "commit": "2ecb99268143749f26f55503f239a761f67e0da9",
+      "evidence": "eslint.config.mjs ignoredDependencies no longer lists every runtime dependency, and the stale later-states comment is replaced; lint exit 0",
+      "reproduction": "./node_modules/.bin/nx run stealth-search:lint --skip-nx-cache"
+    },
+    {
+      "id": "F53",
+      "status": "fixed",
+      "commit": "2ecb99268143749f26f55503f239a761f67e0da9",
+      "evidence": "project.json typecheck-spec comment and ratchet wording no longer claim pre-existing errors for a new package; baseline 0 and typecheck-spec exit 0",
+      "reproduction": "./node_modules/.bin/nx run stealth-search:typecheck-spec --skip-nx-cache"
+    },
+    {
+      "id": "F54",
+      "status": "fixed",
+      "commit": "2ecb99268143749f26f55503f239a761f67e0da9",
+      "evidence": "pdf.ts documents the Function-constructor import as the last resort used only after the plain import fails with ERR_REQUIRE_ESM, with a constant body and the specifier as a parameter restricted to pdfjs; fetch-pdf.spec guards it",
+      "reproduction": "cd entrypoint/stealth-search && npx vitest run test/unit/fetch/fetch-pdf.spec.ts"
+    },
+    {
+      "id": "F55",
+      "status": "rejected",
+      "commit": "cea2fb7d63f51f7527f448ac0e72f8ea9b17fcba",
+      "evidence": "README line 5 names test/unit/examples/examples.spec.ts and that file exists with 15 passing tests that import every example; the file merely sat outside the reviewer's slice",
+      "reproduction": "ls entrypoint/stealth-search/test/unit/examples/examples.spec.ts && cd entrypoint/stealth-search && npx vitest run test/unit/examples"
+    },
+    {
       "id": "F56",
       "status": "fixed",
       "commit": "e0d039afbb8248bb904175c3e344e1fb164b4ae9",
@@ -422,6 +569,76 @@
       "reproduction": "./node_modules/.bin/nx run stealth-core-browser:test --skip-nx-cache -- test/unit/foundation/session.spec.ts"
     },
     {
+      "id": "F82",
+      "status": "rejected",
+      "commit": "cea2fb7d63f51f7527f448ac0e72f8ea9b17fcba",
+      "evidence": "the built package is proven correct: server.js is compiled by build-bin to dist/src/server.js so __dirname is dist/src and packageRoot() resolves to dist/, which holds api.d.ts, operations.baked.json and package.json; node prints the dist path after a clean build-bin (exit 0)",
+      "reproduction": "./node_modules/.bin/nx run stealth-search:build-bin --skip-nx-cache && node -e \"const s=require('./entrypoint/stealth-search/dist/src/server.js');console.log(s.packageRoot())\" && ls entrypoint/stealth-search/dist/api.d.ts entrypoint/stealth-search/dist/operations.baked.json"
+    },
+    {
+      "id": "F83",
+      "status": "fixed",
+      "commit": "2ecb99268143749f26f55503f239a761f67e0da9",
+      "evidence": "packageVersionOf is strict when baking and throws a typed HOST_BOOT_FAILED on an unresolvable package instead of folding every failure into an empty string in the cache key (server-hardening.spec)",
+      "reproduction": "cd entrypoint/stealth-search && npx vitest run test/unit/hosts/server-hardening.spec.ts"
+    },
+    {
+      "id": "F84",
+      "status": "fixed",
+      "commit": "2ecb99268143749f26f55503f239a761f67e0da9",
+      "evidence": "startMcpHost unwinds the hooks and the pid registration when the package build throws after installHooks (server-hardening.spec)",
+      "reproduction": "cd entrypoint/stealth-search && npx vitest run test/unit/hosts/server-hardening.spec.ts"
+    },
+    {
+      "id": "F85",
+      "status": "fixed",
+      "commit": "2ecb99268143749f26f55503f239a761f67e0da9",
+      "evidence": "startMcpHost attaches crash listeners after the exit hooks and unwinds them when boot fails (server-hardening.spec)",
+      "reproduction": "cd entrypoint/stealth-search && npx vitest run test/unit/hosts/server-hardening.spec.ts"
+    },
+    {
+      "id": "F86",
+      "status": "fixed",
+      "commit": "2ecb99268143749f26f55503f239a761f67e0da9",
+      "evidence": "vite.config.ts dts comment now matches the real exclude list",
+      "reproduction": "rg -n 'exclude' entrypoint/stealth-search/vite.config.ts"
+    },
+    {
+      "id": "F87",
+      "status": "fixed",
+      "commit": "2ecb99268143749f26f55503f239a761f67e0da9",
+      "evidence": "bin/mcp.ts handles a rejected mcpMain with one typed HOST_BOOT_FAILED stderr line and exit 79; bins.spec asserts it and goes red with exit 1",
+      "reproduction": "cd entrypoint/stealth-search && npx vitest run test/unit/hosts/bins.spec.ts"
+    },
+    {
+      "id": "F88",
+      "status": "fixed",
+      "commit": "2ecb99268143749f26f55503f239a761f67e0da9",
+      "evidence": "hitlAbortDocument now builds a whole SearchOutput carrying every required SearchHitl field (trippedAt and strategy included); hitl.spec asserts it",
+      "reproduction": "cd entrypoint/stealth-search && npx vitest run test/unit/verbs/hitl.spec.ts"
+    },
+    {
+      "id": "F89",
+      "status": "fixed",
+      "commit": "cea2fb7d63f51f7527f448ac0e72f8ea9b17fcba",
+      "evidence": "examples/tripwire.ts passes record.provider directly (the input type is string) and no longer imports SearchProvider; examples.spec runs it",
+      "reproduction": "cd entrypoint/stealth-search && npx vitest run test/unit/examples"
+    },
+    {
+      "id": "F90",
+      "status": "fixed",
+      "commit": "2ecb99268143749f26f55503f239a761f67e0da9",
+      "evidence": "eslint.config.mjs ignoredDependencies no longer lists every runtime dependency, and the stale later-states comment is replaced; lint exit 0",
+      "reproduction": "./node_modules/.bin/nx run stealth-search:lint --skip-nx-cache"
+    },
+    {
+      "id": "F91",
+      "status": "fixed",
+      "commit": "2ecb99268143749f26f55503f239a761f67e0da9",
+      "evidence": "host-flags takes valueFlags so -h/--help as a flag value is not help (help-as-value.spec); the prompter prechecks share one unanswerable() helper that readAnswer also uses",
+      "reproduction": "cd entrypoint/stealth-search && npx vitest run test/unit/hosts/help-as-value.spec.ts"
+    },
+    {
       "id": "F92",
       "status": "fixed",
       "commit": "bf6fabb75b68eef19f16b4c397ee431d96f62cf1",
@@ -583,6 +800,48 @@
       "reproduction": "./node_modules/.bin/nx run resilience-core-tripwire:test --skip-nx-cache -- test/unit/audit-expiry.spec.ts"
     },
     {
+      "id": "F115",
+      "status": "fixed",
+      "commit": "2ecb99268143749f26f55503f239a761f67e0da9",
+      "evidence": "redactCookieValues walks the tree and strips value from every cookie-shaped object wherever it sits, and the VALUE_KEY comment is true (host-projection.spec)",
+      "reproduction": "cd entrypoint/stealth-search && npx vitest run test/unit/verbs/host-projection.spec.ts"
+    },
+    {
+      "id": "F116",
+      "status": "fixed",
+      "commit": "2ecb99268143749f26f55503f239a761f67e0da9",
+      "evidence": "redactCookieValues walks the tree and strips value from every cookie-shaped object wherever it sits, and the VALUE_KEY comment is true (host-projection.spec)",
+      "reproduction": "cd entrypoint/stealth-search && npx vitest run test/unit/verbs/host-projection.spec.ts"
+    },
+    {
+      "id": "F117",
+      "status": "fixed",
+      "commit": "2ecb99268143749f26f55503f239a761f67e0da9",
+      "evidence": "dom.ts safeDecode returns the raw segment on a malformed percent sequence so one bad URL no longer fails the whole search (dom-urls.spec)",
+      "reproduction": "cd entrypoint/stealth-search && npx vitest run test/unit/engine/dom-urls.spec.ts"
+    },
+    {
+      "id": "F118",
+      "status": "fixed",
+      "commit": "2ecb99268143749f26f55503f239a761f67e0da9",
+      "evidence": "pdfBytesDirect rejects HTTP >=400 with a typed SEARCH_FAILED before parsing, the fetch default is DEFAULT_FETCH_CDP_ENDPOINT (host:port) distinct from host-flags DEFAULT_CDP_HOST, and the >=400 page branch carries md.truncated (fetch-fixes.spec)",
+      "reproduction": "cd entrypoint/stealth-search && npx vitest run test/unit/fetch/fetch-fixes.spec.ts"
+    },
+    {
+      "id": "F119",
+      "status": "fixed",
+      "commit": "2ecb99268143749f26f55503f239a761f67e0da9",
+      "evidence": "pdfBytesDirect rejects HTTP >=400 with a typed SEARCH_FAILED before parsing, the fetch default is DEFAULT_FETCH_CDP_ENDPOINT (host:port) distinct from host-flags DEFAULT_CDP_HOST, and the >=400 page branch carries md.truncated (fetch-fixes.spec)",
+      "reproduction": "cd entrypoint/stealth-search && npx vitest run test/unit/fetch/fetch-fixes.spec.ts"
+    },
+    {
+      "id": "F120",
+      "status": "fixed",
+      "commit": "2ecb99268143749f26f55503f239a761f67e0da9",
+      "evidence": "pdfBytesDirect rejects HTTP >=400 with a typed SEARCH_FAILED before parsing, the fetch default is DEFAULT_FETCH_CDP_ENDPOINT (host:port) distinct from host-flags DEFAULT_CDP_HOST, and the >=400 page branch carries md.truncated (fetch-fixes.spec)",
+      "reproduction": "cd entrypoint/stealth-search && npx vitest run test/unit/fetch/fetch-fixes.spec.ts"
+    },
+    {
       "id": "F121",
       "status": "fixed",
       "commit": "bf6fabb75b68eef19f16b4c397ee431d96f62cf1",
@@ -721,6 +980,41 @@
       "commit": "e0d039afbb8248bb904175c3e344e1fb164b4ae9",
       "evidence": "cli.ts DEFAULT_UNLOCK_USAGE is generic (no repo-specific tool name); cli.spec.ts asserts the text.",
       "reproduction": "./node_modules/.bin/nx run resilience-core-tripwire:test --skip-nx-cache -- test/unit/cli.spec.ts"
+    },
+    {
+      "id": "F141",
+      "status": "fixed",
+      "commit": "2ecb99268143749f26f55503f239a761f67e0da9",
+      "evidence": "networkSearch converts a throw from ban rules or the parser into an error outcome, and directFetchSearch uses the shared parseBody so embedded-json works (post-capture-faults.spec; each mutation turns it red)",
+      "reproduction": "cd entrypoint/stealth-search && npx vitest run test/unit/engine/post-capture-faults.spec.ts"
+    },
+    {
+      "id": "F142",
+      "status": "fixed",
+      "commit": "2ecb99268143749f26f55503f239a761f67e0da9",
+      "evidence": "networkSearch converts a throw from ban rules or the parser into an error outcome, and directFetchSearch uses the shared parseBody so embedded-json works (post-capture-faults.spec; each mutation turns it red)",
+      "reproduction": "cd entrypoint/stealth-search && npx vitest run test/unit/engine/post-capture-faults.spec.ts"
+    },
+    {
+      "id": "F143",
+      "status": "fixed",
+      "commit": "2ecb99268143749f26f55503f239a761f67e0da9",
+      "evidence": "search keeps one sign-in window per provider (loginWindows): a newer login_required wall disposes the previous waiting window, so repeated MCP searches no longer stack windows (login-required.spec, mutation-verified)",
+      "reproduction": "cd entrypoint/stealth-search && npx vitest run test/unit/verbs/login-required.spec.ts"
+    },
+    {
+      "id": "F144",
+      "status": "fixed",
+      "commit": "2ecb99268143749f26f55503f239a761f67e0da9",
+      "evidence": "the npm DOM fallback waits on and selects anchors by href /package/ instead of the build-hashed CSS-module class",
+      "reproduction": "rg -n 'a\\[href\\^=' entrypoint/stealth-search/src/lib/providers.ts"
+    },
+    {
+      "id": "F145",
+      "status": "fixed",
+      "commit": "2ecb99268143749f26f55503f239a761f67e0da9",
+      "evidence": "GitHub and PyPI provider comments are true to their config, carried is a typed declaration, and selectCandidate decodes each body once",
+      "reproduction": "rg -n 'REST API primary' entrypoint/stealth-search/src/lib/providers.ts"
     },
     {
       "id": "F146",
