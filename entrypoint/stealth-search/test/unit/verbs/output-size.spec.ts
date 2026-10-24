@@ -61,7 +61,7 @@ const fetchDeps = (): Partial<FetchDeps> => ({
       return {}
     }) as never,
   }),
-  settle: async () => ({ signal: 'load', settled: true, tookMs: 1 }),
+  settle: async () => ({ signal: 'networkIdle', settled: true, tookMs: 1 }),
   toMarkdown: async () => ({ markdown: FETCH_MARKDOWN, via: 'turndown', truncated: false }),
 })
 

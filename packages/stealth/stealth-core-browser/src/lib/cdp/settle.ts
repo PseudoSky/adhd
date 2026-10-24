@@ -13,7 +13,7 @@
  * `load` fires ~750ms before the page is actually done. Naming this function
  * after it would enshrine the very misconception it exists to fix, and every
  * caller would reasonably assume it awaits `Page.loadEventFired`. It doesn't —
- * `load` is a *fallback rung*, and a late one.
+ * `load` only gates rung 2 and is never a result signal.
  *
  * "Settled" is the honest word: the page has stopped changing. The result says
  * which signal proved it, because "we waited until the deadline" and "we
@@ -122,7 +122,6 @@ export type SettleSignal =
   | 'inflight-zero'
   | 'ui-quiet'
   | 'networkAlmostIdle'
-  | 'load'
   | 'deadline'
 
 export interface SettleResult {
@@ -133,9 +132,9 @@ export interface SettleResult {
   settled: boolean
   /** Wall time from arming to resolution. */
   tookMs: number
-  /** Requests still open when we resolved. */
+  /** Requests of the scoped navigation (by loaderId) still open when we resolved. A redirect re-announces the same requestId and counts once. */
   inflight: number
-  /** Total requests observed for this navigation. */
+  /** Distinct requests observed for the scoped navigation (by loaderId). */
   requests: number
   /** Reflow/LCP events observed. 0 means the ui-quiet rung had no signal at all
    *  (react.dev emits zero layout-shift ever) — do not read 0 as "UI settled". */
@@ -248,8 +247,17 @@ export async function awaitPageSettled(
   } catch { /* older Chrome: ui-quiet simply never fires */ }
 
   let loaderId = opts.loaderId
-  let inflight = 0
-  let requests = 0
+  // Requests are tracked per requestId and scoped to the navigation's loaderId. A redirect re-emits
+  // `Network.requestWillBeSent` for the SAME requestId (one `loadingFinished` follows), so a bare counter
+  // would never return to zero; requests of another loader (the initial about:blank, a navigated-away
+  // document) must not hold this navigation's inflight count up either.
+  const loaderOf = new Map<string, string>()   // requestId -> loaderId of its latest requestWillBeSent
+  const open = new Set<string>()               // requestIds without loadingFinished/loadingFailed yet
+  const inScope = (id: string): boolean => loaderId !== undefined && loaderOf.get(id) === loaderId
+  const inflightNow = (): number => { let n = 0; for (const id of open) if (inScope(id)) n++; return n }
+  const requestsNow = (): number => { let n = 0; for (const id of loaderOf.keys()) if (inScope(id)) n++; return n }
+  // A main-frame commit seen before Page.navigate answered (a redirect that beat the reply): the newer loader wins.
+  let committedLoaderId: string | undefined
   let inflightTimer: ReturnType<typeof setTimeout> | null = null
   let graceTimer: ReturnType<typeof setTimeout> | null = null
   let graceElapsed = false
@@ -263,20 +271,36 @@ export async function awaitPageSettled(
   let settleTimer: ReturnType<typeof setTimeout> | null = null
 
   return new Promise<SettleResult>((resolve, reject) => {
-    const finish = (signal: SettleSignal) => {
+    // One teardown for every exit (resolve, abort, navigate failure): subscribers, all four timers and the
+    // abort listener, so nothing outlives the wait.
+    const onAbort = (): void => {
       if (done) return
+      cleanup()
+      reject(abortError(abort?.reason))
+    }
+    const cleanup = (): void => {
       done = true
       for (const u of unsubs) u()
       if (inflightTimer) clearTimeout(inflightTimer)
       if (graceTimer) clearTimeout(graceTimer)
       if (settleTimer) clearTimeout(settleTimer)
       if (uiTimer) clearTimeout(uiTimer)
+      abort?.removeEventListener('abort', onAbort)
+    }
+    const fail = (err: unknown): void => {
+      if (done) return
+      cleanup()
+      reject(err)
+    }
+    const finish = (signal: SettleSignal) => {
+      if (done) return
+      cleanup()
       resolve({
         signal,
         settled: signal !== 'deadline',
         tookMs: Date.now() - t0,
-        inflight,
-        requests,
+        inflight: inflightNow(),
+        requests: requestsNow(),
         uiEvents,
         loaderId,
       })
@@ -284,12 +308,7 @@ export async function awaitPageSettled(
 
     if (abort) {
       if (abort.aborted) { reject(abortError(abort.reason)); return }
-      abort.addEventListener('abort', () => {
-        if (done) return
-        done = true
-        for (const u of unsubs) u()
-        reject(abortError(abort.reason))
-      }, { once: true })
+      abort.addEventListener('abort', onAbort, { once: true })
     }
 
     // Rung 5: circuit breaker.
@@ -326,18 +345,24 @@ export async function awaitPageSettled(
     // the document is then complete and any quiet is real quiet, not a lull.
     const armInflight = () => {
       if (inflightTimer) clearTimeout(inflightTimer)
-      if (inflight !== 0 || requests === 0) return
+      if (inflightNow() !== 0 || requestsNow() === 0) return
       if (!loadFired) return                        // mid-load lull, not settle
       inflightTimer = setTimeout(() => {
-        if (inflight === 0 && loadFired && allows('inflight-zero')) finish('inflight-zero')
+        if (inflightNow() === 0 && loadFired && allows('inflight-zero')) finish('inflight-zero')
       }, inflightQuietMs)
     }
 
-    unsubs.push(session.on('Network.requestWillBeSent', () => {
-      inflight++; requests++
+    unsubs.push(session.on('Network.requestWillBeSent', (p) => {
+      const id = p['requestId']
+      if (typeof id !== 'string') return
+      loaderOf.set(id, typeof p['loaderId'] === 'string' ? p['loaderId'] : '')
+      open.add(id)
       if (inflightTimer) { clearTimeout(inflightTimer); inflightTimer = null }
     }))
-    const settleReq = () => { inflight = Math.max(0, inflight - 1); armInflight() }
+    const settleReq = (p: Record<string, unknown>) => {
+      if (typeof p['requestId'] === 'string') open.delete(p['requestId'])
+      armInflight()
+    }
     unsubs.push(session.on('Network.loadingFinished', settleReq))
     unsubs.push(session.on('Network.loadingFailed', settleReq))
 
@@ -390,9 +415,15 @@ export async function awaitPageSettled(
     // Only track once `loaderId` is set (i.e. after our navigate), so the
     // target's initial about:blank still can't sneak in.
     unsubs.push(session.on('Page.frameNavigated', (p) => {
-      const frame = p['frame'] as { parentId?: string; loaderId?: string } | undefined
+      const frame = p['frame'] as { parentId?: string; loaderId?: string; url?: string } | undefined
       if (!frame || frame.parentId) return          // main frame only, not iframes
-      if (!loaderId || !frame.loaderId) return      // not armed yet → ignore about:blank
+      if (!frame.loaderId) return
+      if (!loaderId) {
+        // Not armed yet. The target's initial about:blank commit is ignored; a real commit that beats the
+        // Page.navigate reply (a fast redirect) is remembered so the reply cannot pin us to the older loader.
+        if (navigate && frame.url !== undefined && frame.url !== 'about:blank') committedLoaderId = frame.loaderId
+        return
+      }
       if (frame.loaderId === loaderId) return
       loaderId = frame.loaderId                     // follow it
       loadFired = false                             // new document — re-gate rung 2
@@ -434,10 +465,22 @@ export async function awaitPageSettled(
     if (navigate) {
       session.send<{ loaderId?: string; errorText?: string }>('Page.navigate', { url: navigate })
         .then((r) => {
-          if (r.errorText) { if (!done) { done = true; for (const u of unsubs) u(); reject(StealthCoreBrowserError.of('NAVIGATION_FAILED', `Page.navigate failed: ${r.errorText}`, { detail: { url: navigate, errorText: r.errorText } })) } ; return }
-          if (r.loaderId) loaderId = r.loaderId   // authoritative — beats the `init` guess
+          if (done) return
+          if (r.errorText) {
+            fail(StealthCoreBrowserError.of('NAVIGATION_FAILED', `Page.navigate failed: ${r.errorText}`, { detail: { url: navigate, errorText: r.errorText } }))
+            return
+          }
+          if (!r.loaderId) {
+            // A same-document navigation (a fragment change) starts no loader: there is no lifecycle to scope to
+            // and none will ever arrive, so waiting would only ride to the deadline.
+            fail(StealthCoreBrowserError.of('PAGE_SETTLE_FAILED', `Page.navigate to ${navigate} started no new document (same-document navigation), so there is nothing to settle on`, { detail: { url: navigate, reason: 'same-document' } }))
+            return
+          }
+          // The reply's loaderId is authoritative over the `init` guess, but a newer main-frame commit that
+          // already arrived (a redirect that beat the reply) is the document the page really is on.
+          loaderId = committedLoaderId ?? r.loaderId
         })
-        .catch((e) => { if (!done) { done = true; for (const u of unsubs) u(); reject(e) } })
+        .catch(fail)
     }
   })
 }

@@ -1,12 +1,12 @@
 /**
  * Unit spec for src/lib/cdp/settle.ts.
  * Ticket 8468f7b1 AC2 (behavior-preserving port, unit lane) ·
- * criteria [tests-unit-core.1] [tests-unit-core.2] [tests-unit-core.3] [tests-unit-core.4].
+ * criteria [tests-unit-core.1] [tests-unit-core.2] [tests-unit-core.3] [tests-unit-core.4] [resolve-findings.1].
  * The CdpSession is an in-memory fake driven by hand-emitted events under fake timers:
  * no WebSocket, no network, no Chrome.
  * guards: [fs-097] refuses to run without navigate or loaderId: rejects when neither navigate nor loaderId is given (about:blank trap guard)
  * tier: S
- * cites: 8468f7b1 [tests-unit-core.1] [tests-unit-core.2] [tests-unit-core.3] [tests-unit-core.4]
+ * cites: 8468f7b1 [tests-unit-core.1] [tests-unit-core.2] [tests-unit-core.3] [tests-unit-core.4] [resolve-findings.1]
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { awaitPageSettled } from '../../../src/lib/cdp/settle.js'
@@ -25,6 +25,9 @@ interface Fake {
 interface FakeOpts {
   navigateResult?: { loaderId?: string; errorText?: string }
   navigateError?: Error
+  /** Page.navigate answers with this promise (a reply the test resolves late); `navigateHangs` never answers. */
+  navigateReply?: Promise<unknown>
+  navigateHangs?: boolean
   perfTimelineFails?: boolean
 }
 
@@ -33,6 +36,8 @@ function makeFake(o: FakeOpts = {}): Fake {
   const send = vi.fn(async (method: string): Promise<unknown> => {
     if (method === 'Page.navigate') {
       if (o.navigateError) throw o.navigateError
+      if (o.navigateHangs) return new Promise<never>(() => undefined)
+      if (o.navigateReply) return o.navigateReply
       return o.navigateResult ?? { loaderId: 'L1' }
     }
     if (method === 'PerformanceTimeline.enable' && o.perfTimelineFails) throw new Error('unsupported')
@@ -74,6 +79,10 @@ function track(p: Promise<SettleResult>): { result: () => SettleResult | undefin
 }
 
 const lifecycle = (f: Fake, name: string, loaderId = 'L1'): void => f.emit('Page.lifecycleEvent', { name, loaderId })
+/** A request of the loader `loaderId`; a redirect re-emits the same requestId. */
+const request = (f: Fake, requestId: string, loaderId = 'L1'): void => f.emit('Network.requestWillBeSent', { requestId, loaderId })
+const finished = (f: Fake, requestId: string): void => f.emit('Network.loadingFinished', { requestId })
+const failed = (f: Fake, requestId: string): void => f.emit('Network.loadingFailed', { requestId })
 
 const forbidden = vi.fn(() => {
   throw new Error('network touched in a unit spec')
@@ -141,9 +150,9 @@ describe('8468f7b1 AC2 [tests-unit-core.1] awaitPageSettled — rungs', () => {
     const f = makeFake()
     const t = track(awaitPageSettled(f.session, { navigate: 'https://react.test/' }))
     await arm()
-    f.emit('Network.requestWillBeSent')
-    f.emit('Network.requestWillBeSent')
-    f.emit('Network.loadingFinished')
+    request(f, 'r1')
+    request(f, 'r2')
+    finished(f, 'r1')
     f.emit('PerformanceTimeline.timelineEventAdded')
     lifecycle(f, 'networkIdle')
     await arm()
@@ -183,9 +192,9 @@ describe('8468f7b1 AC2 [tests-unit-core.1] awaitPageSettled — rungs', () => {
     const f = makeFake()
     const t = track(awaitPageSettled(f.session, { navigate: 'https://react.test/' }))
     await arm()
-    f.emit('Network.requestWillBeSent')
+    request(f, 'r1')
     lifecycle(f, 'load')
-    f.emit('Network.loadingFinished')
+    finished(f, 'r1')
     await vi.advanceTimersByTimeAsync(499)
     expect(t.settled()).toBe(false)
     await vi.advanceTimersByTimeAsync(1)
@@ -196,8 +205,8 @@ describe('8468f7b1 AC2 [tests-unit-core.1] awaitPageSettled — rungs', () => {
     const f = makeFake()
     const t = track(awaitPageSettled(f.session, { navigate: 'https://react.test/', deadlineMs: 3000 }))
     await arm()
-    f.emit('Network.requestWillBeSent')
-    f.emit('Network.loadingFinished')
+    request(f, 'r1')
+    finished(f, 'r1')
     await vi.advanceTimersByTimeAsync(1000)
     expect(t.settled()).toBe(false)
     await vi.advanceTimersByTimeAsync(2000)
@@ -208,14 +217,14 @@ describe('8468f7b1 AC2 [tests-unit-core.1] awaitPageSettled — rungs', () => {
     const f = makeFake()
     const t = track(awaitPageSettled(f.session, { navigate: 'https://react.test/', inflightQuietMs: 300 }))
     await arm()
-    f.emit('Network.requestWillBeSent')
+    request(f, 'r1')
     lifecycle(f, 'load')
-    f.emit('Network.loadingFinished')
+    finished(f, 'r1')
     await vi.advanceTimersByTimeAsync(200)
-    f.emit('Network.requestWillBeSent')
+    request(f, 'r2')
     await vi.advanceTimersByTimeAsync(400)
     expect(t.settled()).toBe(false)
-    f.emit('Network.loadingFailed')
+    failed(f, 'r2')
     await vi.advanceTimersByTimeAsync(300)
     expect(t.result()).toMatchObject({ signal: 'inflight-zero', requests: 2 })
   })
@@ -355,7 +364,7 @@ describe('8468f7b1 AC2 [tests-unit-core.1] awaitPageSettled — redirects', () =
   })
 
   it('does not follow navigations before the loaderId is armed', async () => {
-    const f = makeFake({ navigateResult: {} })
+    const f = makeFake({ navigateHangs: true })
     const t = track(awaitPageSettled(f.session, { navigate: 'https://redirect.test/', deadlineMs: 500 }))
     await arm()
     f.emit('Page.frameNavigated', { frame: { loaderId: 'BLANK' } })
@@ -367,6 +376,72 @@ describe('8468f7b1 AC2 [tests-unit-core.1] awaitPageSettled — redirects', () =
   })
 })
 
+describe('8468f7b1 [resolve-findings.1] awaitPageSettled — requests and redirects (F149, F154)', () => {
+  it('a redirected request (same requestId announced twice, one loadingFinished) does not hold inflight above zero', async () => {
+    const f = makeFake()
+    const t = track(awaitPageSettled(f.session, { navigate: 'https://redirect.test/', inflightQuietMs: 300 }))
+    await arm()
+    request(f, 'DOC')
+    request(f, 'DOC') // the 301 re-emits requestWillBeSent for the same requestId
+    lifecycle(f, 'load')
+    finished(f, 'DOC')
+    await vi.advanceTimersByTimeAsync(300)
+    expect(t.result()).toMatchObject({ signal: 'inflight-zero', inflight: 0, requests: 1 })
+  })
+
+  it('counts only the requests of the scoped loader: an about:blank or navigated-away request never holds the wait open', async () => {
+    const f = makeFake()
+    const t = track(awaitPageSettled(f.session, { navigate: 'https://react.test/', inflightQuietMs: 200 }))
+    await arm()
+    request(f, 'STALE', 'blank-loader') // never finishes
+    request(f, 'DOC', 'L1')
+    lifecycle(f, 'load')
+    finished(f, 'DOC')
+    await vi.advanceTimersByTimeAsync(200)
+    expect(t.result()).toMatchObject({ signal: 'inflight-zero', inflight: 0, requests: 1 })
+  })
+
+  it('requests of the followed redirect loader count after the loader changes, and the old loader stops counting', async () => {
+    const f = makeFake()
+    const t = track(awaitPageSettled(f.session, { navigate: 'https://redirect.test/', inflightQuietMs: 200 }))
+    await arm()
+    request(f, 'OLD', 'L1') // never finishes: its document was replaced
+    f.emit('Page.frameNavigated', { frame: { loaderId: 'L2', url: 'https://final.test/' } })
+    request(f, 'NEW', 'L2')
+    lifecycle(f, 'load', 'L2')
+    finished(f, 'NEW')
+    await vi.advanceTimersByTimeAsync(200)
+    expect(t.result()).toMatchObject({ signal: 'inflight-zero', loaderId: 'L2', inflight: 0, requests: 1 })
+  })
+
+  it('a main-frame commit that beat the Page.navigate reply wins over the older loaderId the reply carries', async () => {
+    let answer: (v: unknown) => void = () => undefined
+    const f = makeFake({ navigateReply: new Promise((r) => { answer = r }) })
+    const t = track(awaitPageSettled(f.session, { navigate: 'https://redirect.test/' }))
+    await arm()
+    f.emit('Page.frameNavigated', { frame: { loaderId: 'BLANK', url: 'about:blank' } }) // the initial document is ignored
+    f.emit('Page.frameNavigated', { frame: { loaderId: 'L2', url: 'https://final.test/' } })
+    answer({ loaderId: 'L1' })
+    await arm()
+    lifecycle(f, 'networkIdle', 'L1')
+    await arm()
+    expect(t.settled()).toBe(false)
+    lifecycle(f, 'networkIdle', 'L2')
+    await arm()
+    expect(t.result()).toMatchObject({ signal: 'networkIdle', loaderId: 'L2' })
+  })
+
+  it('a same-document navigation (no loaderId in the reply) rejects PAGE_SETTLE_FAILED instead of riding to the deadline', async () => {
+    const f = makeFake({ navigateResult: {} })
+    const p = awaitPageSettled(f.session, { navigate: 'https://react.test/#section', deadlineMs: 60_000 })
+    const assertion = expect(p).rejects.toMatchObject({ code: 'PAGE_SETTLE_FAILED', detail: { reason: 'same-document' } })
+    await arm()
+    await assertion
+    expect(f.listenerCount()).toBe(0)
+    expect(vi.getTimerCount()).toBe(0)
+  })
+})
+
 describe('8468f7b1 AC2 [tests-unit-core.1] awaitPageSettled — failure and cleanup', () => {
   it('[fs-106] navigation failures reject the wait: rejects when Page.navigate reports an errorText', async () => {
     const f = makeFake({ navigateResult: { errorText: 'net::ERR_NAME_NOT_RESOLVED' } })
@@ -375,6 +450,7 @@ describe('8468f7b1 AC2 [tests-unit-core.1] awaitPageSettled — failure and clea
     await arm()
     await assertion
     expect(f.listenerCount()).toBe(0)
+    expect(vi.getTimerCount()).toBe(0) // the deadline and grace timers are cleared on a failed navigation (F153)
   })
 
   it('rejects when Page.navigate itself throws', async () => {
@@ -405,6 +481,19 @@ describe('8468f7b1 AC2 [tests-unit-core.1] awaitPageSettled — failure and clea
     ctl.abort(new Error('stop now'))
     await assertion
     expect(f.listenerCount()).toBe(0)
+    expect(vi.getTimerCount()).toBe(0) // an abort clears the deadline, grace, inflight and ui timers (F153)
+  })
+
+  it('removes its abort listener when the wait resolves, so a long-lived signal does not accumulate listeners', async () => {
+    const f = makeFake()
+    const ctl = new AbortController()
+    const removed = vi.spyOn(ctl.signal, 'removeEventListener')
+    const t = track(awaitPageSettled(f.session, { navigate: 'https://react.test/', abort: ctl.signal }))
+    await arm()
+    lifecycle(f, 'networkIdle')
+    await arm()
+    expect(t.settled()).toBe(true)
+    expect(removed).toHaveBeenCalledWith('abort', expect.any(Function))
   })
 
   it('[fs-108] arms subscribers before navigating and releases them: unsubscribes every listener once settled', async () => {

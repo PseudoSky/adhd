@@ -59,7 +59,7 @@ function scriptedFetch(): Partial<FetchDeps> {
       await tick(5) // keep pages open long enough for the queue to matter
       if (navigate === ENABLE_TIMEOUT) throw new Error('CDP Page.enable timed out after 10000ms')
       session.emit('Network.responseReceived', { type: 'Document', requestId: 'r1', response: { url: navigate, status: navigate === MISSING ? 404 : 200, mimeType: 'text/html' } })
-      return { signal: 'load', settled: true, tookMs: 5 }
+      return { signal: 'networkIdle', settled: true, tookMs: 5 }
     },
     toMarkdown: async () => ({ markdown: MARKDOWN, via: 'turndown', truncated: false }),
   }
