@@ -1,0 +1,54 @@
+{
+  "agent": "resolve-findings-implementer",
+  "resolutions": [
+    {
+      "id": "F146",
+      "status": "fixed",
+      "commit": "9d1514d71f76e4727f4598fc073a0c8a6f914213",
+      "evidence": "Page.* commands now go through cdpPageCall/cdpPageSession: Target.attachToTarget{flatten:true}, command sent with the returned sessionId and no targetId param; getPageMetrics uses Performance.enable/getMetrics/disable (Chrome serves no Page.getMetrics). Failures throw typed StealthCoreBrowserError. Proven by test/unit/domains-storage/transport.spec.ts, domains.spec.ts [fs-181][fs-182], page.spec.ts.",
+      "reproduction": "./node_modules/.bin/nx run stealth-core-browser:test --skip-nx-cache -- test/unit/domains-storage"
+    },
+    {
+      "id": "F147",
+      "status": "fixed",
+      "commit": "9d1514d71f76e4727f4598fc073a0c8a6f914213",
+      "evidence": "BrowserService.getWindowBounds resolves windowId via Browser.getWindowForTarget then sends Browser.getWindowBounds{windowId} on one connection; errors typed. Proven by domains.spec.ts [F147] and browser.spec.ts.",
+      "reproduction": "./node_modules/.bin/nx run stealth-core-browser:test --skip-nx-cache -- test/unit/domains-storage/browser.spec.ts"
+    },
+    {
+      "id": "F148",
+      "status": "fixed",
+      "commit": "9d1514d71f76e4727f4598fc073a0c8a6f914213",
+      "evidence": "NetworkService cookie reads attach a page session (given or first open page); no page is TARGET_NOT_FOUND; failures reject instead of [] . Proven by domains.spec.ts [F148], network.spec.ts.",
+      "reproduction": "./node_modules/.bin/nx run stealth-core-browser:test --skip-nx-cache -- test/unit/domains-storage/network.spec.ts"
+    },
+    {
+      "id": "F150",
+      "status": "fixed",
+      "commit": "9d1514d71f76e4727f4598fc073a0c8a6f914213",
+      "evidence": "transport.ts now fetches /json/version via getRawVersion (cdpFetch + assertSameEndpoint), so a debugger URL for another host is CDP_BAD_RESPONSE before any socket opens. Proven by transport.spec.ts 'refuses a debugger URL that points at another host'.",
+      "reproduction": "./node_modules/.bin/nx run stealth-core-browser:test --skip-nx-cache -- test/unit/domains-storage/transport.spec.ts"
+    },
+    {
+      "id": "F151",
+      "status": "fixed",
+      "commit": "9d1514d71f76e4727f4598fc073a0c8a6f914213",
+      "evidence": "createPageTarget and createIsolatedPageTarget dispose/close the freshly created context/target when the /json/list poll throws. Proven by targets.spec.ts 'no target, context or socket leaks when listing fails'.",
+      "reproduction": "./node_modules/.bin/nx run stealth-core-browser:test --skip-nx-cache -- test/unit/cdp/targets.spec.ts"
+    },
+    {
+      "id": "F152",
+      "status": "fixed",
+      "commit": "9d1514d71f76e4727f4598fc073a0c8a6f914213",
+      "evidence": "The version fetch (transport, BrowserService.getVersion) and TargetService.listPageTargets share targets.ts cdpFetch/cdpJson: 5 s abort signal -> CDP_TIMEOUT, non-2xx -> CDP_BAD_RESPONSE. Proven by transport.spec.ts, browser.spec.ts, target.spec.ts.",
+      "reproduction": "./node_modules/.bin/nx run stealth-core-browser:test --skip-nx-cache -- test/unit/domains-storage"
+    },
+    {
+      "id": "F156",
+      "status": "fixed",
+      "commit": "9d1514d71f76e4727f4598fc073a0c8a6f914213",
+      "evidence": "closePageTarget, hideAllWindows, reveal and dispose close their CdpSession in finally, so a rejected Target.closeTarget or a failing listing leaves no socket open. Proven by targets.spec.ts leak tests.",
+      "reproduction": "./node_modules/.bin/nx run stealth-core-browser:test --skip-nx-cache -- test/unit/cdp/targets.spec.ts"
+    }
+  ]
+}
