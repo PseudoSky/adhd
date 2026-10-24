@@ -15,7 +15,9 @@ export const PDF_SENTENCE = 'the stealth runner survived the audit'
 
 export interface PageScript {
   /** Document responses emitted during settle, in order (the last wins). */
-  responses?: Array<{ url: string; status: number; mimeType: string }>
+  responses?: Array<{ url: string; status: number; mimeType: string; remoteIPAddress?: string }>
+  /** Document requests emitted before the responses (redirect hops), each optionally carrying the redirect response it followed. */
+  requests?: Array<{ url: string; redirectResponse?: { url: string; remoteIPAddress?: string } }>
   /** outerHTML per grab; the last entry repeats. */
   html?: string[]
   /** PDF bytes served through Fetch.getResponseBody when the page navigates. */
@@ -84,6 +86,9 @@ export function makeWorld(script: PageScript, extra: Partial<FetchDeps> = {}): W
     },
     newSession: () => session,
     settle: async (_s, opts): Promise<FetchSettle> => {
+      for (const q of script.requests ?? []) {
+        emit('Network.requestWillBeSent', { type: 'Document', requestId: 'req1', request: { url: q.url }, ...(q.redirectResponse ? { redirectResponse: q.redirectResponse } : {}) })
+      }
       for (const r of script.responses ?? [{ url: opts.navigate, status: 200, mimeType: 'text/html' }]) {
         emit('Network.responseReceived', { type: 'Document', requestId: 'req1', response: r })
       }

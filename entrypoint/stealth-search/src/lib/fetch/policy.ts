@@ -13,9 +13,13 @@
  * `validateFetchUrl` is the name-based half. `resolveAndCheck` is the resolution half: a public
  * hostname is resolved through an INJECTED resolver and every returned address must be public, so a
  * name that RESOLVES to a private address (DNS rebinding) is refused with `FETCH_URL_REFUSED`
- * carrying the offending address in `detail`. A resolver failure is a typed `SEARCH_FAILED`. The
- * browser resolves again at connect time, so a resolve-then-pin step must still precede any
- * credential-bearing tier; the fetch tier is cookieless, which bounds what that can leak.
+ * carrying the offending address in `detail`. A resolver failure is a typed `SEARCH_FAILED`.
+ *
+ * Resolve once, validate every answer, connect to what was validated: the direct PDF fetch connects
+ * to the first validated address (`pinned`), never to the name. Chrome resolves by name itself, so for
+ * the browser the validated address is enforced after the fact: the address each document actually
+ * connected to (`Network.Response.remoteIPAddress`, including every redirect hop) must pass
+ * `isForbiddenAddress` before any content is read.
  *
  * Ticket 8468f7b1 · plan state search-port-fetch.
  */
@@ -35,49 +39,93 @@ export interface UrlVerdict {
   url?: URL
 }
 
+/** True when the dotted-quad octets `p` lie in the range `a.b.c.0/prefix` (arithmetic stays below 2^32, so plain numbers are exact). */
+function inV4(p: readonly number[], a: number, b: number, c: number, prefix: number): boolean {
+  const n = (p[0] ?? 0) * 2 ** 24 + (p[1] ?? 0) * 2 ** 16 + (p[2] ?? 0) * 2 ** 8 + (p[3] ?? 0)
+  const base = a * 2 ** 24 + b * 2 ** 16 + c * 2 ** 8
+  return n >= base && n < base + 2 ** (32 - prefix)
+}
+
+/** The non-public IPv4 ranges (IANA special-purpose registry, RFC 6890 and successors). */
+const FORBIDDEN_V4: ReadonlyArray<readonly [number, number, number, number]> = [
+  [0, 0, 0, 8], // this network
+  [10, 0, 0, 8], // RFC1918
+  [100, 64, 0, 10], // CGNAT
+  [127, 0, 0, 8], // loopback
+  [169, 254, 0, 16], // link-local / cloud metadata
+  [172, 16, 0, 12], // RFC1918
+  [192, 0, 0, 24], // IETF protocol assignments
+  [192, 0, 2, 24], // TEST-NET-1
+  [192, 88, 99, 24], // 6to4 relay anycast
+  [192, 168, 0, 16], // RFC1918
+  [198, 18, 0, 15], // benchmarking
+  [198, 51, 100, 24], // TEST-NET-2
+  [203, 0, 113, 24], // TEST-NET-3
+  [224, 0, 0, 4], // multicast
+  [240, 0, 0, 4], // reserved, includes 255.255.255.255 broadcast
+]
+
 function isForbiddenV4(ip: string): boolean {
   const p = ip.split('.').map(Number)
-  const [a, b] = [p[0] ?? -1, p[1] ?? -1]
-  if (a === 10) return true // 10/8
-  if (a === 127) return true // loopback
-  if (a === 172 && b >= 16 && b <= 31) return true // 172.16/12
-  if (a === 192 && b === 168) return true // 192.168/16
-  if (a === 169 && b === 254) return true // link-local / cloud metadata
-  if (a === 100 && b >= 64 && b <= 127) return true // CGNAT 100.64/10
-  if (a === 0) return true // 0.0.0.0/8
-  return false
+  if (p.length !== 4 || p.some((x) => !Number.isInteger(x) || x < 0 || x > 255)) return true
+  return FORBIDDEN_V4.some(([a, b, c, prefix]) => inV4(p, a, b, c, prefix))
 }
 
-function embeddedV4(hi: string, lo: string): string | null {
-  const h = parseInt(hi, 16)
-  const l = parseInt(lo, 16)
-  if (!Number.isFinite(h) || !Number.isFinite(l)) return null
-  return [h >> 8, h & 255, l >> 8, l & 255].join('.')
-}
-
-/** Private / non-routable IP ranges. `ip` must already be a valid literal. */
-function isForbiddenIp(ip: string): boolean {
-  const v = net.isIP(ip)
-  if (v === 4) return isForbiddenV4(ip)
-  if (v !== 6) return false
-  const s = ip.toLowerCase().replace(/^\[|\]$/g, '')
-  if (s === '::1' || s === '::') return true // loopback / unspecified
-  if (s.startsWith('fc') || s.startsWith('fd')) return true // unique-local fc00::/7
-  if (/^fe[89ab]/.test(s)) return true // link-local fe80::/10
-  // IPv4-mapped (::ffff:...) and IPv4-compatible (::a:b) forms: re-check the embedded v4.
-  // `new URL()` re-serializes the tail to HEX-COMPRESSED form (::ffff:a9fe:a9fe), NOT dotted
-  // decimal, so a decimal-only check would let ::ffff:169.254.169.254 (cloud metadata) through.
-  const mapped = s.match(/^::(?:ffff:)?(.+)$/)
-  if (mapped?.[1]) {
-    const tail = mapped[1]
-    if (/^\d+\.\d+\.\d+\.\d+$/.test(tail)) return isForbiddenV4(tail)
-    const g = tail.split(':')
-    if (g.length === 2 && g[0] !== undefined && g[1] !== undefined) {
-      const v4 = embeddedV4(g[0], g[1])
-      if (v4) return isForbiddenV4(v4)
-    }
+/** The eight 16-bit groups of an IPv6 literal (a dotted-quad tail is folded into two groups), or null. */
+function parseV6(raw: string): number[] | null {
+  let s = raw.toLowerCase().replace(/^\[|\]$/g, '')
+  const zone = s.indexOf('%')
+  if (zone >= 0) s = s.slice(0, zone)
+  const dotted = s.match(/^(.*:)(\d+\.\d+\.\d+\.\d+)$/)
+  if (dotted?.[1] !== undefined && dotted[2] !== undefined) {
+    const q = dotted[2].split('.').map(Number)
+    if (q.length !== 4 || q.some((x) => !Number.isInteger(x) || x < 0 || x > 255)) return null
+    s = `${dotted[1]}${(((q[0] ?? 0) << 8) | (q[1] ?? 0)).toString(16)}:${(((q[2] ?? 0) << 8) | (q[3] ?? 0)).toString(16)}`
   }
+  const halves = s.split('::')
+  if (halves.length > 2) return null
+  const head = halves[0] ? halves[0].split(':') : []
+  const tail = halves.length === 2 && halves[1] ? halves[1].split(':') : []
+  const fill = 8 - head.length - tail.length
+  if (halves.length === 1 ? head.length !== 8 : fill < 1) return null
+  const groups = [...head, ...(halves.length === 2 ? Array<string>(fill).fill('0') : []), ...tail].map((g) => (/^[0-9a-f]{1,4}$/.test(g) ? parseInt(g, 16) : NaN))
+  return groups.length === 8 && groups.every((g) => Number.isInteger(g)) ? groups : null
+}
+
+const v4Of = (hi: number, lo: number): string => [hi >> 8, hi & 255, lo >> 8, lo & 255].join('.')
+
+function isForbiddenV6(ip: string): boolean {
+  const g = parseV6(ip)
+  if (!g) return true // not parseable: refuse
+  const [g0 = 0, g1 = 0, g2 = 0, g3 = 0, g4 = 0, g5 = 0, g6 = 0, g7 = 0] = g
+  const firstFiveZero = g0 === 0 && g1 === 0 && g2 === 0 && g3 === 0 && g4 === 0
+  if (firstFiveZero && g5 === 0 && g6 === 0 && (g7 === 0 || g7 === 1)) return true // :: and ::1
+  if (firstFiveZero && g5 === 0xffff) return isForbiddenV4(v4Of(g6, g7)) // IPv4-mapped ::ffff:a.b.c.d
+  if (firstFiveZero && g5 === 0) return isForbiddenV4(v4Of(g6, g7)) // IPv4-compatible ::a.b.c.d
+  if (g0 === 0x64 && g1 === 0xff9b && g2 === 0 && g3 === 0 && g4 === 0 && g5 === 0) return isForbiddenV4(v4Of(g6, g7)) // NAT64 64:ff9b::/96
+  if (g0 === 0x64 && g1 === 0xff9b && g2 === 1) return true // local-use NAT64 64:ff9b:1::/48
+  if (g0 === 0x2002) return isForbiddenV4(v4Of(g1, g2)) // 6to4 2002::/16 embeds the v4 address
+  if (g0 === 0x2001 && g1 === 0) return true // Teredo 2001::/32
+  if (g0 === 0x2001 && g1 === 0xdb8) return true // documentation 2001:db8::/32
+  if (g0 === 0x100 && g1 === 0 && g2 === 0 && g3 === 0) return true // discard-only 100::/64
+  if ((g0 & 0xfe00) === 0xfc00) return true // unique-local fc00::/7
+  if ((g0 & 0xffc0) === 0xfe80) return true // link-local fe80::/10
+  if ((g0 & 0xffc0) === 0xfec0) return true // deprecated site-local fec0::/10
+  if ((g0 & 0xff00) === 0xff00) return true // multicast ff00::/8
   return false
+}
+
+/**
+ * True for an address a fetch must never reach: private, loopback, link-local, CGNAT, reserved,
+ * multicast, documentation, NAT64, 6to4, IPv4-mapped and Teredo forms. A string that is not an IP
+ * literal is refused too, so the answer to "is it safe to connect" is never true by accident.
+ */
+export function isForbiddenAddress(ip: string): boolean {
+  const bare = ip.replace(/^\[|\]$/g, '')
+  const v = net.isIP(bare)
+  if (v === 4) return isForbiddenV4(bare)
+  if (v === 6) return isForbiddenV6(bare)
+  return true
 }
 
 /**
@@ -92,7 +140,7 @@ export function forbiddenTargetReason(u: URL): string | null {
   // would otherwise slip past the localhost / single-label checks.
   const host = u.hostname.replace(/^\[|\]$/g, '').replace(/\.$/, '')
   if (net.isIP(host)) {
-    return isForbiddenIp(host) ? `blocked IP literal ${host} (private/loopback/link-local)` : null
+    return isForbiddenAddress(host) ? `blocked IP literal ${host} (private/loopback/link-local)` : null
   }
   const lower = host.toLowerCase()
   if (lower === 'localhost') return 'blocked host localhost'
@@ -151,7 +199,7 @@ export async function resolveAndCheck(host: string, resolve: HostResolver): Prom
     throw searchError('SEARCH_FAILED', `resolver returned no address for ${bare}`, { detail: { reason: 'dns-resolution-failed', host: bare } })
   }
   for (const address of addresses) {
-    if (isForbiddenIp(address)) {
+    if (isForbiddenAddress(address)) {
       throw searchError('FETCH_URL_REFUSED', `${bare} resolves to ${address} (private/loopback/link-local)`, {
         detail: { reason: 'resolves-to-private-address', host: bare, address },
       })

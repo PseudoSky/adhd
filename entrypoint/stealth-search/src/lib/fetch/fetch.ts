@@ -20,7 +20,9 @@ import type { BanRule } from '@adhd/stealth-core-browser'
 import { isSearchError, searchError } from '../../errors.js'
 import { htmlToMarkdown, type MarkdownResult } from './markdown.js'
 import { extractPdfText, type PdfText } from './pdf.js'
-import { resolveAndCheck, systemResolver, validateFetchUrl } from './policy.js'
+import { PDF_DIRECT_TIMEOUT_MS, PDF_MAX_BYTES, pinnedGet } from './pinned.js'
+import type { DirectFetch } from './pinned.js'
+import { forbiddenTargetReason, isForbiddenAddress, resolveAndCheck, systemResolver, validateFetchUrl } from './policy.js'
 
 /** Browser-like user agent for the PDF byte-fetch fallback (this tier is cookieless anyway). */
 export const FETCH_UA =
@@ -140,7 +142,8 @@ export interface FetchDeps {
   checkBans(rules: readonly BanRule[], ctx: { url: string; status: number; body: string }): string | null
   toMarkdown(html: string): Promise<MarkdownResult>
   extractPdf(bytes: Uint8Array): Promise<PdfText>
-  fetchImpl: typeof fetch
+  /** The direct byte fetch (PDF fallback): connects to the address it is given, never to the name; bounded in bytes and time. */
+  fetchDirect: DirectFetch
   /** Resolves a hostname to every address; the SSRF check refuses a name that resolves to a private one. */
   resolveHost(host: string): Promise<string[]>
   now(): number
@@ -158,7 +161,7 @@ export function defaultFetchDeps(): FetchDeps {
     checkBans: (rules, ctx) => capture.checkBans([...rules], ctx),
     toMarkdown: (html) => htmlToMarkdown(html),
     extractPdf: (bytes) => extractPdfText(bytes),
-    fetchImpl: (input, init) => fetch(input, init),
+    fetchDirect: pinnedGet,
     resolveHost: systemResolver,
     now: () => Date.now(),
     sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
@@ -296,29 +299,38 @@ async function pdfBytesViaBrowser(session: FetchSession, url: string, deps: Fetc
   return got ? new Uint8Array(got) : null
 }
 
-/** Direct byte fetch, following redirects by hand so every hop passes the SSRF policy. */
-async function pdfBytesDirect(url: string, deps: FetchDeps): Promise<Uint8Array> {
+/**
+ * Direct byte fetch, following redirects by hand: every hop passes the SSRF policy, is resolved ONCE and
+ * is fetched at the validated address, so a DNS answer that changes after the check cannot redirect it.
+ * `pinned` is the already validated answer for the first hop's host.
+ */
+async function pdfBytesDirect(url: string, pinned: readonly string[], deps: FetchDeps): Promise<Uint8Array> {
   let current = url
+  let addresses = pinned
   for (let hop = 0; hop <= MAX_PDF_REDIRECTS; hop++) {
-    const res = await deps.fetchImpl(current, { headers: { 'User-Agent': FETCH_UA, Accept: 'application/pdf,*/*' }, redirect: 'manual' })
+    const address = addresses[0]
+    if (!address) throw searchError('SEARCH_FAILED', `no validated address for ${current}`, { detail: { reason: 'dns-resolution-failed' } })
+    const res = await deps.fetchDirect(current, address, { headers: { 'User-Agent': FETCH_UA, Accept: 'application/pdf,*/*' }, maxBytes: PDF_MAX_BYTES, timeoutMs: PDF_DIRECT_TIMEOUT_MS })
     if (res.status >= 300 && res.status < 400) {
-      const location = res.headers.get('location')
-      if (!location) throw searchError('SEARCH_FAILED', `redirect from ${current} carried no Location`, { detail: { reason: 'redirect-without-location' } })
-      const verdict = validateFetchUrl(new URL(location, current).toString())
+      if (!res.location) throw searchError('SEARCH_FAILED', `redirect from ${current} carried no Location`, { detail: { reason: 'redirect-without-location' } })
+      const verdict = validateFetchUrl(new URL(res.location, current).toString())
       if (!verdict.ok || !verdict.url) {
         throw searchError('FETCH_URL_REFUSED', `redirect target refused: ${verdict.reason}`, { detail: { reason: verdict.reason } })
       }
-      await resolveAndCheck(verdict.url.hostname, deps.resolveHost)
+      addresses = await resolveAndCheck(verdict.url.hostname, deps.resolveHost)
       current = verdict.url.toString()
       continue
     }
-    return new Uint8Array(await res.arrayBuffer())
+    if (res.body.length > PDF_MAX_BYTES) {
+      throw searchError('SEARCH_FAILED', `the response for ${current} is larger than ${PDF_MAX_BYTES} bytes`, { detail: { reason: 'direct-fetch-too-large', maxBytes: PDF_MAX_BYTES } })
+    }
+    return res.body
   }
   throw searchError('SEARCH_FAILED', `more than ${MAX_PDF_REDIRECTS} redirects fetching ${url}`, { detail: { reason: 'too-many-redirects' } })
 }
 
 /** PDF bytes: the browser's network response first (walled/gated PDFs), a validated `Network.getResponseBody`, then a direct fetch. */
-async function pdfBytes(session: FetchSession, requestId: string, url: string, deps: FetchDeps): Promise<Uint8Array> {
+async function pdfBytes(session: FetchSession, requestId: string, url: string, pinned: readonly string[], deps: FetchDeps): Promise<Uint8Array> {
   const viaBrowser = await pdfBytesViaBrowser(session, url, deps).catch(() => null)
   if (viaBrowser && pdfLooksComplete(viaBrowser)) return viaBrowser
   if (requestId) {
@@ -330,7 +342,7 @@ async function pdfBytes(session: FetchSession, requestId: string, url: string, d
       /* fall through */
     }
   }
-  return pdfBytesDirect(url, deps)
+  return pdfBytesDirect(url, pinned, deps)
 }
 
 /** Map a ban signal to the response outcome. */
@@ -371,8 +383,11 @@ export async function fetchPage(provider: FetchProviderConfig, url: string, opti
   if (!verdict.ok || !verdict.url) {
     return failure(searchError('FETCH_URL_REFUSED', `invalid fetch target: ${verdict.reason}`, { detail: { reason: verdict.reason } }))
   }
+  // Resolve ONCE and validate every answer; the direct fetch connects to that answer, and the browser's
+  // own connection is checked against the same table (see `refuse` below).
+  let pinned: string[]
   try {
-    await resolveAndCheck(verdict.url.hostname, deps.resolveHost)
+    pinned = await resolveAndCheck(verdict.url.hostname, deps.resolveHost)
   } catch (err) {
     return failure(err)
   }
@@ -392,9 +407,51 @@ export async function fetchPage(provider: FetchProviderConfig, url: string, opti
     let mainMime = ''
     let mainReqId = ''
     let mainStatus: number | undefined
+
+    // SSRF enforcement on what the BROWSER connected to (it resolves names itself and follows redirects):
+    // every document request (each redirect hop included) must pass the target policy, every document
+    // response must have connected to a non-forbidden address, and every extra host a hop introduced is
+    // resolved and checked. Any violation ends the fetch before a byte of the page is read.
+    const refusals: unknown[] = []
+    const checkedHosts = new Set<string>([verdict.url.hostname])
+    const pendingHosts = new Set<string>()
+    const checkConnected = (resp: { url?: unknown; remoteIPAddress?: unknown }): void => {
+      const addr = str(resp.remoteIPAddress).replace(/^\[|\]$/g, '')
+      if (addr && isForbiddenAddress(addr)) {
+        refusals.push(searchError('FETCH_URL_REFUSED', `${str(resp.url) || target} connected to ${addr} (private/loopback/link-local)`, { detail: { reason: 'connected-to-forbidden-address', address: addr } }))
+      }
+    }
+    session.on('Network.requestWillBeSent', (p) => {
+      if (p['type'] !== 'Document') return
+      const u = str((p['request'] as { url?: unknown } | undefined)?.url)
+      if (!/^https?:/i.test(u)) return
+      const hop = p['redirectResponse']
+      if (hop && typeof hop === 'object') checkConnected(hop as { url?: unknown; remoteIPAddress?: unknown })
+      try {
+        const parsed = new URL(u)
+        const reason = forbiddenTargetReason(parsed)
+        if (reason) refusals.push(searchError('FETCH_URL_REFUSED', `redirect target refused: ${reason}`, { detail: { reason, url: u } }))
+        else if (!checkedHosts.has(parsed.hostname)) pendingHosts.add(parsed.hostname)
+      } catch {
+        refusals.push(searchError('FETCH_URL_REFUSED', `redirect target is not a valid URL: ${u}`, { detail: { url: u } }))
+      }
+    })
+    const refuse = async (): Promise<void> => {
+      for (const host of [...pendingHosts]) {
+        pendingHosts.delete(host)
+        checkedHosts.add(host)
+        try {
+          await resolveAndCheck(host, deps.resolveHost)
+        } catch (err) {
+          refusals.push(err)
+        }
+      }
+      if (refusals[0]) throw refusals[0]
+    }
     session.on('Network.responseReceived', (p) => {
-      const response = (p['response'] ?? {}) as { url?: unknown; mimeType?: unknown; status?: unknown }
+      const response = (p['response'] ?? {}) as { url?: unknown; mimeType?: unknown; status?: unknown; remoteIPAddress?: unknown }
       const u = str(response.url)
+      if (p['type'] === 'Document') checkConnected(response)
       // Only real http(s) documents: navigating to a PDF fires a SECOND Document response for the
       // pdfium viewer page (chrome-extension://..., text/html) that would clobber application/pdf.
       if (p['type'] === 'Document' && /^https?:/i.test(u)) {
@@ -407,6 +464,10 @@ export async function fetchPage(provider: FetchProviderConfig, url: string, opti
 
     // ── 3. Navigate + settle (event-driven) ──
     const settle = await deps.settle(session, { navigate: target, deadlineMs })
+    await refuse().catch(async (err: unknown) => {
+      await session.send('Page.stopLoading').catch(() => undefined)
+      throw err
+    })
 
     const meta = (): Pick<FetchResult, 'status' | 'contentType'> => ({
       ...(mainStatus !== undefined ? { status: mainStatus } : {}),
@@ -444,6 +505,7 @@ export async function fetchPage(provider: FetchProviderConfig, url: string, opti
       const until = deps.now() + challengeWaitMs
       while (deps.now() < until) {
         await deps.sleep(CHALLENGE_POLL_MS)
+        await refuse()
         outerHTML = await grab()
         md = await deps.toMarkdown(outerHTML)
         ban = detectChallenge()
@@ -491,7 +553,8 @@ export async function fetchPage(provider: FetchProviderConfig, url: string, opti
     // reflects the final document.
     const isPdf = /application\/pdf/i.test(mainMime) || (/\.pdf($|[?#])/i.test(target) && md.markdown.trim().length < CHALLENGE_SPARSE_CHARS)
     if (isPdf) {
-      const bytes = await pdfBytes(session, mainReqId, target, deps)
+      const bytes = await pdfBytes(session, mainReqId, target, pinned, deps)
+      await refuse()
       const pdf = await deps.extractPdf(bytes)
       const hasText = pdf.text.trim().length > 0
       return finish(pdf.text, hasText ? 'success' : 'empty', finalUrl, {

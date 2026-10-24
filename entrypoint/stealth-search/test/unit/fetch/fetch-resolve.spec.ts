@@ -21,10 +21,10 @@ async function run(resolveHost: (host: string) => Promise<string[]>) {
     { html: [page('Guide', longBody())] },
     {
       resolveHost,
-      fetchImpl: (async (input: Parameters<typeof fetch>[0]) => {
+      fetchDirect: async (input) => {
         requested.push(String(input))
-        return new Response('x')
-      }) as typeof fetch,
+        return { status: 200, location: null, body: new Uint8Array(0) }
+      },
     },
   )
   const r = await fetchPage(PROVIDER, URL_, {}, w.deps)

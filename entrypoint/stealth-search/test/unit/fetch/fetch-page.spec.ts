@@ -7,6 +7,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { fetchPage, FETCH_UA, pdfLooksComplete } from '../../../src/lib/fetch/fetch.js'
+import type { FetchDeps } from '../../../src/lib/fetch/fetch.js'
 import { CF_BAN, longBody, makeWorld, page, PDF_SENTENCE, PROVIDER, readFixture } from '../../helpers/fetch/harness.js'
 
 const URL_ = 'https://docs.example.com/guide'
@@ -118,11 +119,11 @@ describe('PDF branch', () => {
 
   it('falls back to a direct fetch whose redirects are policy-checked', async () => {
     const calls: string[] = []
-    const fetchImpl = (async (u: string) => {
+    const fetchDirect: FetchDeps['fetchDirect'] = async (u) => {
       calls.push(String(u))
-      return new Response(pdf, { status: 200 })
-    }) as unknown as typeof fetch
-    const w = makeWorld({ html: ['<html></html>'], responses: [{ url: pdfUrl, status: 200, mimeType: 'application/pdf' }] }, { fetchImpl })
+      return { status: 200, location: null, body: pdf }
+    }
+    const w = makeWorld({ html: ['<html></html>'], responses: [{ url: pdfUrl, status: 200, mimeType: 'application/pdf' }] }, { fetchDirect })
     const r = await fetchPage(PROVIDER, pdfUrl, { content: 'full' }, w.deps)
     expect(r.outcome).toBe('success')
     expect(r.content).toContain(PDF_SENTENCE)
@@ -130,8 +131,8 @@ describe('PDF branch', () => {
   })
 
   it('a direct-fetch redirect to a private address is refused with FETCH_URL_REFUSED', async () => {
-    const fetchImpl = (async () => new Response(null, { status: 302, headers: { location: 'http://169.254.169.254/x.pdf' } })) as unknown as typeof fetch
-    const w = makeWorld({ html: ['<html></html>'], responses: [{ url: pdfUrl, status: 200, mimeType: 'application/pdf' }] }, { fetchImpl })
+    const fetchDirect: FetchDeps['fetchDirect'] = async () => ({ status: 302, location: 'http://169.254.169.254/x.pdf', body: new Uint8Array(0) })
+    const w = makeWorld({ html: ['<html></html>'], responses: [{ url: pdfUrl, status: 200, mimeType: 'application/pdf' }] }, { fetchDirect })
     const r = await fetchPage(PROVIDER, pdfUrl, {}, w.deps)
     expect(r.outcome).toBe('error')
     expect(r.error).toMatch(/^FETCH_URL_REFUSED:/)
