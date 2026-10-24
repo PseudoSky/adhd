@@ -34,7 +34,7 @@ Items the plan deliberately does not build. Each has an owner decision recorded 
 ## Housekeeping
 
 - The scratch repo `INDEX.md` entry for agent-browser is not updated by the cutover: the file carries other agents' uncommitted edits, so staging it would sweep their work into a commit. Update it when the tree is clean.
-- The generated `e2e` nx target and `vitest.e2e.config.ts` (sibling parity, `entrypoint-parity.1,3`) stay in place and are unused: there is no live-Chrome lane.
+- The generated `e2e` nx target and `vitest.e2e.config.ts` are not part of the packages (there is no live-Chrome lane): sibling parity (`entrypoint-parity.1,3`, `search-scaffold.2`) compares against the sibling set minus the e2e lane.
 - Fixtures under `src/test/fixtures/cdp/` are labelled `synthetic-protocol-conformant` until FU-5 replaces them.
 - Design decisions: the capture sink (store adapter, option B'') and the lifecycle backbone (hybrid C with the service-proxy launcher) are recorded in `EVALUATIONS.md` with their provisional defaults as OPEN-DECISIONS OD-1..OD-11, including the pending service-proxy extension design (OD-10).
 - Kill -9 of the last out-of-process reaper with no returning client orphans Chrome (no parent-death signal on darwin); bound: the next `ready()` of any process adopts or reaps.

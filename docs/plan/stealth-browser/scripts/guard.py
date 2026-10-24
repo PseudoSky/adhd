@@ -217,10 +217,16 @@ def source_untouched():
         return False, "evidence/source-baseline.txt missing (scaffold state records it)"
     cut = [x for x in sh(["git", "log", "--format=%H", "--grep=\\[psm:search-cutover\\]", "--reverse"], cwd=SCRATCH)[1].split() if x]
     if cut:
-        # the cutover may change agent-browser/adhd: everything BEFORE its first commit must equal the baseline, and only cutover commits may touch it afterwards
+        # Recorded-at-completion semantics: the cutover may change agent-browser/adhd, so the tree just BEFORE its first commit is a frozen fact
+        # (evidence/frozen/source-untouched.json: the baseline plus the untagged ambient fixes made by other agents), no commit tagged [psm:*] other
+        # than the cutover may ever have touched it, and nothing but cutover commits may touch it afterwards.
+        frozen = jread(f"{PLAN}/evidence/frozen/source-untouched.json", {}) or {}
         tree = git("rev-parse", f"{cut[0]}^:agent-browser/adhd", cwd=SCRATCH)
-        others = [c for c in sh(["git", "log", "--format=%H%x1f%B%x1e", f"{cut[0]}^..HEAD", "--", "agent-browser/adhd"], cwd=SCRATCH)[1].split("\x1e") if c.strip() and "[psm:search-cutover]" not in c]
-        return tree == base.get("tree") and not others, f"pre-cutover tree={tree[:10]} baseline={base.get('tree', '')[:10]} non-cutover commits touching adhd={len(others)}"
+        recs = [c for c in sh(["git", "log", "--format=%H%x1f%B%x1e", f"{cut[0]}^..HEAD", "--", "agent-browser/adhd"], cwd=SCRATCH)[1].split("\x1e") if c.strip() and "[psm:search-cutover]" not in c]
+        tagged = [c for c in sh(["git", "log", "--format=%H%x1f%B%x1e", "--grep=\\[psm:", "--", "agent-browser/adhd"], cwd=SCRATCH)[1].split("\x1e") if c.strip() and "[psm:search-cutover]" not in c]
+        base_ok = sh(["git", "cat-file", "-e", f"{base['tree']}^{{tree}}"], cwd=SCRATCH)[0] == 0
+        ok = tree == frozen.get("pre_cutover_tree") and base.get("tree") == frozen.get("baseline_tree") and not recs and not tagged and base_ok
+        return ok, f"pre-cutover tree={tree[:10]} frozen={str(frozen.get('pre_cutover_tree'))[:10]} baseline intact={base_ok} non-cutover commits touching adhd after cutover={len(recs)} plan-tagged non-cutover commits touching adhd={len(tagged)}"
     # Commit-scoped (the live scratch tree is ambient state other authorised agents edit, and the cutover removes adhd/ on purpose): no commit of
     # this plan touched agent-browser/adhd, and the recorded baseline tree is still an intact git object.
     psm = [c for c in sh(["git", "log", "--format=%H%x1f%B%x1e", "--grep=\\[psm:", "--", "agent-browser/adhd"], cwd=SCRATCH)[1].split("\x1e") if c.strip()]
@@ -397,13 +403,24 @@ def _ck(slug, n):
     return run
 
 
+def completion_ref(slug):
+    """The commit a `[psm:<slug>]` ownership scan runs up to: the state's recorded `end_ref` once it is complete (a one-shot historical fact frozen in
+    state.json at completion, so later states, merges and repair commits that merely MENTION the tag cannot re-open a completed state), else HEAD
+    (the state is in flight).  Falls back to HEAD when the recorded ref is not an ancestor of HEAD."""
+    st = (state().get("states") or {}).get(slug) or {}
+    end = st.get("end_ref")
+    if st.get("status") == "complete" and end and sh(["git", "merge-base", "--is-ancestor", end, "HEAD"])[0] == 0:
+        return end
+    return "HEAD"
+
+
 def ownership_ok(slug):
     owned = ownership().get(slug)
     if owned is None:
         return False, f"no ownership entry for {slug}"
     st = (state().get("states") or {}).get(slug) or {}
     since = st.get("start_ref") or git("merge-base", "HEAD", "main")
-    log = sh(["git", "log", f"{since}..HEAD", "--format=%H%x1f%B%x1e"])[1]
+    log = sh(["git", "log", f"{since}..{completion_ref(slug)}", "--format=%H%x1f%B%x1e"])[1]
     bad = []
     for rec in log.split("\x1e"):
         if "\x1f" not in rec:
@@ -685,18 +702,35 @@ def EPP():
     return jread(f"{EPD()}/package.json", {}) or {}
 
 
+# The live-Chrome e2e lane was dropped by user decision (unit tests simulating the real use cases replace it: tests-use-cases, search-usecases), so the
+# sibling-parity criteria compare against the sibling set MINUS the e2e lane: the `vitest.e2e.config.ts` file and the `e2e` nx target.
+E2E_LANE_FILES = {"vitest.e2e.config.ts"}
+E2E_LANE_TARGETS = {"e2e"}
+
+
+def sibling_targets(extra=("build-bin",)):
+    """nx targets present in both dispatch-cli and backlog (plus `extra`), minus the dropped e2e lane."""
+    def targets(name):
+        rc, out = sh([NX, "show", "project", name, "--json"], timeout=300)
+        try:
+            return set(json.loads(out[out.index("{"):]).get("targets", {}))
+        except (ValueError, json.JSONDecodeError):
+            return set()
+    return ((targets("dispatch-cli") & targets("backlog")) | set(extra)) - E2E_LANE_TARGETS
+
+
 def sibling_top():
     sets = []
     for s in SIBLINGS:
         files = git("ls-files", "--", s).splitlines()
         sets.append({f[len(s) + 1:] for f in files if "/" not in f[len(s) + 1:]})
     inter = set.intersection(*sets) if sets else set()
-    return inter - {"BACKLOG.md", "CONTRIBUTING.md"}
+    return inter - {"BACKLOG.md", "CONTRIBUTING.md"} - E2E_LANE_FILES
 
 
 @check("entrypoint-parity", 1)
 def _ep1():
-    """Top-level tracked file set contains every file common to dispatch-cli, backlog and apigen-cli (eslint/vite/tsconfig.*/vitest.e2e/AGENTS/CHANGELOG/LICENSE...)."""
+    """Top-level tracked file set contains every file common to dispatch-cli, backlog and apigen-cli (eslint/vite/tsconfig.*/AGENTS/CHANGELOG/LICENSE...), minus the dropped e2e lane (vitest.e2e.config.ts): the user replaced the live-Chrome e2e lane with unit tests that simulate the real use cases."""
     need = sibling_top()
     d = EPD()
     have = {f[len(d) + 1:] for f in git("ls-files", "--", d).splitlines() if "/" not in f[len(d) + 1:]}
@@ -715,14 +749,14 @@ def _ep2():
 
 @check("entrypoint-parity", 3)
 def _ep3():
-    """`nx show project` lists every target present in both dispatch-cli and backlog (build, test, lint, typecheck, e2e, verify-dist-load...) and the dispatch-cli-only `build-bin`."""
+    """`nx show project` lists every target present in both dispatch-cli and backlog (build, test, lint, typecheck, verify-dist-load...) minus the dropped e2e target, and the dispatch-cli-only `build-bin`. The e2e lane was dropped by user decision (unit tests simulating the real use cases replace it), so the sibling set is compared without `e2e`."""
+    need = sibling_targets()
     def targets(name):
         rc, out = sh([NX, "show", "project", name, "--json"], timeout=300)
         try:
             return set(json.loads(out[out.index("{"):]).get("targets", {}))
         except (ValueError, json.JSONDecodeError):
             return set()
-    need = (targets("dispatch-cli") & targets("backlog")) | {"build-bin"}
     mine = targets("stealth-browser" if EPD() == LEGACY_DIR else SEARCH_PROJECT)
     return bool(need) and need <= mine, f"missing targets {sorted(need - mine)}"
 
@@ -825,7 +859,8 @@ TEMP_IGNORE_MARK = "TEMPORARY(stealth-browser:deps-install)"
 @check("deps-install", 7)
 def _d7():
     """Historical one-shot: the dependency commit carried the documented TEMPORARY `@nx/dependency-checks` `ignoredDependencies` entry (git history shows a [psm:deps-install] commit that introduced the marker); mig-capture-parsers.6 removed it again, so the live eslint config is not asserted."""
-    log = git("log", "--format=%B%x1e", "-S" + TEMP_IGNORE_MARK, "--", f"{P}/eslint.config.mjs")
+    # the library directory moved (entrypoint/stealth-browser -> packages/stealth/stealth-core-browser): search history under both locations
+    log = git("log", "--format=%B%x1e", "-S" + TEMP_IGNORE_MARK, "--", f"{LEGACY_DIR}/eslint.config.mjs", f"{CORE_DIR}/eslint.config.mjs")
     return any("[psm:deps-install]" in rec for rec in log.split("\x1e")), "marker introduced by a deps-install commit"
 
 
@@ -3699,7 +3734,7 @@ def own_commits(slug):
     """Commit shas since the state's start_ref whose message carries [psm:<slug>]: concurrent states commit to shared paths, so 'did this state touch X' must look only at its own commits."""
     st = (state().get("states") or {}).get(slug) or {}
     since = st.get("start_ref") or git("merge-base", "HEAD", "main")
-    log = sh(["git", "log", f"{since}..HEAD", "--format=%H%x1f%B%x1e"])[1]
+    log = sh(["git", "log", f"{since}..{completion_ref(slug)}", "--format=%H%x1f%B%x1e"])[1]
     out = []
     for rec in log.split("\x1e"):
         if "\x1f" not in rec:

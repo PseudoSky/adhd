@@ -26,3 +26,10 @@ Intentionally unused (source repo dependencies that do not travel): `@xmldom/xml
 
 Workspace ranges resolve in the workspace: the core and the tripwire package are `^0.1.0` (their package
 versions are `0.1.0`); no `link:` or `file:` specifier is used.
+
+## Dropped as unused after the port
+
+The port states established that nothing in `entrypoint/stealth-search/src` imports `@adhd/apigen-plugin-ir-cache`
+(the search verbs are not IR-cached), so `search-hosts` removed it from the manifest ([psm:search-hosts] commit 612f29df7):
+
+DROPPED-UNUSED: @adhd/apigen-plugin-ir-cache

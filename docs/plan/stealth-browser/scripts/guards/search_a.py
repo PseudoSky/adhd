@@ -122,20 +122,18 @@ def _ssc1():
 
 @check("search-scaffold", 2)
 def _ssc2():
-    """Structure equals the sibling entrypoints: the tracked top-level file set contains every file common to dispatch-cli, backlog and apigen-cli (minus BACKLOG.md and CONTRIBUTING.md), and `nx show project stealth-search` lists every target common to dispatch-cli and backlog plus `build-bin`."""
+    """Structure equals the sibling entrypoints: the tracked top-level file set contains every file common to dispatch-cli, backlog and apigen-cli (minus BACKLOG.md and CONTRIBUTING.md and the dropped e2e lane), and `nx show project stealth-search` lists every target common to dispatch-cli and backlog plus `build-bin`, minus the e2e target. The live-Chrome e2e lane was dropped by user decision (unit tests simulating the real use cases replace it), so `vitest.e2e.config.ts` and the `e2e` target are not required."""
     if not _sa_has_project():
         return False, "project missing"
     need = sibling_top()
     have = {f[len(SEARCH_DIR) + 1:] for f in git("ls-files", "--", SEARCH_DIR).splitlines() if "/" not in f[len(SEARCH_DIR) + 1:]}
 
-    def targets(name):
-        rc, out = sh([NX, "show", "project", name, "--json"], timeout=300)
-        try:
-            return set(json.loads(out[out.index("{"):]).get("targets", {}))
-        except (ValueError, json.JSONDecodeError):
-            return set()
-    tneed = (targets("dispatch-cli") & targets("backlog")) | {"build-bin"}
-    tmine = targets(SEARCH_PROJECT)
+    tneed = sibling_targets()
+    rc, out = sh([NX, "show", "project", SEARCH_PROJECT, "--json"], timeout=300)
+    try:
+        tmine = set(json.loads(out[out.index("{"):]).get("targets", {}))
+    except (ValueError, json.JSONDecodeError):
+        tmine = set()
     return bool(need) and need <= have and tneed <= tmine, f"missing files {sorted(need - have)} missing targets {sorted(tneed - tmine)}"
 
 
@@ -157,11 +155,14 @@ def _ssc3():
 
 @check("search-scaffold", 4)
 def _ssc4():
-    """The manifest declares EVERY dependency the later search states need so none of them edits package.json or the lockfile: @adhd/stealth-core-browser, @adhd/resilience-core-tripwire, @adhd/sox-telemetry, the apigen core-client / engine-naming / engine-runtime / plugin-mcp / plugin-cli-output / plugin-ir-cache / plugin-tracing packages, @modelcontextprotocol/sdk, commander, turndown and pdfjs-dist (workspace packages as ranges that resolve in the workspace, never link: or file:), and every `import` of a bare package in the source repo's search files that is not a node builtin is covered or recorded as unused in evidence/split/search-deps.md."""
+    """The manifest declares EVERY dependency the later search states need so none of them edits package.json or the lockfile: @adhd/stealth-core-browser, @adhd/resilience-core-tripwire, @adhd/sox-telemetry, the apigen core-client / engine-naming / engine-runtime / plugin-mcp / plugin-cli-output / plugin-ir-cache / plugin-tracing packages, @modelcontextprotocol/sdk, commander, turndown and pdfjs-dist (workspace packages as ranges that resolve in the workspace, never link: or file:), and every `import` of a bare package in the source repo's search files that is not a node builtin is covered or recorded as unused in evidence/split/search-deps.md. A declared dependency that the port later proved unused (and nothing imports) may be absent when evidence/split/search-deps.md records `DROPPED-UNUSED: <name>` (@adhd/apigen-plugin-ir-cache, dropped by search-hosts)."""
     p = pkg_json(SEARCH_DIR)
     deps = {**(p.get("devDependencies") or {}), **(p.get("dependencies") or {})}
-    miss = [d for d in SA_REQUIRED_DEPS if d not in deps]
     note = read(f"{SPLIT_EVIDENCE}/search-deps.md")
+    # A dependency the port proved unused may be dropped later, but only when search-deps.md records `DROPPED-UNUSED: <name>` AND nothing imports it.
+    dropped = {d for d in re.findall(r"^DROPPED-UNUSED:\s*(\S+)", note, re.M)
+               if not any(d in read(f) for f in walk(f"{SEARCH_DIR}/src", (".ts",)))}
+    miss = [d for d in SA_REQUIRED_DEPS if d not in deps and d not in dropped]
     return not miss and bool(note.strip()), f"missing deps {miss}; search-deps.md present={bool(note.strip())}"
 
 

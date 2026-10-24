@@ -29,9 +29,9 @@ The generated package is raised to full parity with the sibling entrypoints (`di
 
 Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/guard.py` (`python3 docs/plan/stealth-browser/scripts/guard.py entrypoint-parity --only entrypoint-parity.N`). None may be deferred. Tests written by this plan cite ticket `8468f7b1` and these ids ([inv:tests-cite]).
 
-- [entrypoint-parity.1] Top-level tracked file set contains every file common to dispatch-cli, backlog and apigen-cli (eslint/vite/tsconfig.*/vitest.e2e/AGENTS/CHANGELOG/LICENSE...).
+- [entrypoint-parity.1] Top-level tracked file set contains every file common to dispatch-cli, backlog and apigen-cli (eslint/vite/tsconfig.*/AGENTS/CHANGELOG/LICENSE...), minus the dropped e2e lane (`vitest.e2e.config.ts`): the user replaced the live-Chrome e2e lane with unit tests that simulate the real use cases.
 - [entrypoint-parity.2] project.json tags are a superset of the tags common to the three sibling entrypoints.
-- [entrypoint-parity.3] `nx show project` lists every target present in both dispatch-cli and backlog (build, test, lint, typecheck, e2e, verify-dist-load...) and the dispatch-cli-only `build-bin`.
+- [entrypoint-parity.3] `nx show project` lists every target present in both dispatch-cli and backlog (build, test, lint, typecheck, verify-dist-load...) minus the dropped `e2e` target (the user replaced the live-Chrome e2e lane with unit tests that simulate the real use cases), and the dispatch-cli-only `build-bin`.
 - [entrypoint-parity.4] package.json carries the sibling publish metadata: repository.directory == entrypoint/stealth-browser, homepage, bugs, license, files, main/types, publishConfig.
 - [entrypoint-parity.5] `nx run stealth-browser:lint` exits 0 on the scaffold (tooling wired).
 - [entrypoint-parity.6] Only owned paths changed by [psm:entrypoint-parity] commits.
