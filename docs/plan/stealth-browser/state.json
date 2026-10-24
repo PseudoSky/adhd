@@ -564,11 +564,11 @@
       "end_ref": null
     },
     "release-gate-fixes": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-10-24T04:12:24.860Z",
-      "done_at": null,
+      "done_at": "2026-10-24T05:21:25.320Z",
       "start_ref": "d707776de68abd98d5c16b97a40e9294e6b60df0",
-      "end_ref": null
+      "end_ref": "7bb3f6db497290a3cbef5ecad132f5ac8dde592e"
     }
   },
   "transition_log": [
@@ -1375,6 +1375,18 @@
       "audit_criteria_total": 10,
       "by": "pseudosky",
       "note": "commits 0fea5952d acc1750c0 ac35a00a1 (scratch ca1f94d84); guard 10/10 rc=0 after .3 grep amendment"
+    },
+    {
+      "ts": "2026-10-24T05:21:25.320Z",
+      "from": "release-gate-fixes",
+      "to": "release-gate-fixes",
+      "start_ref": "d707776de68abd98d5c16b97a40e9294e6b60df0",
+      "end_ref": "7bb3f6db497290a3cbef5ecad132f5ac8dde592e",
+      "audit_exit": 0,
+      "audit_criteria_passed": 8,
+      "audit_criteria_total": 8,
+      "by": "pseudosky",
+      "note": "graph-aware check-test-wiring; release:dry exports ADHD_NX_VERSION_DRY_RUN for whole chain; publish dry-run semantics; decompile-cli fixture path; backlog root cause recorded; guard 8/8"
     }
   ],
   "amendment_log": [
