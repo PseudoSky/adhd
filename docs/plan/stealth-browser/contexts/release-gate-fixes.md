@@ -16,7 +16,7 @@
      matching audit check ID so Check 3's ID-mirror holds. Do not hand-add
      bare [slug.N] tokens here without a matching audit check. -->
 
-_No criteria yet._
+- [release-gate-fixes.1] tools/nx-plugins/test/executors/wiring/check-test-wiring.spec.mjs exists with the testing-standard header (guards:, tier: S, cites:) citing 8468f7b1 and [release-gate-fixes.1], carries a plugin-inferred-target case and a negative control (a project with specs and no test target, literal or inferred, is still flagged), is listed in package.json `test:build-tools`, passes `node --test`, and check-lane-reachability exits 0.
 
 ---
 
