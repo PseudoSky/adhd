@@ -1,6 +1,6 @@
 # @adhd/stealth-core-browser
 
-Work with your own logged-in Chrome from Node.js over the Chrome DevTools Protocol, with a lower footprint than the usual automation drivers.
+Work with your own logged-in Chrome from Node.js over the Chrome DevTools Protocol: Chrome is launched without `--enable-automation` and pages are read without `Runtime.evaluate`.
 
 Requires Node.js 22.5 or newer and an installed Chrome. macOS is the verified platform; see [docs/CONFIGURATION.md](docs/CONFIGURATION.md).
 
@@ -55,13 +55,15 @@ Areas are namespaces on the one package root; there are no subpath exports.
 | `chromeManager` | Auto-start, idle timer, reaper-host safety shutdown | [docs/reference/chrome-manager.md](docs/reference/chrome-manager.md) |
 | `lifecycle`, `recording`, `endpoint` | Manager seam and reaper, redacted network recording, endpoint policy | [docs/reference/README.md](docs/reference/README.md) |
 
+A lower-level example with the `cdp` and `capture` namespaces, on the dedicated port 9333:
+
 ```ts
 import { cdp, capture } from '@adhd/stealth-core-browser'
 const { ensureChromeRunning, createPageTarget, closePageTarget } = cdp
 const { captureNetworkResponse } = capture
 
-await ensureChromeRunning()
-const { targetId, pageWsUrl } = await createPageTarget('127.0.0.1:9222')
+await ensureChromeRunning({ port: 9333 })
+const { targetId, pageWsUrl } = await createPageTarget('127.0.0.1:9333')
 try {
   const response = await captureNetworkResponse(pageWsUrl, {
     navigateUrl: 'https://example.com',
@@ -70,7 +72,7 @@ try {
   })
   console.log(response.status, response.body.length)
 } finally {
-  await closePageTarget('127.0.0.1:9222', targetId)
+  await closePageTarget('127.0.0.1:9333', targetId)
 }
 ```
 
@@ -94,6 +96,7 @@ endpoint.configureEndpointPolicy({ allowHosts: ['chrome.internal'] })
 - [docs/CONFIGURATION.md](docs/CONFIGURATION.md): every default (port `9222`, the `Chrome-CDP` profile, the lifecycle state directory), options and platform support
 - [docs/RESPONSIBLE-USE.md](docs/RESPONSIBLE-USE.md): terms of service, robots.txt, rate limits, read-only profile access
 - [docs/EXAMPLES.md](docs/EXAMPLES.md): every runnable file under `examples/` with its scenario
+- [docs/LIFECYCLE-AND-RECORDING.md](docs/LIFECYCLE-AND-RECORDING.md): members of `lifecycle`, `recording` and `endpoint`
 - [docs/ERRORS.md](docs/ERRORS.md): the `StealthCoreBrowserError` code registry
 - [docs/reference/README.md](docs/reference/README.md): API and protocol reference
 - [CHANGELOG.md](CHANGELOG.md)

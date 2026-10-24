@@ -46,7 +46,7 @@ import { cdp } from '@adhd/stealth-core-browser'
 const { CdpSession, ensureChromeRunning, createPageTarget } = cdp
 
 // 1. Ensure Chrome is running (starts it if missing)
-const { port, profileDir } = await ensureChromeRunning()
+const { port, profileDir } = await ensureChromeRunning({ port: 9333 })
 const cdpHost = `127.0.0.1:${port}`
 
 // 2. Create a page target
@@ -103,7 +103,7 @@ chrome.bump()
 // Or use withBrowser for automatic lifecycle
 await chrome.withBrowser(async () => {
   // Chrome is guaranteed running here
-  const { pageWsUrl } = await createPageTarget('127.0.0.1:9222')
+  const { pageWsUrl } = await createPageTarget('127.0.0.1:9333')
   // ... do work ...
 })
 
