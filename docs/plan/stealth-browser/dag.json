@@ -473,8 +473,8 @@
       ],
       "guard": "python3 docs/plan/stealth-browser/scripts/guard.py audit-pre-review",
       "artifacts": [
-        "/Users/nix/dev/node/adhd/.worktrees/stealth-browser/docs/plan/stealth-browser/review/PRE-REVIEW.json",
-        "/Users/nix/dev/node/adhd/.worktrees/stealth-browser/docs/plan/stealth-browser/review/PRE-REVIEW.md"
+        "docs/plan/stealth-browser/review/PRE-REVIEW.json",
+        "docs/plan/stealth-browser/review/PRE-REVIEW.md"
       ],
       "context": "contexts/audit-pre-review.md",
       "notes": "executor=code-reviewer tier=sonnet/high; non-blind static audit, findings recorded with the audit_dod.py --phase pre-review output"

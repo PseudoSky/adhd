@@ -40,8 +40,8 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 ## Reservations
 
 ```text
-read_only:  ["packages/stealth/stealth-core-browser/", "entrypoint/stealth-search/", "/Users/nix/dev/ai/scratch/agent-browser/"]
-mutates:    ["/Users/nix/dev/node/adhd/.worktrees/stealth-browser/docs/plan/stealth-browser/review/PRE-REVIEW.json", "/Users/nix/dev/node/adhd/.worktrees/stealth-browser/docs/plan/stealth-browser/review/PRE-REVIEW.md"]
+read_only:  []
+mutates:    ["docs/plan/stealth-browser/review/PRE-REVIEW.json", "docs/plan/stealth-browser/review/PRE-REVIEW.md"]
 ```
 
 ---
