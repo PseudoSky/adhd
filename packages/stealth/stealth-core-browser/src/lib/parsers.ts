@@ -267,26 +267,29 @@ export function extractResultsFromHtml(body: string, capture: CaptureConfig): Pa
   const seen = new Set<string>()
   let match: RegExpExecArray | null
 
-  while ((match = reSelf.exec(body)) !== null) {
-    const url = normalizeUrl(applyUrlTemplate(match[1], capture))
-    const title = stripHtml(match[2]).trim().replace(/\s+/g, ' ')
-    if (!title || seen.has(url)) continue
+  // Each card's snippet is looked up between its own title element and the START of the next title
+  // element (`cardEnd`), so a card without a snippet of its own never takes the next card's.
+  const selfMatches = [...body.matchAll(reSelf)]
+  selfMatches.forEach((m, i) => {
+    const url = normalizeUrl(applyUrlTemplate(m[1], capture))
+    const title = stripHtml(m[2]).trim().replace(/\s+/g, ' ')
+    if (!title || seen.has(url)) return
     seen.add(url)
-    const snippet = extractSnippet(body, match.index, snippetPattern)
+    const snippet = extractSnippet(body, m.index, snippetPattern, cardEnd(selfMatches, i, body))
     results.push({ title, url, snippet })
-  }
+  })
 
-  reChild.lastIndex = 0
-  while ((match = reChild.exec(body)) !== null) {
-    const inner = match[1]
+  const childMatches = [...body.matchAll(reChild)]
+  childMatches.forEach((m, i) => {
+    const inner = m[1]
     const title = stripHtml(inner).trim().replace(/\s+/g, ' ')
     const aHref = inner.match(/<a[^>]*href="([^"]*)"[^>]*>/i)
     const url = aHref ? normalizeUrl(applyUrlTemplate(aHref[1], capture)) : ''
-    if (!title || !url || seen.has(url)) continue
+    if (!title || !url || seen.has(url)) return
     seen.add(url)
-    const snippet = extractSnippet(body, match.index, snippetPattern)
+    const snippet = extractSnippet(body, m.index, snippetPattern, cardEnd(childMatches, i, body))
     results.push({ title, url, snippet })
-  }
+  })
 
   // Pass 2.5: wrapper anchor — the URL element (`fields.url`) ENCLOSES the title
   // element (e.g. pypi: `<a class="package-snippet" href="/project/x/"> …
@@ -303,15 +306,16 @@ export function extractResultsFromHtml(body: string, capture: CaptureConfig): Pa
       const [, linkTag, linkClass] = linkM
       const lcRe = linkClass ? `class="[^"]*${escapeRe(linkClass)}[^"]*"` : ''
       const wrapRe = new RegExp(`<${linkTag}[^>]*${lcRe}[^>]*href="([^"]*)"[^>]*>([\\s\\S]*?)<\\/${linkTag}>`, 'gi')
-      while ((match = wrapRe.exec(body)) !== null) {
-        const url = normalizeUrl(applyUrlTemplate(match[1], capture))
-        const titleInner = match[2].match(new RegExp(`<${titleTag}[^>]*${classRe}[^>]*>([\\s\\S]*?)<\\/${titleTag}>`, 'i'))
+      const wrapMatches = [...body.matchAll(wrapRe)]
+      wrapMatches.forEach((m, i) => {
+        const url = normalizeUrl(applyUrlTemplate(m[1], capture))
+        const titleInner = m[2].match(new RegExp(`<${titleTag}[^>]*${classRe}[^>]*>([\\s\\S]*?)<\\/${titleTag}>`, 'i'))
         const title = titleInner ? stripHtml(titleInner[1]).trim().replace(/\s+/g, ' ') : ''
-        if (!title || !url || seen.has(url)) continue
+        if (!title || !url || seen.has(url)) return
         seen.add(url)
-        const snippet = extractSnippet(body, match.index, snippetPattern)
+        const snippet = extractSnippet(body, m.index, snippetPattern, cardEnd(wrapMatches, i, body))
         results.push({ title, url, snippet })
-      }
+      })
     }
   }
 
@@ -329,28 +333,41 @@ export function extractResultsFromHtml(body: string, capture: CaptureConfig): Pa
         if (!seen.has(url)) hrefs.push({ url, index: match.index })
       }
       const tRe = new RegExp(`<${titleTag}[^>]*${classRe}[^>]*>([\\s\\S]*?)<\\/${titleTag}>`, 'gi')
-      tRe.lastIndex = 0
-      while ((match = tRe.exec(body)) !== null) {
-        const t = stripHtml(match[1]).trim().replace(/\s+/g, ' ')
-        if (!t) continue
-        const matchIndex = match.index
+      const titleMatches = [...body.matchAll(tRe)]
+      titleMatches.forEach((m, i) => {
+        const t = stripHtml(m[1]).trim().replace(/\s+/g, ' ')
+        if (!t) return
+        const matchIndex = m.index
         const nearest = hrefs.find((h) => h.index > matchIndex)
-        if (!nearest || seen.has(nearest.url)) continue
+        if (!nearest || seen.has(nearest.url)) return
         seen.add(nearest.url)
-        const snippet = extractSnippet(body, match.index, snippetPattern)
+        const snippet = extractSnippet(body, m.index, snippetPattern, cardEnd(titleMatches, i, body))
         results.push({ title: t, url: nearest.url, snippet })
-      }
+      })
     }
   }
 
   return results
 }
 
-function extractSnippet(body: string, matchIndex: number, snippetPattern: string): string {
+/** Longest stretch after a title element in which its snippet is looked for. */
+const SNIPPET_WINDOW = 5000
+
+/** Where the card of `matches[i]` ends: the start of the next title element, or the end of the body. */
+function cardEnd(matches: readonly RegExpMatchArray[], i: number, body: string): number {
+  return matches[i + 1]?.index ?? body.length
+}
+
+/**
+ * The snippet of the card whose title element starts at `matchIndex`. The window runs forward to the
+ * start of the next card (`cardEndIndex`), never past `SNIPPET_WINDOW` characters and never past the body,
+ * so a card without a snippet of its own gets an empty one instead of the next card's.
+ */
+function extractSnippet(body: string, matchIndex: number, snippetPattern: string, cardEndIndex: number = body.length): string {
   const m = snippetPattern.match(/^(\w+)(?:\.(.+))?$/)
   if (!m) return ''
   const [, tag, cls] = m
-  const ctx = body.slice(matchIndex, Math.min(body.length, matchIndex + 5000))
+  const ctx = body.slice(matchIndex, Math.min(body.length, cardEndIndex, matchIndex + SNIPPET_WINDOW))
   const cp = cls ? `class="[^"]*${escapeRe(cls)}[^"]*"` : ''
   const re = new RegExp(`<${tag}[^>]*${cp}[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'i')
   const hit = re.exec(ctx)
@@ -409,12 +426,28 @@ function applyUrlTemplate(url: string, capture: CaptureConfig): string {
   return template ? template.replace('{}', url) : url
 }
 
+/**
+ * `decodeURIComponent` that cannot throw on page-supplied text: every run of valid `%XX` escapes is
+ * decoded and a malformed run (a lone `%`, a truncated multi-byte sequence) keeps its undecodable bytes as written, so one
+ * bad link never aborts the parse of a results page.
+ */
+function safeDecode(s: string): string {
+  return s.replace(/(?:%[0-9A-Fa-f]{2})+/g, (run) => {
+    try {
+      return decodeURIComponent(run)
+    } catch {
+      // A truncated or invalid multi-byte tail: keep it as written but still decode the ASCII escapes around it.
+      return run.replace(/%([0-7][0-9A-Fa-f])/g, (_m, hex: string) => String.fromCharCode(parseInt(hex, 16)))
+    }
+  })
+}
+
 function normalizeUrl(raw: string): string {
   if (!raw) return raw
   const ddg = raw.match(/[?&]uddg=([^&]+)/)
-  if (ddg) return decodeURIComponent(ddg[1])
+  if (ddg) return safeDecode(ddg[1])
   const ggl = raw.match(/[?&]q=([^&]+)/)
-  if (ggl && !raw.startsWith('http')) return decodeURIComponent(ggl[1])
+  if (ggl && !raw.startsWith('http')) return safeDecode(ggl[1])
   if (raw.startsWith('//')) return 'https:' + raw
   if (raw.startsWith('/abs/')) return `https://arxiv.org${raw}`
   // Google's newer SERP wraps result links as an ENCRYPTED redirect
