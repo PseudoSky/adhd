@@ -116,11 +116,11 @@
       "end_ref": "9830641c9bcb909ab67ba79e0e41efc73a3f5ad7"
     },
     "gates-first": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-10-24T11:02:27.502Z",
-      "done_at": null,
+      "done_at": "2026-10-24T11:39:40.907Z",
       "start_ref": "652738d6aaa53b399d9806da3b0733d520e2f022",
-      "end_ref": null
+      "end_ref": "fcaa816ac166b2925f59cec64dff4079265ebff6"
     },
     "review-prep": {
       "status": "pending",
@@ -1423,6 +1423,18 @@
       "audit_criteria_total": 6,
       "by": "pseudosky",
       "note": "41 fixed, 2 rejected (P7 shared AGENTS.md, P40 deliberate); guard 6/6"
+    },
+    {
+      "ts": "2026-10-24T11:39:40.907Z",
+      "from": "gates-first",
+      "to": "gates-first",
+      "start_ref": "652738d6aaa53b399d9806da3b0733d520e2f022",
+      "end_ref": "fcaa816ac166b2925f59cec64dff4079265ebff6",
+      "audit_exit": 0,
+      "audit_criteria_passed": 12,
+      "audit_criteria_total": 12,
+      "by": "pseudosky",
+      "note": "all 12 gates green: lint/typecheck/build/test/verify-dist-load of core, search, tripwire; module-format proof; pack dry-run recorded"
     }
   ],
   "amendment_log": [
@@ -2200,7 +2212,7 @@
     "version": "0.8.35",
     "hash": "0b6bc1f3d70e"
   },
-  "current_state": "gates-first",
+  "current_state": "review-prep",
   "dod_provenance": {
     "confirmed_at": "2026-10-12T23:49:38.410Z",
     "by": "pseudosky",
