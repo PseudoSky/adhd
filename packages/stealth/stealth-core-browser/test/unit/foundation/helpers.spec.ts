@@ -39,7 +39,6 @@ import {
   defaultChromeDir,
   hydrateVisit,
   notYet,
-  openDb,
   toUnixTimeSql,
   transitionName,
 } from '../../../src/lib/helpers.js'
@@ -77,32 +76,6 @@ describe('8468f7b1 AC2 [tests-unit-core.3] profile paths (homedir mocked)', () =
     expect(dir.startsWith('/fake/home/')).toBe(true)
     expect(dir.endsWith('Chrome')).toBe(true)
     expect(dir).not.toBe(chromeProfileDir())
-  })
-})
-
-describe('8468f7b1 AC2 [tests-unit-core.3] openDb (node:sqlite mocked)', () => {
-  beforeEach(() => {
-    sqlite.state.uris.length = 0
-    sqlite.state.execs.length = 0
-    sqlite.state.execError = null
-    sqlite.state.ctorError = null
-  })
-
-  it('opens read-only and immutable (no file locking) then forces query_only', () => {
-    const db = openDb('/fake/profile/History')
-    expect(db).toBeInstanceOf(sqlite.DatabaseSync)
-    expect(sqlite.state.uris).toEqual(['file:/fake/profile/History?mode=ro&immutable=1'])
-    expect(sqlite.state.execs).toEqual(['PRAGMA query_only = ON'])
-  })
-
-  it('propagates an open failure instead of swallowing it', () => {
-    sqlite.state.ctorError = new Error('unable to open database file')
-    expect(() => openDb('/fake/missing')).toThrow('unable to open database file')
-  })
-
-  it('propagates a PRAGMA failure', () => {
-    sqlite.state.execError = new Error('pragma failed')
-    expect(() => openDb('/fake/profile/History')).toThrow('pragma failed')
   })
 })
 

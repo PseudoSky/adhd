@@ -4,8 +4,6 @@
  * Extracted from cdp-query-client.ts (helper section + VisitRow).
  */
 
-import { DatabaseSync } from 'node:sqlite'
-import type { DatabaseSync as DatabaseSyncType } from 'node:sqlite'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type { ChromeVisit } from './types.js'
@@ -42,18 +40,6 @@ export function chromeProfileDir(): string {
 
 export function defaultChromeDir(): string {
   return join(homedir(), 'Library', 'Application Support', 'Google', 'Chrome')
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// Database helpers
-// ═══════════════════════════════════════════════════════════════════════════════
-
-/** Open a Chrome SQLite DB with immutable mode — no file locking. */
-export function openDb(dbPath: string): DatabaseSyncType {
-  const uri = `file:${dbPath}?mode=ro&immutable=1`
-  const db = new DatabaseSync(uri)
-  db.exec('PRAGMA query_only = ON')
-  return db
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

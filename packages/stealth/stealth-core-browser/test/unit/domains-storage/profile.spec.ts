@@ -4,7 +4,7 @@
  * SQLite/JSON/Extensions fixtures are created in the OS temp dir; console.warn is spied.
  * guards: defaultDir is <profile>/Default
  * tier: S
- * cites: 8468f7b1 [tests-unit-data.1] [tests-unit-data.2] [tests-unit-data.3] [tests-unit-data.4]
+ * cites: 8468f7b1 [tests-unit-data.1] [tests-unit-data.2] [tests-unit-data.3] [tests-unit-data.4] [audit-fixes.5]
  */
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -64,6 +64,16 @@ describe('8468f7b1 AC2 [tests-unit-data.1] ProfileClient', () => {
     expect(rows.map((r) => r.name)).toEqual(['email', 'city'])
     expect(rows[0]).toMatchObject({ value: 'a@b.test', count: 4 })
     expect(rows[0].lastUsed.getTime()).toBe(1 - 11644473600000)
+  })
+
+  it('[audit-fixes.5] P32 getAutofillData({ redactValues: true }) keeps names, counts and dates and masks every value', () => {
+    const d = fx.db('Web Data', ['CREATE TABLE autofill (name TEXT, value TEXT, count INTEGER, date_last_used INTEGER)'])
+    d.prepare('INSERT INTO autofill VALUES (?,?,?,?)').run('email', 'a@b.test', 4, 1000)
+    d.close()
+    const [row] = new ProfileClient(fx.root).getAutofillData({ redactValues: true })
+    expect(row).toMatchObject({ name: 'email', value: '[REDACTED]', count: 4 })
+    expect(JSON.stringify(row)).not.toContain('a@b.test')
+    expect(new ProfileClient(fx.root).getAutofillData({ redactValues: false })[0]?.value).toBe('a@b.test')
   })
 
   it('getSearchEngines is ordered by keyword and mapped to name/keyword/url', () => {

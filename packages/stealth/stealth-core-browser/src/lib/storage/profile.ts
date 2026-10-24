@@ -4,6 +4,9 @@ import { join } from 'node:path'
 import { readFileSync, readdirSync } from 'node:fs'
 import type { SessionTab } from '../types.js'
 
+/** The value shown in place of an autofill value when `redactValues` is set. */
+export const AUTOFILL_REDACTED = '[REDACTED]'
+
 export class ProfileClient {
   private readonly profileDir: string
 
@@ -44,7 +47,12 @@ export class ProfileClient {
     } finally { db.close() }
   }
 
-  getAutofillData(): Array<{ name: string; value: string; count: number; lastUsed: Date }> {
+  /**
+   * Saved form-fill entries, newest first (at most 100). The values are personal data (names, emails, addresses):
+   * pass `{ redactValues: true }` to get the field names, counts and dates with every value replaced by
+   * `[REDACTED]`. The default returns the values, because reading them is what this call is for.
+   */
+  getAutofillData(opts: { redactValues?: boolean } = {}): Array<{ name: string; value: string; count: number; lastUsed: Date }> {
     const db = openDb(join(this.defaultDir, 'Web Data'))
     try {
       const rows = db.prepare(`
@@ -55,7 +63,7 @@ export class ProfileClient {
       `).all() as Array<{ name: string; value: string; count: unknown; date_last_used: unknown }>
       return rows.map((r) => ({
         name: r.name ?? '',
-        value: r.value ?? '',
+        value: opts.redactValues ? AUTOFILL_REDACTED : (r.value ?? ''),
         count: Number(r.count ?? 0),
         lastUsed: new Date((Number(r.date_last_used ?? 0) / 1000) - 11644473600000),
       }))
@@ -78,6 +86,11 @@ export class ProfileClient {
     } finally { db.close() }
   }
 
+  /**
+   * Not implemented: always `[]`, and it warns once per call. Chrome keeps the open tabs of a profile in its
+   * binary session files, which this reader does not parse; the live tabs of the controlled Chrome come from
+   * `listPageTargets()`.
+   */
   getOpenTabs(): SessionTab[] {
     notYet('getOpenTabs'); return []
   }

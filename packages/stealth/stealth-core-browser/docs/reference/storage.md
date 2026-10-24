@@ -274,7 +274,7 @@ interface BookmarkNode {
 
 ## `ProfileClient`
 
-Stub client for Chrome profile data. All methods return empty/default values.
+Read-only client for the non-history data files of a Chrome profile (top sites, favicons, autofill, search engines, preferences, extensions). Every database is opened immutable and read-only.
 
 ```typescript
 import { ProfileClient } from '@adhd/stealth-core-browser/storage'
@@ -292,18 +292,18 @@ new ProfileClient(profileDir?: string)
 |---|---|---|
 | `defaultDir` | `string` | Path to the `Default` profile directory |
 
-### Stub Methods
+### Methods
 
 | Method | Returns | Status |
 |---|---|---|
-| `getTopSites(limit?)` | `Array<{url, title, score}>` (empty) | 🔴 Not yet implemented |
-| `getFaviconData(pageUrl)` | `{url, data?, mimeType?} \| null` | 🔴 Not yet implemented |
-| `getAutofillData()` | `Array<{name, value, count, lastUsed}>` (empty) | 🔴 Not yet implemented |
-| `getSearchEngines()` | `Array<{name, keyword, url}>` (empty) | 🔴 Not yet implemented |
-| `getOpenTabs()` | `SessionTab[]` (empty) | 🔴 Not yet implemented |
-| `getPreference(key)` | `T \| undefined` | 🔴 Not yet implemented |
-| `getExtensionIds()` | `string[]` (empty) | 🔴 Not yet implemented |
-| `hasSavedCredentials()` | `false` | 🔴 Not yet implemented |
+| `getTopSites(limit?)` | `Array<{url, title, score}>` | Implemented |
+| `getFaviconData(pageUrl)` | `{url, data?, mimeType?} \| null` | Implemented |
+| `getAutofillData({ redactValues? })` | `Array<{name, value, count, lastUsed}>`, newest first, at most 100 | Implemented. Values are personal data: `redactValues: true` replaces each with `[REDACTED]` |
+| `getSearchEngines()` | `Array<{name, keyword, url}>` | Implemented |
+| `getOpenTabs()` | `SessionTab[]` (always empty, with a warning) | Not implemented: use `listPageTargets()` for the live tabs |
+| `getPreference(key)` | `T \| undefined` | Implemented (dotted key path) |
+| `getExtensionIds()` | `string[]` | Implemented |
+| `hasSavedCredentials()` | `boolean` | Implemented |
 
 ## Path Helpers
 
