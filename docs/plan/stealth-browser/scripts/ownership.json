@@ -256,7 +256,8 @@
     "/Users/nix/dev/ai/scratch/agent-browser/FEATURES.md",
     "/Users/nix/dev/ai/scratch/agent-browser/FETCH.md",
     "/Users/nix/dev/ai/scratch/agent-browser/docs/",
-    "packages/resilience/resilience-core-tripwire/"
+    "packages/resilience/resilience-core-tripwire/",
+    "/Users/nix/dev/ai/scratch/INDEX.md"
   ],
   "cdp-test-harness": [
     "entrypoint/stealth-browser/src/test/support/",
