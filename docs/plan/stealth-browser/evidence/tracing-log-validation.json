@@ -2,31 +2,31 @@
   "service": "stealth-search",
   "namespace": "adhd",
   "agent": "tracing-log-validation validating agent (claude-sonnet-5-5)",
-  "home": "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/c8273d10-b319-41df-99f1-5458418387f6/scratchpad/tmp.4WjXTioW7u",
-  "validated_at": "2026-10-24T02:17:02.603Z",
-  "search_code_tree": "3c93f20be98050d388f3a3d08f726cc05532b5c0e2dc306320ca4783f10384a8",
+  "home": "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/c8273d10-b319-41df-99f1-5458418387f6/scratchpad/tlv2/home.qZ6xxi",
+  "validated_at": "2026-10-24T10:41:12.312Z",
+  "search_code_tree": "5861ebd0e90df21c5a0e7b88985fe164e8b6b1d8cb69fde29ff0551eb3590107",
   "commands_run": [
+    "stealth-search listProviders",
+    "stealth-search describeProvider --provider duckduckgo",
+    "stealth-search tripwireStatus --data-dir /private/tmp/claude-502/-Users-nix-dev-ai-scratch/c8273d10-b319-41df-99f1-5458418387f6/scratchpad/tlv2/home.qZ6xxi/data",
+    "stealth-search chromeStatus --cdp-port 19999",
+    "stealth-search describeProvider --provider nope",
+    "stealth-search chromeStatus --cdp-port abc",
     "stealth-search search --help",
     "stealth-search listProviders --help",
     "stealth-search describeProvider --help",
     "stealth-search tripwireStatus --help",
     "stealth-search clearTripwire --help",
-    "stealth-search getPageContext --help",
     "stealth-search chromeStatus --help",
     "stealth-search launchChrome --help",
     "stealth-search shutdownChrome --help",
     "stealth-search listPageTargets --help",
     "stealth-search checkChromeActivity --help",
-    "stealth-search -h",
-    "stealth-search",
-    "stealth-search listProviders",
-    "stealth-search describeProvider --provider duckduckgo",
-    "stealth-search tripwireStatus --data-dir /private/tmp/claude-502/-Users-nix-dev-ai-scratch/c8273d10-b319-41df-99f1-5458418387f6/scratchpad/tmp.4WjXTioW7u/data",
-    "stealth-search chromeStatus --cdp-port 19999",
-    "stealth-search describeProvider --provider nope",
-    "stealth-search chromeStatus --cdp-port abc",
-    "stealth-search listProviders --log-dir /private/tmp/claude-502/-Users-nix-dev-ai-scratch/c8273d10-b319-41df-99f1-5458418387f6/scratchpad/tmp.4WjXTioW7u/logs",
-    "stealth-search describeProvider --provider nope --log-dir /private/tmp/claude-502/-Users-nix-dev-ai-scratch/c8273d10-b319-41df-99f1-5458418387f6/scratchpad/tmp.4WjXTioW7u/logs"
+    "stealth-search getPageContext --help",
+    "stealth-search --help",
+    "stealth-search listProviders --log-dir /private/tmp/claude-502/-Users-nix-dev-ai-scratch/c8273d10-b319-41df-99f1-5458418387f6/scratchpad/tlv2/home.qZ6xxi/logs",
+    "stealth-search describeProvider --provider nope --log-dir /private/tmp/claude-502/-Users-nix-dev-ai-scratch/c8273d10-b319-41df-99f1-5458418387f6/scratchpad/tlv2/home.qZ6xxi/logs",
+    "stealth-search-mcp --transport stdio"
   ],
   "mcp_calls": [
     {
@@ -35,7 +35,117 @@
         "data": {}
       },
       "outcome": {
-        "isError": false
+        "isError": false,
+        "content": "[{\"type\":\"text\",\"text\":\"{\\\"providers\\\":[{\\\"id\\\":\\\"duckduckgo\\\",\\\"name\\\":\\\"DuckDuckGo\\\",\\\"help\\\":\\\"General web search (via html.duckduckgo.com). Supports site:, intitle:, filetype: operators.\\\",\\\"strategies\\\":[\\\"network\\\",\\\"dom\\\"]},{\\\"id\\\":\\\"google\\\",\\\"name\\\":\\\"Google\\\",\\\"help\\\":\\\"General web search (via google.com). Supports site:, filetype:, intitle:, inurl: operators.\\\",\\\"strategies\\\":[\\\"network\\\",\\\"dom\\\"]},{\\\"id\\\":\\\"arxiv\\\",\\\"name\\\":\\\"arXiv\\\",\\\"help\\\":\\\"Academic papers (via arxiv.org). Supports au:, ti:, cat: operators.\\\",\\\"strategies\\\":[\\\"network\\\",\\\"dom\\\"]},{\\\"id\\\":\\\"npm\\\",\\\"name\\\":\\\"npm\\",
+        "structuredContent": {
+          "providers": [
+            {
+              "id": "duckduckgo",
+              "name": "DuckDuckGo",
+              "help": "General web search (via html.duckduckgo.com). Supports site:, intitle:, filetype: operators.",
+              "strategies": [
+                "network",
+                "dom"
+              ]
+            },
+            {
+              "id": "google",
+              "name": "Google",
+              "help": "General web search (via google.com). Supports site:, filetype:, intitle:, inurl: operators.",
+              "strategies": [
+                "network",
+                "dom"
+              ]
+            },
+            {
+              "id": "arxiv",
+              "name": "arXiv",
+              "help": "Academic papers (via arxiv.org). Supports au:, ti:, cat: operators.",
+              "strategies": [
+                "network",
+                "dom"
+              ]
+            },
+            {
+              "id": "npm",
+              "name": "npm",
+              "help": "npm packages (via registry.npmjs.org API). Direct fetch. Qualifiers: author:, maintainer:, keywords:, scope:, is:unstable, not:unstable, not:insecure, boost-exact:false.",
+              "strategies": [
+                "network",
+                "dom"
+              ]
+            },
+            {
+              "id": "github",
+              "name": "GitHub",
+              "help": "GitHub search \u2014 repos by default. Use qualifier \"type:code\" for code search, \"type:repositories\" to stay explicit. Qualifiers: repo:, org:, user:, language:, license:, is:, path:, symbol:, regex. See docs.github.com/en/search-github (code search).",
+              "strategies": [
+                "network",
+                "network"
+              ]
+            },
+            {
+              "id": "maven",
+              "name": "Maven Central",
+              "help": "Java/Maven packages (via search.maven.org Solr API). Direct fetch. Qualifiers: g: (groupId), a: (artifactId), v: (version), p: (packaging), l: (classifier).",
+              "strategies": [
+                "network"
+              ]
+            },
+            {
+              "id": "wikipedia",
+              "name": "Wikipedia",
+              "help": "Wikipedia articles (via en.wikipedia.org API). Direct fetch. Free text search \u2014 no inline qualifiers.",
+              "strategies": [
+                "network"
+              ]
+            },
+            {
+              "id": "crates",
+              "name": "crates.io",
+              "help": "Rust crates (via crates.io API). Direct fetch. Free text search \u2014 no inline qualifiers.",
+              "strategies": [
+                "network",
+                "dom"
+              ]
+            },
+            {
+              "id": "pypi",
+              "name": "PyPI",
+              "help": "Python packages (via pypi.org search). Free text search \u2014 no inline qualifiers.",
+              "strategies": [
+                "network",
+                "dom"
+              ]
+            },
+            {
+              "id": "mdn",
+              "name": "MDN",
+              "help": "MDN Web Docs (via Google site search). Google qualifiers apply: site:, filetype:, intitle:, inurl:.",
+              "strategies": [
+                "dom",
+                "network"
+              ]
+            },
+            {
+              "id": "stackoverflow",
+              "name": "Stack Overflow",
+              "help": "Stack Overflow (via Google site search). Google qualifiers apply: site:, filetype:, intitle:, inurl:.",
+              "strategies": [
+                "dom",
+                "network"
+              ]
+            },
+            {
+              "id": "fetch",
+              "name": "Fetch",
+              "help": "Fetch any URL and return it as markdown. The query IS the URL (e.g. `fetch https://react.dev`). Cookieless render, no per-site config. Returns markdown in `content`, not `results`.",
+              "strategies": [
+                "fetch"
+              ]
+            }
+          ]
+        }
       }
     },
     {
@@ -48,7 +158,31 @@
         }
       },
       "outcome": {
-        "isError": false
+        "isError": false,
+        "content": "[{\"type\":\"text\",\"text\":\"{\\\"id\\\":\\\"duckduckgo\\\",\\\"name\\\":\\\"DuckDuckGo\\\",\\\"help\\\":\\\"General web search (via html.duckduckgo.com). Supports site:, intitle:, filetype: operators.\\\",\\\"url\\\":\\\"https://html.duckduckgo.com/html?q=demo\\\",\\\"strategies\\\":[\\\"network\\\",\\\"dom\\\"],\\\"qualifierExamples\\\":[\\\"site:example.com    Search within a site\\\",\\\"filetype:pdf        Filter by file type\\\",\\\"intitle:hello       Title must contain\\\"],\\\"bans\\\":[\\\"ddg-captcha\\\",\\\"ddg-block\\\",\\\"cloudflare-challenge\\\",\\\"cloudflare-captcha-widget\\\",\\\"cloudflare-blocked\\\"],\\\"usage\\\":\\\"search({ provider: \\\\\\\"duckduckgo\\\\\\\", query: \\",
+        "structuredContent": {
+          "id": "duckduckgo",
+          "name": "DuckDuckGo",
+          "help": "General web search (via html.duckduckgo.com). Supports site:, intitle:, filetype: operators.",
+          "url": "https://html.duckduckgo.com/html?q=demo",
+          "strategies": [
+            "network",
+            "dom"
+          ],
+          "qualifierExamples": [
+            "site:example.com    Search within a site",
+            "filetype:pdf        Filter by file type",
+            "intitle:hello       Title must contain"
+          ],
+          "bans": [
+            "ddg-captcha",
+            "ddg-block",
+            "cloudflare-challenge",
+            "cloudflare-captcha-widget",
+            "cloudflare-blocked"
+          ],
+          "usage": "search({ provider: \"duckduckgo\", query: \"tree-sitter\", qualifier: \"<optional syntax>\" }) returns results of title, url and snippet"
+        }
       }
     },
     {
@@ -57,7 +191,9 @@
         "data": {}
       },
       "outcome": {
-        "isError": false
+        "isError": false,
+        "content": "[{\"type\":\"text\",\"text\":\"{}\"}]",
+        "structuredContent": {}
       }
     },
     {
@@ -70,7 +206,12 @@
         }
       },
       "outcome": {
-        "isError": false
+        "isError": false,
+        "content": "[{\"type\":\"text\",\"text\":\"{\\\"running\\\":false,\\\"managed\\\":false}\"}]",
+        "structuredContent": {
+          "running": false,
+          "managed": false
+        }
       }
     },
     {
@@ -83,9 +224,9 @@
         }
       },
       "outcome": {
-        "rejected": true,
-        "code": -32603,
-        "message": "MCP error -32603: Unknown provider \"nope\". Available: duckduckgo, google, arxiv, npm, github, maven, wikipedia, crates, pypi, mdn, stackoverflow, fetch — Use one of the registered provider ids (see the providers list), then retry."
+        "isError": true,
+        "content": "[{\"type\":\"text\",\"text\":\"invalid_argument: UNKNOWN_PROVIDER: Unknown provider \\\"nope\\\". Available: duckduckgo, google, arxiv, npm, github, maven, wikipedia, crates, pypi, mdn, stackoverflow, fetch \u2014 Use one of the registered provider ids (see the providers list), then retry.\"}]",
+        "structuredContent": null
       }
     }
   ],
@@ -97,148 +238,158 @@
   ],
   "log_files_detail": [
     {
-      "path": "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/c8273d10-b319-41df-99f1-5458418387f6/scratchpad/tmp.4WjXTioW7u/.adhd/sox-ecosystem/stealth-search/logs/stealth-search.cli-2026-10-24.jsonl",
+      "path": "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/c8273d10-b319-41df-99f1-5458418387f6/scratchpad/tlv2/home.qZ6xxi/.adhd/sox-ecosystem/stealth-search/logs/stealth-search.cli-2026-10-24.jsonl",
       "bytes": 11190
     },
     {
-      "path": "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/c8273d10-b319-41df-99f1-5458418387f6/scratchpad/tmp.4WjXTioW7u/.adhd/sox-ecosystem/stealth-search/logs/stealth-search.live-service-2026-10-24.jsonl",
-      "bytes": 7737
+      "path": "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/c8273d10-b319-41df-99f1-5458418387f6/scratchpad/tlv2/home.qZ6xxi/.adhd/sox-ecosystem/stealth-search/logs/stealth-search.live-service-2026-10-24.jsonl",
+      "bytes": 8884
     },
     {
-      "path": "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/c8273d10-b319-41df-99f1-5458418387f6/scratchpad/tmp.4WjXTioW7u/logs/stealth-search.cli-2026-10-24.jsonl",
+      "path": "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/c8273d10-b319-41df-99f1-5458418387f6/scratchpad/tlv2/home.qZ6xxi/logs/stealth-search.cli-2026-10-24.jsonl",
       "bytes": 4187
     }
   ],
-  "log_dir_flag_dir": "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/c8273d10-b319-41df-99f1-5458418387f6/scratchpad/tmp.4WjXTioW7u/logs",
+  "log_dir_flag_dir": "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/c8273d10-b319-41df-99f1-5458418387f6/scratchpad/tlv2/home.qZ6xxi/logs",
   "tests_added": 0,
   "process_spawn_mocked": true,
   "real_chrome_launched": false,
-  "limitations": "The plugin error record (adhd.<op>.error) carries the failure message in `error` and no typed error_code; the typed code UNKNOWN_PROVIDER is evidenced by CLI stderr and exit status 70, and over MCP by the JSON-RPC rejection message. Twin event adhd.op.error (upstream behaviour) is recorded under no_apigen_events.twin_events.",
+  "real_home_sink_records_from_this_run": 0,
+  "limitations": "Over the CLI the span error record (adhd.<op>.error) carries the failure message in `error` and no typed code; the typed code UNKNOWN_PROVIDER is evidenced by CLI stderr and exit status 70. Over MCP a typed StealthSearchError is an isError tool result carrying the code (invalid_argument: UNKNOWN_PROVIDER: ...), not a JSON-RPC rejection, and the span `.error` record's `error` field begins with UNKNOWN_PROVIDER. The upstream twin event adhd.op.error accompanies each adhd.<op>.error (its adhd.op attribute holds the real op id; no other record carries the name op) and is recorded under no_apigen_events.twin_events. The sibling *.metrics-snapshot-*.jsonl files (event metrics.snapshot) are periodic metrics sinks, not span logs, and are excluded from the span analysis.",
   "checks": [
     {
       "name": "cli_pairs",
       "status": "PASS",
       "sample_lines": [
-        "{\"ts\":\"2026-10-24T02:12:06.858Z\",\"level\":\"info\",\"event\":\"adhd.stealth/list-providers.start\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:9577e3912e1d900bd124d7bc03f64f58f27f267901336211a0fb2b509a8c9361\",\"git_sha\":\"9db13b7e0f3770777d4399f580a8f820963aaf4c\"},\"trace_id\":\"01M5NTVZ1ENHTG2QAS31BDFVPF\",\"pid\":64769,\"adhd.op\":\"stealth/list-providers\",\"adhd.transport\":\"cli\",\"session_id\":\"c43242e0-d8fe-4f49-9407-4615d5b1c592\",\"worktree\":\"linked\",\"release.git_sha\":\"9db13b7e0f3770777d4399f580a8f820963aaf4c\",\"release.artifact_sha256\":\"sha256:9577e3912e1d900bd124d7bc03f64f58f27f267901336211a0fb2b509a8c9361\",\"span_id\":\"ff45c30822abc9f7\",\"parent_span_id\":null,\"otel_trace_id\":\"d6262a178bb22afe6d6a1661edaa7c16\"}",
-        "{\"ts\":\"2026-10-24T02:12:06.859Z\",\"level\":\"info\",\"event\":\"adhd.stealth/list-providers.finish\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:9577e3912e1d900bd124d7bc03f64f58f27f267901336211a0fb2b509a8c9361\",\"git_sha\":\"9db13b7e0f3770777d4399f580a8f820963aaf4c\"},\"trace_id\":\"01M5NTVZ1ENHTG2QAS31BDFVPF\",\"pid\":64769,\"adhd.op\":\"stealth/list-providers\",\"adhd.transport\":\"cli\",\"session_id\":\"c43242e0-d8fe-4f49-9407-4615d5b1c592\",\"worktree\":\"linked\",\"release.git_sha\":\"9db13b7e0f3770777d4399f580a8f820963aaf4c\",\"release.artifact_sha256\":\"sha256:9577e3912e1d900bd124d7bc03f64f58f27f267901336211a0fb2b509a8c9361\",\"span_id\":\"ff45c30822abc9f7\",\"parent_span_id\":null,\"otel_trace_id\":\"d6262a178bb22afe6d6a1661edaa7c16\",\"duration_ms\":2}",
-        "{\"ts\":\"2026-10-24T02:12:07.094Z\",\"level\":\"info\",\"event\":\"adhd.stealth/describe-provider.start\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:9577e3912e1d900bd124d7bc03f64f58f27f267901336211a0fb2b509a8c9361\",\"git_sha\":\"9db13b7e0f3770777d4399f580a8f820963aaf4c\"},\"trace_id\":\"01M5NTVZ8V3N9K2M9FNPR2Q3FK\",\"pid\":64831,\"adhd.op\":\"stealth/describe-provider\",\"adhd.transport\":\"cli\",\"session_id\":\"1250cc66-86d9-4c60-ae9a-184e8c571d60\",\"worktree\":\"linked\",\"release.git_sha\":\"9db13b7e0f3770777d4399f580a8f820963aaf4c\",\"release.artifact_sha256\":\"sha256:9577e3912e1d900bd124d7bc03f64f58f27f267901336211a0fb2b509a8c9361\",\"span_id\":\"00f87ce893b891c9\",\"parent_span_id\":null,\"otel_trace_id\":\"1de4b11dd3a8f6bb0bb3d78be8419e60\"}",
-        "{\"ts\":\"2026-10-24T02:12:07.095Z\",\"level\":\"info\",\"event\":\"adhd.stealth/describe-provider.finish\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:9577e3912e1d900bd124d7bc03f64f58f27f267901336211a0fb2b509a8c9361\",\"git_sha\":\"9db13b7e0f3770777d4399f580a8f820963aaf4c\"},\"trace_id\":\"01M5NTVZ8V3N9K2M9FNPR2Q3FK\",\"pid\":64831,\"adhd.op\":\"stealth/describe-provider\",\"adhd.transport\":\"cli\",\"session_id\":\"1250cc66-86d9-4c60-ae9a-184e8c571d60\",\"worktree\":\"linked\",\"release.git_sha\":\"9db13b7e0f3770777d4399f580a8f820963aaf4c\",\"release.artifact_sha256\":\"sha256:9577e3912e1d900bd124d7bc03f64f58f27f267901336211a0fb2b509a8c9361\",\"span_id\":\"00f87ce893b891c9\",\"parent_span_id\":null,\"otel_trace_id\":\"1de4b11dd3a8f6bb0bb3d78be8419e60\",\"duration_ms\":2}",
-        "{\"ts\":\"2026-10-24T02:12:07.329Z\",\"level\":\"info\",\"event\":\"adhd.stealth/tripwire-status.start\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:9577e3912e1d900bd124d7bc03f64f58f27f267901336211a0fb2b509a8c9361\",\"git_sha\":\"9db13b7e0f3770777d4399f580a8f820963aaf4c\"},\"trace_id\":\"01M5NTVZG4XHDZBPMNCJAGHVJC\",\"pid\":64894,\"adhd.op\":\"stealth/tripwire-status\",\"adhd.transport\":\"cli\",\"session_id\":\"e460fd75-8652-4b07-a090-b4f3c6ca9d04\",\"worktree\":\"linked\",\"release.git_sha\":\"9db13b7e0f3770777d4399f580a8f820963aaf4c\",\"release.artifact_sha256\":\"sha256:9577e3912e1d900bd124d7bc03f64f58f27f267901336211a0fb2b509a8c9361\",\"span_id\":\"acaa80200994fef7\",\"parent_span_id\":null,\"otel_trace_id\":\"6cc91b93566e6466666b46b978023490\"}",
-        "{\"ts\":\"2026-10-24T02:12:07.331Z\",\"level\":\"info\",\"event\":\"adhd.stealth/tripwire-status.finish\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:9577e3912e1d900bd124d7bc03f64f58f27f267901336211a0fb2b509a8c9361\",\"git_sha\":\"9db13b7e0f3770777d4399f580a8f820963aaf4c\"},\"trace_id\":\"01M5NTVZG4XHDZBPMNCJAGHVJC\",\"pid\":64894,\"adhd.op\":\"stealth/tripwire-status\",\"adhd.transport\":\"cli\",\"session_id\":\"e460fd75-8652-4b07-a090-b4f3c6ca9d04\",\"worktree\":\"linked\",\"release.git_sha\":\"9db13b7e0f3770777d4399f580a8f820963aaf4c\",\"release.artifact_sha256\":\"sha256:9577e3912e1d900bd124d7bc03f64f58f27f267901336211a0fb2b509a8c9361\",\"span_id\":\"acaa80200994fef7\",\"parent_span_id\":null,\"otel_trace_id\":\"6cc91b93566e6466666b46b978023490\",\"duration_ms\":2}",
-        "{\"ts\":\"2026-10-24T02:12:07.569Z\",\"level\":\"info\",\"event\":\"adhd.stealth/chrome-status.start\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:9577e3912e1d900bd124d7bc03f64f58f27f267901336211a0fb2b509a8c9361\",\"git_sha\":\"9db13b7e0f3770777d4399f580a8f820963aaf4c\"},\"trace_id\":\"01M5NTVZQEYMYDX36K2SGQC9A3\",\"pid\":64956,\"adhd.op\":\"stealth/chrome-status\",\"adhd.transport\":\"cli\",\"session_id\":\"45fa577f-276c-4e8f-acdd-2ffc3ada869c\",\"worktree\":\"linked\",\"release.git_sha\":\"9db13b7e0f3770777d4399f580a8f820963aaf4c\",\"release.artifact_sha256\":\"sha256:9577e3912e1d900bd124d7bc03f64f58f27f267901336211a0fb2b509a8c9361\",\"span_id\":\"31ec085cfa6f4021\",\"parent_span_id\":null,\"otel_trace_id\":\"7a81bb6250ba2da048ba74c5d859a780\"}",
-        "{\"ts\":\"2026-10-24T02:12:07.574Z\",\"level\":\"info\",\"event\":\"adhd.stealth/chrome-status.finish\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:9577e3912e1d900bd124d7bc03f64f58f27f267901336211a0fb2b509a8c9361\",\"git_sha\":\"9db13b7e0f3770777d4399f580a8f820963aaf4c\"},\"trace_id\":\"01M5NTVZQEYMYDX36K2SGQC9A3\",\"pid\":64956,\"adhd.op\":\"stealth/chrome-status\",\"adhd.transport\":\"cli\",\"session_id\":\"45fa577f-276c-4e8f-acdd-2ffc3ada869c\",\"worktree\":\"linked\",\"release.git_sha\":\"9db13b7e0f3770777d4399f580a8f820963aaf4c\",\"release.artifact_sha256\":\"sha256:9577e3912e1d900bd124d7bc03f64f58f27f267901336211a0fb2b509a8c9361\",\"span_id\":\"31ec085cfa6f4021\",\"parent_span_id\":null,\"otel_trace_id\":\"7a81bb6250ba2da048ba74c5d859a780\",\"duration_ms\":5}"
+        "{\"ts\":\"2026-10-24T10:41:07.240Z\",\"level\":\"info\",\"event\":\"adhd.stealth/list-providers.start\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\"},\"trace_id\":\"01M5PQZZMB78YYCE1N897QQBXN\",\"pid\":42270,\"adhd.op\":\"stealth/list-providers\",\"adhd.transport\":\"cli\",\"session_id\":\"5b326a27-4037-4130-8b1e-c7dd1071c710\",\"worktree\":\"linked\",\"release.git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\",\"release.artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"span_id\":\"27ed120900af6e61\",\"parent_span_id\":null,\"otel_trace_id\":\"1f35667073ca36d858352a69e638c79b\"}",
+        "{\"ts\":\"2026-10-24T10:41:07.242Z\",\"level\":\"info\",\"event\":\"adhd.stealth/list-providers.finish\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\"},\"trace_id\":\"01M5PQZZMB78YYCE1N897QQBXN\",\"pid\":42270,\"adhd.op\":\"stealth/list-providers\",\"adhd.transport\":\"cli\",\"session_id\":\"5b326a27-4037-4130-8b1e-c7dd1071c710\",\"worktree\":\"linked\",\"release.git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\",\"release.artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"span_id\":\"27ed120900af6e61\",\"parent_span_id\":null,\"otel_trace_id\":\"1f35667073ca36d858352a69e638c79b\",\"duration_ms\":2}",
+        "{\"ts\":\"2026-10-24T10:41:07.476Z\",\"level\":\"info\",\"event\":\"adhd.stealth/describe-provider.start\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\"},\"trace_id\":\"01M5PQZZVPP8P829Q9P47G6WWR\",\"pid\":42338,\"adhd.op\":\"stealth/describe-provider\",\"adhd.transport\":\"cli\",\"session_id\":\"9b8332c2-7562-42d4-8d38-bc52ff5ce501\",\"worktree\":\"linked\",\"release.git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\",\"release.artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"span_id\":\"ce86b6619a4a2408\",\"parent_span_id\":null,\"otel_trace_id\":\"17122087c546c49083e088a3f314ad6b\"}",
+        "{\"ts\":\"2026-10-24T10:41:07.478Z\",\"level\":\"info\",\"event\":\"adhd.stealth/describe-provider.finish\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\"},\"trace_id\":\"01M5PQZZVPP8P829Q9P47G6WWR\",\"pid\":42338,\"adhd.op\":\"stealth/describe-provider\",\"adhd.transport\":\"cli\",\"session_id\":\"9b8332c2-7562-42d4-8d38-bc52ff5ce501\",\"worktree\":\"linked\",\"release.git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\",\"release.artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"span_id\":\"ce86b6619a4a2408\",\"parent_span_id\":null,\"otel_trace_id\":\"17122087c546c49083e088a3f314ad6b\",\"duration_ms\":2}",
+        "{\"ts\":\"2026-10-24T10:41:07.711Z\",\"level\":\"info\",\"event\":\"adhd.stealth/tripwire-status.start\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\"},\"trace_id\":\"01M5PR0031HEQWSA03PWBYJ8Q3\",\"pid\":42401,\"adhd.op\":\"stealth/tripwire-status\",\"adhd.transport\":\"cli\",\"session_id\":\"0ad292e0-a8e5-4bfc-a176-a6de12fa1007\",\"worktree\":\"linked\",\"release.git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\",\"release.artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"span_id\":\"eba373002577cc6d\",\"parent_span_id\":null,\"otel_trace_id\":\"0abeb98821b3861cd03e59f612babdc6\"}",
+        "{\"ts\":\"2026-10-24T10:41:07.712Z\",\"level\":\"info\",\"event\":\"adhd.stealth/tripwire-status.finish\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\"},\"trace_id\":\"01M5PR0031HEQWSA03PWBYJ8Q3\",\"pid\":42401,\"adhd.op\":\"stealth/tripwire-status\",\"adhd.transport\":\"cli\",\"session_id\":\"0ad292e0-a8e5-4bfc-a176-a6de12fa1007\",\"worktree\":\"linked\",\"release.git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\",\"release.artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"span_id\":\"eba373002577cc6d\",\"parent_span_id\":null,\"otel_trace_id\":\"0abeb98821b3861cd03e59f612babdc6\",\"duration_ms\":2}",
+        "{\"ts\":\"2026-10-24T10:41:07.947Z\",\"level\":\"info\",\"event\":\"adhd.stealth/chrome-status.start\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\"},\"trace_id\":\"01M5PR00A8XPRVWKQZ9JZ3N6J8\",\"pid\":42463,\"adhd.op\":\"stealth/chrome-status\",\"adhd.transport\":\"cli\",\"session_id\":\"22efc69b-c8cb-4b7f-b7f6-d301e9793e5a\",\"worktree\":\"linked\",\"release.git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\",\"release.artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"span_id\":\"ee62ec0203d8a686\",\"parent_span_id\":null,\"otel_trace_id\":\"cae5904eb882b6e381912de7ff3a1f8c\"}",
+        "{\"ts\":\"2026-10-24T10:41:07.951Z\",\"level\":\"info\",\"event\":\"adhd.stealth/chrome-status.finish\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\"},\"trace_id\":\"01M5PR00A8XPRVWKQZ9JZ3N6J8\",\"pid\":42463,\"adhd.op\":\"stealth/chrome-status\",\"adhd.transport\":\"cli\",\"session_id\":\"22efc69b-c8cb-4b7f-b7f6-d301e9793e5a\",\"worktree\":\"linked\",\"release.git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\",\"release.artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"span_id\":\"ee62ec0203d8a686\",\"parent_span_id\":null,\"otel_trace_id\":\"cae5904eb882b6e381912de7ff3a1f8c\",\"duration_ms\":5}"
       ],
       "log_files": [
-        "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/c8273d10-b319-41df-99f1-5458418387f6/scratchpad/tmp.4WjXTioW7u/.adhd/sox-ecosystem/stealth-search/logs/stealth-search.cli-2026-10-24.jsonl"
+        "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/c8273d10-b319-41df-99f1-5458418387f6/scratchpad/tlv2/home.qZ6xxi/.adhd/sox-ecosystem/stealth-search/logs/stealth-search.cli-2026-10-24.jsonl"
       ]
     },
     {
       "name": "cli_forced_error",
       "status": "PASS",
       "sample_lines": [
-        "{\"ts\":\"2026-10-24T02:12:07.806Z\",\"level\":\"info\",\"event\":\"adhd.stealth/describe-provider.start\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:9577e3912e1d900bd124d7bc03f64f58f27f267901336211a0fb2b509a8c9361\",\"git_sha\":\"9db13b7e0f3770777d4399f580a8f820963aaf4c\"},\"trace_id\":\"01M5NTVZZ1P1FFK12PDD9J1CWT\",\"pid\":65017,\"adhd.op\":\"stealth/describe-provider\",\"adhd.transport\":\"cli\",\"session_id\":\"5cb7e5c9-e82b-41c9-b569-cba6e5953d26\",\"worktree\":\"linked\",\"release.git_sha\":\"9db13b7e0f3770777d4399f580a8f820963aaf4c\",\"release.artifact_sha256\":\"sha256:9577e3912e1d900bd124d7bc03f64f58f27f267901336211a0fb2b509a8c9361\",\"span_id\":\"8671269c6dfe5243\",\"parent_span_id\":null,\"otel_trace_id\":\"c490525ec24e0ed6704422edfddfde9f\"}",
-        "{\"ts\":\"2026-10-24T02:12:07.808Z\",\"level\":\"error\",\"event\":\"adhd.stealth/describe-provider.error\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:9577e3912e1d900bd124d7bc03f64f58f27f267901336211a0fb2b509a8c9361\",\"git_sha\":\"9db13b7e0f3770777d4399f580a8f820963aaf4c\"},\"trace_id\":\"01M5NTVZZ1P1FFK12PDD9J1CWT\",\"pid\":65017,\"adhd.op\":\"stealth/describe-provider\",\"adhd.transport\":\"cli\",\"session_id\":\"5cb7e5c9-e82b-41c9-b569-cba6e5953d26\",\"worktree\":\"linked\",\"release.git_sha\":\"9db13b7e0f3770777d4399f580a8f820963aaf4c\",\"release.artifact_sha256\":\"sha256:9577e3912e1d900bd124d7bc03f64f58f27f267901336211a0fb2b509a8c9361\",\"span_id\":\"8671269c6dfe5243\",\"parent_span_id\":null,\"otel_trace_id\":\"c490525ec24e0ed6704422edfddfde9f\",\"duration_ms\":2,\"error\":\"Unknown provider \\\"nope\\\". Available: duckduckgo, google, arxiv, npm, github, maven, wikipedia, crates, pypi, mdn, stackoverflow, fetch — Use one of the registered provider ids (see the providers list), then retry.\"}"
+        "{\"ts\":\"2026-10-24T10:41:08.212Z\",\"level\":\"info\",\"event\":\"adhd.stealth/describe-provider.start\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\"},\"trace_id\":\"01M5PR00HSCHYAGWQT5R60BNY5\",\"pid\":42525,\"adhd.op\":\"stealth/describe-provider\",\"adhd.transport\":\"cli\",\"session_id\":\"5ad0d707-be67-4c69-964a-f058c73928c1\",\"worktree\":\"linked\",\"release.git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\",\"release.artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"span_id\":\"863cde181f97cd39\",\"parent_span_id\":null,\"otel_trace_id\":\"aaafea66b4d2b803d239a798b8bfd1bc\"}",
+        "{\"ts\":\"2026-10-24T10:41:08.215Z\",\"level\":\"error\",\"event\":\"adhd.stealth/describe-provider.error\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\"},\"trace_id\":\"01M5PR00HSCHYAGWQT5R60BNY5\",\"pid\":42525,\"adhd.op\":\"stealth/describe-provider\",\"adhd.transport\":\"cli\",\"session_id\":\"5ad0d707-be67-4c69-964a-f058c73928c1\",\"worktree\":\"linked\",\"release.git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\",\"release.artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"span_id\":\"863cde181f97cd39\",\"parent_span_id\":null,\"otel_trace_id\":\"aaafea66b4d2b803d239a798b8bfd1bc\",\"duration_ms\":2,\"error\":\"Unknown provider \\\"nope\\\". Available: duckduckgo, google, arxiv, npm, github, maven, wikipedia, crates, pypi, mdn, stackoverflow, fetch \u2014 Use one of the registered provider ids (see the providers list), then retry.\"}"
       ],
       "log_files": [
-        "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/c8273d10-b319-41df-99f1-5458418387f6/scratchpad/tmp.4WjXTioW7u/.adhd/sox-ecosystem/stealth-search/logs/stealth-search.cli-2026-10-24.jsonl"
+        "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/c8273d10-b319-41df-99f1-5458418387f6/scratchpad/tlv2/home.qZ6xxi/.adhd/sox-ecosystem/stealth-search/logs/stealth-search.cli-2026-10-24.jsonl"
       ],
-      "cli_stderr": "UNKNOWN_PROVIDER: Unknown provider \"nope\". Available: ...",
+      "cli_stderr": "UNKNOWN_PROVIDER: Unknown provider \"nope\". Available: duckduckgo, google, arxiv, npm, github, maven, wikipedia, crates, pypi, mdn, stackoverflow, fetch \u2014 Use one of the registered provider ids (see the providers list), then retry.",
       "cli_exit_code": 70,
-      "note": "the span error record carries the message only (no typed error_code); the typed code is the CLI stderr/exit status"
+      "note": "the typed code UNKNOWN_PROVIDER is in the CLI stderr and exit status 70; the span error record carries the message in `error`"
     },
     {
       "name": "mcp_pairs",
       "status": "PASS",
       "sample_lines": [
-        "{\"ts\":\"2026-10-24T02:16:18.152Z\",\"level\":\"info\",\"event\":\"adhd.stealth/list-providers.start\",\"service\":\"stealth-search\",\"role\":\"live-service\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"git_sha\":null},\"trace_id\":\"01M5NV3MEC0AJDTYCP746EPW9J\",\"pid\":70438,\"adhd.op\":\"stealth/list-providers\",\"adhd.transport\":\"mcp\",\"session_id\":\"a771aa2f-5bff-4b92-9dab-a8c8de5b658f\",\"worktree\":\"none\",\"release.artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"span_id\":\"e7ba35e1d5b5df20\",\"parent_span_id\":null,\"otel_trace_id\":\"3518ac0e771af92faa3201d0027989be\"}",
-        "{\"ts\":\"2026-10-24T02:16:18.153Z\",\"level\":\"info\",\"event\":\"adhd.stealth/list-providers.finish\",\"service\":\"stealth-search\",\"role\":\"live-service\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"git_sha\":null},\"trace_id\":\"01M5NV3MEC0AJDTYCP746EPW9J\",\"pid\":70438,\"adhd.op\":\"stealth/list-providers\",\"adhd.transport\":\"mcp\",\"session_id\":\"a771aa2f-5bff-4b92-9dab-a8c8de5b658f\",\"worktree\":\"none\",\"release.artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"span_id\":\"e7ba35e1d5b5df20\",\"parent_span_id\":null,\"otel_trace_id\":\"3518ac0e771af92faa3201d0027989be\",\"duration_ms\":1}",
-        "{\"ts\":\"2026-10-24T02:16:18.156Z\",\"level\":\"info\",\"event\":\"adhd.stealth/describe-provider.start\",\"service\":\"stealth-search\",\"role\":\"live-service\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"git_sha\":null},\"trace_id\":\"01M5NV3MFA8X6JBYPKVYJBZGXK\",\"pid\":70438,\"adhd.op\":\"stealth/describe-provider\",\"adhd.transport\":\"mcp\",\"session_id\":\"a771aa2f-5bff-4b92-9dab-a8c8de5b658f\",\"worktree\":\"none\",\"release.artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"span_id\":\"69711582a2f1b593\",\"parent_span_id\":null,\"otel_trace_id\":\"b94118e54d1b22adab61a6beed49e616\"}",
-        "{\"ts\":\"2026-10-24T02:16:18.156Z\",\"level\":\"info\",\"event\":\"adhd.stealth/describe-provider.finish\",\"service\":\"stealth-search\",\"role\":\"live-service\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"git_sha\":null},\"trace_id\":\"01M5NV3MFA8X6JBYPKVYJBZGXK\",\"pid\":70438,\"adhd.op\":\"stealth/describe-provider\",\"adhd.transport\":\"mcp\",\"session_id\":\"a771aa2f-5bff-4b92-9dab-a8c8de5b658f\",\"worktree\":\"none\",\"release.artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"span_id\":\"69711582a2f1b593\",\"parent_span_id\":null,\"otel_trace_id\":\"b94118e54d1b22adab61a6beed49e616\",\"duration_ms\":0}",
-        "{\"ts\":\"2026-10-24T02:16:18.158Z\",\"level\":\"info\",\"event\":\"adhd.stealth/tripwire-status.start\",\"service\":\"stealth-search\",\"role\":\"live-service\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"git_sha\":null},\"trace_id\":\"01M5NV3MFCBY28D99R84DJ9BX8\",\"pid\":70438,\"adhd.op\":\"stealth/tripwire-status\",\"adhd.transport\":\"mcp\",\"session_id\":\"a771aa2f-5bff-4b92-9dab-a8c8de5b658f\",\"worktree\":\"none\",\"release.artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"span_id\":\"e7adc943a8b26f44\",\"parent_span_id\":null,\"otel_trace_id\":\"ec214b461c93bcb0fe70a21dfdd2d43e\"}",
-        "{\"ts\":\"2026-10-24T02:16:18.158Z\",\"level\":\"info\",\"event\":\"adhd.stealth/tripwire-status.finish\",\"service\":\"stealth-search\",\"role\":\"live-service\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"git_sha\":null},\"trace_id\":\"01M5NV3MFCBY28D99R84DJ9BX8\",\"pid\":70438,\"adhd.op\":\"stealth/tripwire-status\",\"adhd.transport\":\"mcp\",\"session_id\":\"a771aa2f-5bff-4b92-9dab-a8c8de5b658f\",\"worktree\":\"none\",\"release.artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"span_id\":\"e7adc943a8b26f44\",\"parent_span_id\":null,\"otel_trace_id\":\"ec214b461c93bcb0fe70a21dfdd2d43e\",\"duration_ms\":0}",
-        "{\"ts\":\"2026-10-24T02:16:18.163Z\",\"level\":\"info\",\"event\":\"adhd.stealth/chrome-status.start\",\"service\":\"stealth-search\",\"role\":\"live-service\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"git_sha\":null},\"trace_id\":\"01M5NV3MFFYMGDWGBDNGDGCV4V\",\"pid\":70438,\"adhd.op\":\"stealth/chrome-status\",\"adhd.transport\":\"mcp\",\"session_id\":\"a771aa2f-5bff-4b92-9dab-a8c8de5b658f\",\"worktree\":\"none\",\"release.artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"span_id\":\"27b4884843fcf733\",\"parent_span_id\":null,\"otel_trace_id\":\"b5a379a3a2a88ca9885acb3e20603415\"}",
-        "{\"ts\":\"2026-10-24T02:16:18.164Z\",\"level\":\"info\",\"event\":\"adhd.stealth/chrome-status.finish\",\"service\":\"stealth-search\",\"role\":\"live-service\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"git_sha\":null},\"trace_id\":\"01M5NV3MFFYMGDWGBDNGDGCV4V\",\"pid\":70438,\"adhd.op\":\"stealth/chrome-status\",\"adhd.transport\":\"mcp\",\"session_id\":\"a771aa2f-5bff-4b92-9dab-a8c8de5b658f\",\"worktree\":\"none\",\"release.artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"span_id\":\"27b4884843fcf733\",\"parent_span_id\":null,\"otel_trace_id\":\"b5a379a3a2a88ca9885acb3e20603415\",\"duration_ms\":2}"
+        "{\"ts\":\"2026-10-24T10:41:11.174Z\",\"level\":\"info\",\"event\":\"adhd.stealth/list-providers.start\",\"service\":\"stealth-search\",\"role\":\"live-service\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\"},\"trace_id\":\"01M5PR03F75762BZHQ922R7EV2\",\"pid\":43053,\"adhd.op\":\"stealth/list-providers\",\"adhd.transport\":\"mcp\",\"session_id\":\"e48e9684-d891-4caf-ad51-5d51f6c453c2\",\"worktree\":\"linked\",\"release.git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\",\"release.artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"span_id\":\"3ad07d4592f05da4\",\"parent_span_id\":null,\"otel_trace_id\":\"38aafd21716567b66b295245a9b09f67\"}",
+        "{\"ts\":\"2026-10-24T10:41:11.175Z\",\"level\":\"info\",\"event\":\"adhd.stealth/list-providers.finish\",\"service\":\"stealth-search\",\"role\":\"live-service\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\"},\"trace_id\":\"01M5PR03F75762BZHQ922R7EV2\",\"pid\":43053,\"adhd.op\":\"stealth/list-providers\",\"adhd.transport\":\"mcp\",\"session_id\":\"e48e9684-d891-4caf-ad51-5d51f6c453c2\",\"worktree\":\"linked\",\"release.git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\",\"release.artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"span_id\":\"3ad07d4592f05da4\",\"parent_span_id\":null,\"otel_trace_id\":\"38aafd21716567b66b295245a9b09f67\",\"duration_ms\":1}",
+        "{\"ts\":\"2026-10-24T10:41:11.178Z\",\"level\":\"info\",\"event\":\"adhd.stealth/describe-provider.start\",\"service\":\"stealth-search\",\"role\":\"live-service\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\"},\"trace_id\":\"01M5PR03G9EXR9T0DF7EYRN97E\",\"pid\":43053,\"adhd.op\":\"stealth/describe-provider\",\"adhd.transport\":\"mcp\",\"session_id\":\"e48e9684-d891-4caf-ad51-5d51f6c453c2\",\"worktree\":\"linked\",\"release.git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\",\"release.artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"span_id\":\"47ad250a277d1b92\",\"parent_span_id\":null,\"otel_trace_id\":\"5c090c79630b0e305f6d2ec095fa7953\"}",
+        "{\"ts\":\"2026-10-24T10:41:11.178Z\",\"level\":\"info\",\"event\":\"adhd.stealth/describe-provider.finish\",\"service\":\"stealth-search\",\"role\":\"live-service\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\"},\"trace_id\":\"01M5PR03G9EXR9T0DF7EYRN97E\",\"pid\":43053,\"adhd.op\":\"stealth/describe-provider\",\"adhd.transport\":\"mcp\",\"session_id\":\"e48e9684-d891-4caf-ad51-5d51f6c453c2\",\"worktree\":\"linked\",\"release.git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\",\"release.artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"span_id\":\"47ad250a277d1b92\",\"parent_span_id\":null,\"otel_trace_id\":\"5c090c79630b0e305f6d2ec095fa7953\",\"duration_ms\":0}",
+        "{\"ts\":\"2026-10-24T10:41:11.181Z\",\"level\":\"info\",\"event\":\"adhd.stealth/tripwire-status.start\",\"service\":\"stealth-search\",\"role\":\"live-service\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\"},\"trace_id\":\"01M5PR03GBEYN05YW44M4HTZVE\",\"pid\":43053,\"adhd.op\":\"stealth/tripwire-status\",\"adhd.transport\":\"mcp\",\"session_id\":\"e48e9684-d891-4caf-ad51-5d51f6c453c2\",\"worktree\":\"linked\",\"release.git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\",\"release.artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"span_id\":\"cac476003afad2cb\",\"parent_span_id\":null,\"otel_trace_id\":\"8a0786f49c498c59ae704170958c1b4f\"}",
+        "{\"ts\":\"2026-10-24T10:41:11.181Z\",\"level\":\"info\",\"event\":\"adhd.stealth/tripwire-status.finish\",\"service\":\"stealth-search\",\"role\":\"live-service\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\"},\"trace_id\":\"01M5PR03GBEYN05YW44M4HTZVE\",\"pid\":43053,\"adhd.op\":\"stealth/tripwire-status\",\"adhd.transport\":\"mcp\",\"session_id\":\"e48e9684-d891-4caf-ad51-5d51f6c453c2\",\"worktree\":\"linked\",\"release.git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\",\"release.artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"span_id\":\"cac476003afad2cb\",\"parent_span_id\":null,\"otel_trace_id\":\"8a0786f49c498c59ae704170958c1b4f\",\"duration_ms\":0}",
+        "{\"ts\":\"2026-10-24T10:41:11.188Z\",\"level\":\"info\",\"event\":\"adhd.stealth/chrome-status.start\",\"service\":\"stealth-search\",\"role\":\"live-service\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\"},\"trace_id\":\"01M5PR03GERGPR7HSFES1TX8DG\",\"pid\":43053,\"adhd.op\":\"stealth/chrome-status\",\"adhd.transport\":\"mcp\",\"session_id\":\"e48e9684-d891-4caf-ad51-5d51f6c453c2\",\"worktree\":\"linked\",\"release.git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\",\"release.artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"span_id\":\"31e2b2146fd88f97\",\"parent_span_id\":null,\"otel_trace_id\":\"d3fd631b34f031111551f5e4950bb569\"}",
+        "{\"ts\":\"2026-10-24T10:41:11.190Z\",\"level\":\"info\",\"event\":\"adhd.stealth/chrome-status.finish\",\"service\":\"stealth-search\",\"role\":\"live-service\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\"},\"trace_id\":\"01M5PR03GERGPR7HSFES1TX8DG\",\"pid\":43053,\"adhd.op\":\"stealth/chrome-status\",\"adhd.transport\":\"mcp\",\"session_id\":\"e48e9684-d891-4caf-ad51-5d51f6c453c2\",\"worktree\":\"linked\",\"release.git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\",\"release.artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"span_id\":\"31e2b2146fd88f97\",\"parent_span_id\":null,\"otel_trace_id\":\"d3fd631b34f031111551f5e4950bb569\",\"duration_ms\":2}"
       ],
       "log_files": [
-        "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/c8273d10-b319-41df-99f1-5458418387f6/scratchpad/tmp.4WjXTioW7u/.adhd/sox-ecosystem/stealth-search/logs/stealth-search.live-service-2026-10-24.jsonl"
+        "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/c8273d10-b319-41df-99f1-5458418387f6/scratchpad/tlv2/home.qZ6xxi/.adhd/sox-ecosystem/stealth-search/logs/stealth-search.live-service-2026-10-24.jsonl"
       ]
     },
     {
       "name": "mcp_forced_error",
       "status": "PASS",
       "sample_lines": [
-        "{\"ts\":\"2026-10-24T02:16:18.165Z\",\"level\":\"info\",\"event\":\"adhd.stealth/describe-provider.start\",\"service\":\"stealth-search\",\"role\":\"live-service\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"git_sha\":null},\"trace_id\":\"01M5NV3MFN17TKAGRKNSF13B3F\",\"pid\":70438,\"adhd.op\":\"stealth/describe-provider\",\"adhd.transport\":\"mcp\",\"session_id\":\"a771aa2f-5bff-4b92-9dab-a8c8de5b658f\",\"worktree\":\"none\",\"release.artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"span_id\":\"0f27f14e75372eb4\",\"parent_span_id\":null,\"otel_trace_id\":\"05c45aff9afe0fd4d1b9449d40146c16\"}",
-        "{\"ts\":\"2026-10-24T02:16:18.166Z\",\"level\":\"error\",\"event\":\"adhd.stealth/describe-provider.error\",\"service\":\"stealth-search\",\"role\":\"live-service\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"git_sha\":null},\"trace_id\":\"01M5NV3MFN17TKAGRKNSF13B3F\",\"pid\":70438,\"adhd.op\":\"stealth/describe-provider\",\"adhd.transport\":\"mcp\",\"session_id\":\"a771aa2f-5bff-4b92-9dab-a8c8de5b658f\",\"worktree\":\"none\",\"release.artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"span_id\":\"0f27f14e75372eb4\",\"parent_span_id\":null,\"otel_trace_id\":\"05c45aff9afe0fd4d1b9449d40146c16\",\"duration_ms\":0,\"error\":\"Unknown provider \\\"nope\\\". Available: duckduckgo, google, arxiv, npm, github, maven, wikipedia, crates, pypi, mdn, stackoverflow, fetch — Use one of the registered provider ids (see the providers list), then retry.\"}"
+        "{\"ts\":\"2026-10-24T10:41:11.191Z\",\"level\":\"info\",\"event\":\"adhd.stealth/describe-provider.start\",\"service\":\"stealth-search\",\"role\":\"live-service\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\"},\"trace_id\":\"01M5PR03GQ1DMYJ9P0CAP6YWHA\",\"pid\":43053,\"adhd.op\":\"stealth/describe-provider\",\"adhd.transport\":\"mcp\",\"session_id\":\"e48e9684-d891-4caf-ad51-5d51f6c453c2\",\"worktree\":\"linked\",\"release.git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\",\"release.artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"span_id\":\"b784626f7eb192b8\",\"parent_span_id\":null,\"otel_trace_id\":\"8067849233f7859a173aa749bf081b37\"}",
+        "{\"ts\":\"2026-10-24T10:41:11.191Z\",\"level\":\"error\",\"event\":\"adhd.stealth/describe-provider.error\",\"service\":\"stealth-search\",\"role\":\"live-service\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\"},\"trace_id\":\"01M5PR03GQ1DMYJ9P0CAP6YWHA\",\"pid\":43053,\"adhd.op\":\"stealth/describe-provider\",\"adhd.transport\":\"mcp\",\"session_id\":\"e48e9684-d891-4caf-ad51-5d51f6c453c2\",\"worktree\":\"linked\",\"release.git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\",\"release.artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"span_id\":\"b784626f7eb192b8\",\"parent_span_id\":null,\"otel_trace_id\":\"8067849233f7859a173aa749bf081b37\",\"duration_ms\":0,\"error\":\"UNKNOWN_PROVIDER: Unknown provider \\\"nope\\\". Available: duckduckgo, google, arxiv, npm, github, maven, wikipedia, crates, pypi, mdn, stackoverflow, fetch \u2014 Use one of the registered provider ids (see the providers list), then retry.\"}"
       ],
       "log_files": [
-        "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/c8273d10-b319-41df-99f1-5458418387f6/scratchpad/tmp.4WjXTioW7u/.adhd/sox-ecosystem/stealth-search/logs/stealth-search.live-service-2026-10-24.jsonl"
+        "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/c8273d10-b319-41df-99f1-5458418387f6/scratchpad/tlv2/home.qZ6xxi/.adhd/sox-ecosystem/stealth-search/logs/stealth-search.live-service-2026-10-24.jsonl"
       ],
-      "jsonrpc_rejection": "MCP error -32603: Unknown provider \"nope\". Available: duckduckgo, google, arxiv, npm, github, maven, wikipedia, crates, pypi, mdn, stackoverflow, fetch — Use one of the registered provider ids (see the providers list), then retry.",
-      "jsonrpc_code": -32603,
-      "note": "StealthSearchError over MCP is a JSON-RPC rejection (-32603), not isError; the span error record carries the message only"
+      "mcp_result_is_error": true,
+      "mcp_result_content": "[{\"type\":\"text\",\"text\":\"invalid_argument: UNKNOWN_PROVIDER: Unknown provider \\\"nope\\\". Available: duckduckgo, google, arxiv, npm, github, maven, wikipedia, crates, pypi, mdn, stackoverflow, fetch \u2014 Use one of the registered provider ids (see the providers list), then retry.\"}]",
+      "mcp_result_structured": null,
+      "note": "over MCP a StealthSearchError is an isError tool result carrying the typed code UNKNOWN_PROVIDER, not a JSON-RPC rejection; the span .error record error field begins with UNKNOWN_PROVIDER"
     },
     {
       "name": "transport_attr",
       "status": "PASS",
       "sample_lines": [
-        "{\"ts\":\"2026-10-24T02:12:06.858Z\",\"level\":\"info\",\"event\":\"adhd.stealth/list-providers.start\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:9577e3912e1d900bd124d7bc03f64f58f27f267901336211a0fb2b509a8c9361\",\"git_sha\":\"9db13b7e0f3770777d4399f580a8f820963aaf4c\"},\"trace_id\":\"01M5NTVZ1ENHTG2QAS31BDFVPF\",\"pid\":64769,\"adhd.op\":\"stealth/list-providers\",\"adhd.transport\":\"cli\",\"session_id\":\"c43242e0-d8fe-4f49-9407-4615d5b1c592\",\"worktree\":\"linked\",\"release.git_sha\":\"9db13b7e0f3770777d4399f580a8f820963aaf4c\",\"release.artifact_sha256\":\"sha256:9577e3912e1d900bd124d7bc03f64f58f27f267901336211a0fb2b509a8c9361\",\"span_id\":\"ff45c30822abc9f7\",\"parent_span_id\":null,\"otel_trace_id\":\"d6262a178bb22afe6d6a1661edaa7c16\"}",
-        "{\"ts\":\"2026-10-24T02:16:18.152Z\",\"level\":\"info\",\"event\":\"adhd.stealth/list-providers.start\",\"service\":\"stealth-search\",\"role\":\"live-service\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"git_sha\":null},\"trace_id\":\"01M5NV3MEC0AJDTYCP746EPW9J\",\"pid\":70438,\"adhd.op\":\"stealth/list-providers\",\"adhd.transport\":\"mcp\",\"session_id\":\"a771aa2f-5bff-4b92-9dab-a8c8de5b658f\",\"worktree\":\"none\",\"release.artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"span_id\":\"e7ba35e1d5b5df20\",\"parent_span_id\":null,\"otel_trace_id\":\"3518ac0e771af92faa3201d0027989be\"}"
+        "{\"ts\":\"2026-10-24T10:41:07.242Z\",\"level\":\"info\",\"event\":\"adhd.stealth/list-providers.finish\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\"},\"trace_id\":\"01M5PQZZMB78YYCE1N897QQBXN\",\"pid\":42270,\"adhd.op\":\"stealth/list-providers\",\"adhd.transport\":\"cli\",\"session_id\":\"5b326a27-4037-4130-8b1e-c7dd1071c710\",\"worktree\":\"linked\",\"release.git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\",\"release.artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"span_id\":\"27ed120900af6e61\",\"parent_span_id\":null,\"otel_trace_id\":\"1f35667073ca36d858352a69e638c79b\",\"duration_ms\":2}",
+        "{\"ts\":\"2026-10-24T10:41:11.175Z\",\"level\":\"info\",\"event\":\"adhd.stealth/list-providers.finish\",\"service\":\"stealth-search\",\"role\":\"live-service\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\"},\"trace_id\":\"01M5PR03F75762BZHQ922R7EV2\",\"pid\":43053,\"adhd.op\":\"stealth/list-providers\",\"adhd.transport\":\"mcp\",\"session_id\":\"e48e9684-d891-4caf-ad51-5d51f6c453c2\",\"worktree\":\"linked\",\"release.git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\",\"release.artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"span_id\":\"3ad07d4592f05da4\",\"parent_span_id\":null,\"otel_trace_id\":\"38aafd21716567b66b295245a9b09f67\",\"duration_ms\":1}"
       ],
       "log_files": [
-        "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/c8273d10-b319-41df-99f1-5458418387f6/scratchpad/tmp.4WjXTioW7u/.adhd/sox-ecosystem/stealth-search/logs/stealth-search.cli-2026-10-24.jsonl",
-        "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/c8273d10-b319-41df-99f1-5458418387f6/scratchpad/tmp.4WjXTioW7u/.adhd/sox-ecosystem/stealth-search/logs/stealth-search.live-service-2026-10-24.jsonl"
+        "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/c8273d10-b319-41df-99f1-5458418387f6/scratchpad/tlv2/home.qZ6xxi/.adhd/sox-ecosystem/stealth-search/logs/stealth-search.cli-2026-10-24.jsonl",
+        "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/c8273d10-b319-41df-99f1-5458418387f6/scratchpad/tlv2/home.qZ6xxi/.adhd/sox-ecosystem/stealth-search/logs/stealth-search.live-service-2026-10-24.jsonl"
       ]
     },
     {
       "name": "role_attr",
       "status": "PASS",
       "sample_lines": [
-        "{\"ts\":\"2026-10-24T02:12:06.859Z\",\"level\":\"info\",\"event\":\"adhd.stealth/list-providers.finish\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:9577e3912e1d900bd124d7bc03f64f58f27f267901336211a0fb2b509a8c9361\",\"git_sha\":\"9db13b7e0f3770777d4399f580a8f820963aaf4c\"},\"trace_id\":\"01M5NTVZ1ENHTG2QAS31BDFVPF\",\"pid\":64769,\"adhd.op\":\"stealth/list-providers\",\"adhd.transport\":\"cli\",\"session_id\":\"c43242e0-d8fe-4f49-9407-4615d5b1c592\",\"worktree\":\"linked\",\"release.git_sha\":\"9db13b7e0f3770777d4399f580a8f820963aaf4c\",\"release.artifact_sha256\":\"sha256:9577e3912e1d900bd124d7bc03f64f58f27f267901336211a0fb2b509a8c9361\",\"span_id\":\"ff45c30822abc9f7\",\"parent_span_id\":null,\"otel_trace_id\":\"d6262a178bb22afe6d6a1661edaa7c16\",\"duration_ms\":2}",
-        "{\"ts\":\"2026-10-24T02:16:18.153Z\",\"level\":\"info\",\"event\":\"adhd.stealth/list-providers.finish\",\"service\":\"stealth-search\",\"role\":\"live-service\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"git_sha\":null},\"trace_id\":\"01M5NV3MEC0AJDTYCP746EPW9J\",\"pid\":70438,\"adhd.op\":\"stealth/list-providers\",\"adhd.transport\":\"mcp\",\"session_id\":\"a771aa2f-5bff-4b92-9dab-a8c8de5b658f\",\"worktree\":\"none\",\"release.artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"span_id\":\"e7ba35e1d5b5df20\",\"parent_span_id\":null,\"otel_trace_id\":\"3518ac0e771af92faa3201d0027989be\",\"duration_ms\":1}"
+        "{\"ts\":\"2026-10-24T10:41:07.242Z\",\"level\":\"info\",\"event\":\"adhd.stealth/list-providers.finish\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\"},\"trace_id\":\"01M5PQZZMB78YYCE1N897QQBXN\",\"pid\":42270,\"adhd.op\":\"stealth/list-providers\",\"adhd.transport\":\"cli\",\"session_id\":\"5b326a27-4037-4130-8b1e-c7dd1071c710\",\"worktree\":\"linked\",\"release.git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\",\"release.artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"span_id\":\"27ed120900af6e61\",\"parent_span_id\":null,\"otel_trace_id\":\"1f35667073ca36d858352a69e638c79b\",\"duration_ms\":2}",
+        "{\"ts\":\"2026-10-24T10:41:11.175Z\",\"level\":\"info\",\"event\":\"adhd.stealth/list-providers.finish\",\"service\":\"stealth-search\",\"role\":\"live-service\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\"},\"trace_id\":\"01M5PR03F75762BZHQ922R7EV2\",\"pid\":43053,\"adhd.op\":\"stealth/list-providers\",\"adhd.transport\":\"mcp\",\"session_id\":\"e48e9684-d891-4caf-ad51-5d51f6c453c2\",\"worktree\":\"linked\",\"release.git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\",\"release.artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"span_id\":\"3ad07d4592f05da4\",\"parent_span_id\":null,\"otel_trace_id\":\"38aafd21716567b66b295245a9b09f67\",\"duration_ms\":1}"
       ],
       "log_files": [
-        "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/c8273d10-b319-41df-99f1-5458418387f6/scratchpad/tmp.4WjXTioW7u/.adhd/sox-ecosystem/stealth-search/logs/stealth-search.cli-2026-10-24.jsonl",
-        "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/c8273d10-b319-41df-99f1-5458418387f6/scratchpad/tmp.4WjXTioW7u/.adhd/sox-ecosystem/stealth-search/logs/stealth-search.live-service-2026-10-24.jsonl"
+        "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/c8273d10-b319-41df-99f1-5458418387f6/scratchpad/tlv2/home.qZ6xxi/.adhd/sox-ecosystem/stealth-search/logs/stealth-search.cli-2026-10-24.jsonl",
+        "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/c8273d10-b319-41df-99f1-5458418387f6/scratchpad/tlv2/home.qZ6xxi/.adhd/sox-ecosystem/stealth-search/logs/stealth-search.live-service-2026-10-24.jsonl"
       ]
     },
     {
       "name": "no_apigen_events",
       "status": "PASS",
       "sample_lines": [
-        "{\"ts\":\"2026-10-24T02:12:07.569Z\",\"level\":\"info\",\"event\":\"adhd.stealth/chrome-status.start\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:9577e3912e1d900bd124d7bc03f64f58f27f267901336211a0fb2b509a8c9361\",\"git_sha\":\"9db13b7e0f3770777d4399f580a8f820963aaf4c\"},\"trace_id\":\"01M5NTVZQEYMYDX36K2SGQC9A3\",\"pid\":64956,\"adhd.op\":\"stealth/chrome-status\",\"adhd.transport\":\"cli\",\"session_id\":\"45fa577f-276c-4e8f-acdd-2ffc3ada869c\",\"worktree\":\"linked\",\"release.git_sha\":\"9db13b7e0f3770777d4399f580a8f820963aaf4c\",\"release.artifact_sha256\":\"sha256:9577e3912e1d900bd124d7bc03f64f58f27f267901336211a0fb2b509a8c9361\",\"span_id\":\"31ec085cfa6f4021\",\"parent_span_id\":null,\"otel_trace_id\":\"7a81bb6250ba2da048ba74c5d859a780\"}",
-        "{\"ts\":\"2026-10-24T02:16:18.163Z\",\"level\":\"info\",\"event\":\"adhd.stealth/chrome-status.start\",\"service\":\"stealth-search\",\"role\":\"live-service\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"git_sha\":null},\"trace_id\":\"01M5NV3MFFYMGDWGBDNGDGCV4V\",\"pid\":70438,\"adhd.op\":\"stealth/chrome-status\",\"adhd.transport\":\"mcp\",\"session_id\":\"a771aa2f-5bff-4b92-9dab-a8c8de5b658f\",\"worktree\":\"none\",\"release.artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"span_id\":\"27b4884843fcf733\",\"parent_span_id\":null,\"otel_trace_id\":\"b5a379a3a2a88ca9885acb3e20603415\"}"
+        "{\"ts\":\"2026-10-24T10:41:07.240Z\",\"level\":\"info\",\"event\":\"adhd.stealth/list-providers.start\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\"},\"trace_id\":\"01M5PQZZMB78YYCE1N897QQBXN\",\"pid\":42270,\"adhd.op\":\"stealth/list-providers\",\"adhd.transport\":\"cli\",\"session_id\":\"5b326a27-4037-4130-8b1e-c7dd1071c710\",\"worktree\":\"linked\",\"release.git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\",\"release.artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"span_id\":\"27ed120900af6e61\",\"parent_span_id\":null,\"otel_trace_id\":\"1f35667073ca36d858352a69e638c79b\"}",
+        "{\"ts\":\"2026-10-24T10:41:07.242Z\",\"level\":\"info\",\"event\":\"adhd.stealth/list-providers.finish\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\"},\"trace_id\":\"01M5PQZZMB78YYCE1N897QQBXN\",\"pid\":42270,\"adhd.op\":\"stealth/list-providers\",\"adhd.transport\":\"cli\",\"session_id\":\"5b326a27-4037-4130-8b1e-c7dd1071c710\",\"worktree\":\"linked\",\"release.git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\",\"release.artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"span_id\":\"27ed120900af6e61\",\"parent_span_id\":null,\"otel_trace_id\":\"1f35667073ca36d858352a69e638c79b\",\"duration_ms\":2}",
+        "{\"ts\":\"2026-10-24T10:41:11.174Z\",\"level\":\"info\",\"event\":\"adhd.stealth/list-providers.start\",\"service\":\"stealth-search\",\"role\":\"live-service\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\"},\"trace_id\":\"01M5PR03F75762BZHQ922R7EV2\",\"pid\":43053,\"adhd.op\":\"stealth/list-providers\",\"adhd.transport\":\"mcp\",\"session_id\":\"e48e9684-d891-4caf-ad51-5d51f6c453c2\",\"worktree\":\"linked\",\"release.git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\",\"release.artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"span_id\":\"3ad07d4592f05da4\",\"parent_span_id\":null,\"otel_trace_id\":\"38aafd21716567b66b295245a9b09f67\"}",
+        "{\"ts\":\"2026-10-24T10:41:11.175Z\",\"level\":\"info\",\"event\":\"adhd.stealth/list-providers.finish\",\"service\":\"stealth-search\",\"role\":\"live-service\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\"},\"trace_id\":\"01M5PR03F75762BZHQ922R7EV2\",\"pid\":43053,\"adhd.op\":\"stealth/list-providers\",\"adhd.transport\":\"mcp\",\"session_id\":\"e48e9684-d891-4caf-ad51-5d51f6c453c2\",\"worktree\":\"linked\",\"release.git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\",\"release.artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"span_id\":\"3ad07d4592f05da4\",\"parent_span_id\":null,\"otel_trace_id\":\"38aafd21716567b66b295245a9b09f67\",\"duration_ms\":1}"
       ],
       "log_files": [
-        "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/c8273d10-b319-41df-99f1-5458418387f6/scratchpad/tmp.4WjXTioW7u/.adhd/sox-ecosystem/stealth-search/logs/stealth-search.cli-2026-10-24.jsonl",
-        "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/c8273d10-b319-41df-99f1-5458418387f6/scratchpad/tmp.4WjXTioW7u/.adhd/sox-ecosystem/stealth-search/logs/stealth-search.live-service-2026-10-24.jsonl",
-        "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/c8273d10-b319-41df-99f1-5458418387f6/scratchpad/tmp.4WjXTioW7u/logs/stealth-search.cli-2026-10-24.jsonl"
+        "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/c8273d10-b319-41df-99f1-5458418387f6/scratchpad/tlv2/home.qZ6xxi/.adhd/sox-ecosystem/stealth-search/logs/stealth-search.cli-2026-10-24.jsonl",
+        "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/c8273d10-b319-41df-99f1-5458418387f6/scratchpad/tlv2/home.qZ6xxi/.adhd/sox-ecosystem/stealth-search/logs/stealth-search.live-service-2026-10-24.jsonl"
       ],
       "apigen_event_count": 0,
       "records_scanned": 30,
+      "log_files_scanned": [
+        "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/c8273d10-b319-41df-99f1-5458418387f6/scratchpad/tlv2/home.qZ6xxi/.adhd/sox-ecosystem/stealth-search/logs/stealth-search.cli-2026-10-24.jsonl",
+        "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/c8273d10-b319-41df-99f1-5458418387f6/scratchpad/tlv2/home.qZ6xxi/.adhd/sox-ecosystem/stealth-search/logs/stealth-search.live-service-2026-10-24.jsonl",
+        "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/c8273d10-b319-41df-99f1-5458418387f6/scratchpad/tlv2/home.qZ6xxi/logs/stealth-search.cli-2026-10-24.jsonl"
+      ],
       "twin_event_count": 4,
       "twin_events": [
-        "{\"ts\":\"2026-10-24T02:12:07.807Z\",\"level\":\"error\",\"event\":\"adhd.op.error\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:9577e3912e1d900bd124d7bc03f64f58f27f267901336211a0fb2b509a8c9361\",\"git_sha\":\"9db13b7e0f3770777d4399f580a8f820963aaf4c\"},\"trace_id\":\"01M5NTVZZ1P1FFK12PDD9J1CWT\",\"pid\":65017,\"adhd.op\":\"stealth/describe-provider\",\"adhd.transport\":\"cli\",\"session_id\":\"5cb7e5c9-e82b-41c9-b569-cba6e5953d26\",\"worktree\":\"linked\",\"release.git_sha\":\"9db13b7e0f3770777d4399f580a8f820963aaf4c\",\"release.artifact_sha256\":\"sha256:9577e3912e1d900bd124d7bc03f64f58f27f267901336211a0fb2b509a8c9361\",\"span\":\"adhd.stealth/describe-provider\",\"duration_ms\":30,\"err\":\"Unknown provider \\\"nope\\\". Available: duckduckgo, google, arxiv, npm, github, maven, wikipedia, crates, pypi, mdn, stackoverflow, fetch — Use one of the registered provider ids (see the providers list), then retry.\"}",
-        "{\"ts\":\"2026-10-24T02:12:08.025Z\",\"level\":\"error\",\"event\":\"adhd.op.error\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:9577e3912e1d900bd124d7bc03f64f58f27f267901336211a0fb2b509a8c9361\",\"git_sha\":\"9db13b7e0f3770777d4399f580a8f820963aaf4c\"},\"trace_id\":\"01M5NTW06A983P4SDTJEE291D0\",\"pid\":65078,\"adhd.op\":\"stealth/chrome-status\",\"adhd.transport\":\"cli\",\"session_id\":\"096c9738-728a-408a-b45c-580211cd3591\",\"worktree\":\"linked\",\"release.git_sha\":\"9db13b7e0f3770777d4399f580a8f820963aaf4c\",\"release.artifact_sha256\":\"sha256:9577e3912e1d900bd124d7bc03f64f58f27f267901336211a0fb2b509a8c9361\",\"span\":\"adhd.stealth/chrome-status\",\"duration_ms\":15,\"err\":\"--cdp-port: expected an integer, got \\\"abc\\\" — Run the command with --help and pass a valid value for the flag.\"}",
-        "{\"ts\":\"2026-10-24T02:16:18.165Z\",\"level\":\"error\",\"event\":\"adhd.op.error\",\"service\":\"stealth-search\",\"role\":\"live-service\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"git_sha\":null},\"trace_id\":\"01M5NV3MFN17TKAGRKNSF13B3F\",\"pid\":70438,\"adhd.op\":\"stealth/describe-provider\",\"adhd.transport\":\"mcp\",\"session_id\":\"a771aa2f-5bff-4b92-9dab-a8c8de5b658f\",\"worktree\":\"none\",\"release.artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"span\":\"adhd.stealth/describe-provider\",\"duration_ms\":0,\"err\":\"Unknown provider \\\"nope\\\". Available: duckduckgo, google, arxiv, npm, github, maven, wikipedia, crates, pypi, mdn, stackoverflow, fetch — Use one of the registered provider ids (see the providers list), then retry.\"}",
-        "{\"ts\":\"2026-10-24T02:12:40.587Z\",\"level\":\"error\",\"event\":\"adhd.op.error\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:9577e3912e1d900bd124d7bc03f64f58f27f267901336211a0fb2b509a8c9361\",\"git_sha\":\"9db13b7e0f3770777d4399f580a8f820963aaf4c\"},\"trace_id\":\"01M5NTWZZCHGRD1BWES7EGX53T\",\"pid\":65903,\"adhd.op\":\"stealth/describe-provider\",\"adhd.transport\":\"cli\",\"session_id\":\"35585151-06d8-489f-857c-01e9747e0575\",\"worktree\":\"linked\",\"release.git_sha\":\"9db13b7e0f3770777d4399f580a8f820963aaf4c\",\"release.artifact_sha256\":\"sha256:9577e3912e1d900bd124d7bc03f64f58f27f267901336211a0fb2b509a8c9361\",\"span\":\"adhd.stealth/describe-provider\",\"duration_ms\":31,\"err\":\"Unknown provider \\\"nope\\\". Available: duckduckgo, google, arxiv, npm, github, maven, wikipedia, crates, pypi, mdn, stackoverflow, fetch — Use one of the registered provider ids (see the providers list), then retry.\"}"
+        "{\"ts\":\"2026-10-24T10:41:08.214Z\",\"level\":\"error\",\"event\":\"adhd.op.error\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\"},\"trace_id\":\"01M5PR00HSCHYAGWQT5R60BNY5\",\"pid\":42525,\"adhd.op\":\"stealth/describe-provider\",\"adhd.transport\":\"cli\",\"session_id\":\"5ad0d707-be67-4c69-964a-f058c73928c1\",\"worktree\":\"linked\",\"release.git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\",\"release.artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"span\":\"adhd.stealth/describe-provider\",\"duration_ms\":61,\"err\":\"Unknown provider \\\"nope\\\". Available: duckduckgo, google, arxiv, npm, github, maven, wikipedia, crates, pypi, mdn, stackoverflow, fetch \u2014 Use one of the registered provider ids (see the providers list), then retry.\"}",
+        "{\"ts\":\"2026-10-24T10:41:08.427Z\",\"level\":\"error\",\"event\":\"adhd.op.error\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\"},\"trace_id\":\"01M5PR00SSPQTEMYNMS02WSV5Y\",\"pid\":42589,\"adhd.op\":\"stealth/chrome-status\",\"adhd.transport\":\"cli\",\"session_id\":\"c31aa233-bcb6-4ef7-be71-2a0b2eda170c\",\"worktree\":\"linked\",\"release.git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\",\"release.artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"span\":\"adhd.stealth/chrome-status\",\"duration_ms\":18,\"err\":\"--cdp-port: expected an integer, got \\\"abc\\\" \u2014 Run the command with --help and pass a valid value for the flag.\"}",
+        "{\"ts\":\"2026-10-24T10:41:11.191Z\",\"level\":\"error\",\"event\":\"adhd.op.error\",\"service\":\"stealth-search\",\"role\":\"live-service\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\"},\"trace_id\":\"01M5PR03GQ1DMYJ9P0CAP6YWHA\",\"pid\":43053,\"adhd.op\":\"stealth/describe-provider\",\"adhd.transport\":\"mcp\",\"session_id\":\"e48e9684-d891-4caf-ad51-5d51f6c453c2\",\"worktree\":\"linked\",\"release.git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\",\"release.artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"span\":\"adhd.stealth/describe-provider\",\"duration_ms\":0,\"err\":\"UNKNOWN_PROVIDER: Unknown provider \\\"nope\\\". Available: duckduckgo, google, arxiv, npm, github, maven, wikipedia, crates, pypi, mdn, stackoverflow, fetch \u2014 Use one of the registered provider ids (see the providers list), then retry.\"}",
+        "{\"ts\":\"2026-10-24T10:41:10.857Z\",\"level\":\"error\",\"event\":\"adhd.op.error\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\"},\"trace_id\":\"01M5PR035BDCBGSTB26G6S4ZNJ\",\"pid\":42991,\"adhd.op\":\"stealth/describe-provider\",\"adhd.transport\":\"cli\",\"session_id\":\"d871de9e-3479-4f51-98fa-3bb5e13c94a7\",\"worktree\":\"linked\",\"release.git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\",\"release.artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"span\":\"adhd.stealth/describe-provider\",\"duration_ms\":29,\"err\":\"Unknown provider \\\"nope\\\". Available: duckduckgo, google, arxiv, npm, github, maven, wikipedia, crates, pypi, mdn, stackoverflow, fetch \u2014 Use one of the registered provider ids (see the providers list), then retry.\"}"
       ]
     },
     {
       "name": "sink_dir",
       "status": "PASS",
       "sample_lines": [
-        "{\"ts\":\"2026-10-24T02:12:06.858Z\",\"level\":\"info\",\"event\":\"adhd.stealth/list-providers.start\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:9577e3912e1d900bd124d7bc03f64f58f27f267901336211a0fb2b509a8c9361\",\"git_sha\":\"9db13b7e0f3770777d4399f580a8f820963aaf4c\"},\"trace_id\":\"01M5NTVZ1ENHTG2QAS31BDFVPF\",\"pid\":64769,\"adhd.op\":\"stealth/list-providers\",\"adhd.transport\":\"cli\",\"session_id\":\"c43242e0-d8fe-4f49-9407-4615d5b1c592\",\"worktree\":\"linked\",\"release.git_sha\":\"9db13b7e0f3770777d4399f580a8f820963aaf4c\",\"release.artifact_sha256\":\"sha256:9577e3912e1d900bd124d7bc03f64f58f27f267901336211a0fb2b509a8c9361\",\"span_id\":\"ff45c30822abc9f7\",\"parent_span_id\":null,\"otel_trace_id\":\"d6262a178bb22afe6d6a1661edaa7c16\"}",
-        "{\"ts\":\"2026-10-24T02:16:18.152Z\",\"level\":\"info\",\"event\":\"adhd.stealth/list-providers.start\",\"service\":\"stealth-search\",\"role\":\"live-service\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"git_sha\":null},\"trace_id\":\"01M5NV3MEC0AJDTYCP746EPW9J\",\"pid\":70438,\"adhd.op\":\"stealth/list-providers\",\"adhd.transport\":\"mcp\",\"session_id\":\"a771aa2f-5bff-4b92-9dab-a8c8de5b658f\",\"worktree\":\"none\",\"release.artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"span_id\":\"e7ba35e1d5b5df20\",\"parent_span_id\":null,\"otel_trace_id\":\"3518ac0e771af92faa3201d0027989be\"}"
+        "{\"ts\":\"2026-10-24T10:41:07.240Z\",\"level\":\"info\",\"event\":\"adhd.stealth/list-providers.start\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\"},\"trace_id\":\"01M5PQZZMB78YYCE1N897QQBXN\",\"pid\":42270,\"adhd.op\":\"stealth/list-providers\",\"adhd.transport\":\"cli\",\"session_id\":\"5b326a27-4037-4130-8b1e-c7dd1071c710\",\"worktree\":\"linked\",\"release.git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\",\"release.artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"span_id\":\"27ed120900af6e61\",\"parent_span_id\":null,\"otel_trace_id\":\"1f35667073ca36d858352a69e638c79b\"}",
+        "{\"ts\":\"2026-10-24T10:41:07.242Z\",\"level\":\"info\",\"event\":\"adhd.stealth/list-providers.finish\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\"},\"trace_id\":\"01M5PQZZMB78YYCE1N897QQBXN\",\"pid\":42270,\"adhd.op\":\"stealth/list-providers\",\"adhd.transport\":\"cli\",\"session_id\":\"5b326a27-4037-4130-8b1e-c7dd1071c710\",\"worktree\":\"linked\",\"release.git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\",\"release.artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"span_id\":\"27ed120900af6e61\",\"parent_span_id\":null,\"otel_trace_id\":\"1f35667073ca36d858352a69e638c79b\",\"duration_ms\":2}",
+        "{\"ts\":\"2026-10-24T10:41:11.174Z\",\"level\":\"info\",\"event\":\"adhd.stealth/list-providers.start\",\"service\":\"stealth-search\",\"role\":\"live-service\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\"},\"trace_id\":\"01M5PR03F75762BZHQ922R7EV2\",\"pid\":43053,\"adhd.op\":\"stealth/list-providers\",\"adhd.transport\":\"mcp\",\"session_id\":\"e48e9684-d891-4caf-ad51-5d51f6c453c2\",\"worktree\":\"linked\",\"release.git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\",\"release.artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"span_id\":\"3ad07d4592f05da4\",\"parent_span_id\":null,\"otel_trace_id\":\"38aafd21716567b66b295245a9b09f67\"}",
+        "{\"ts\":\"2026-10-24T10:41:11.175Z\",\"level\":\"info\",\"event\":\"adhd.stealth/list-providers.finish\",\"service\":\"stealth-search\",\"role\":\"live-service\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\"},\"trace_id\":\"01M5PR03F75762BZHQ922R7EV2\",\"pid\":43053,\"adhd.op\":\"stealth/list-providers\",\"adhd.transport\":\"mcp\",\"session_id\":\"e48e9684-d891-4caf-ad51-5d51f6c453c2\",\"worktree\":\"linked\",\"release.git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\",\"release.artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"span_id\":\"3ad07d4592f05da4\",\"parent_span_id\":null,\"otel_trace_id\":\"38aafd21716567b66b295245a9b09f67\",\"duration_ms\":1}"
       ],
       "log_files": [
-        "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/c8273d10-b319-41df-99f1-5458418387f6/scratchpad/tmp.4WjXTioW7u/.adhd/sox-ecosystem/stealth-search/logs/stealth-search.cli-2026-10-24.jsonl",
-        "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/c8273d10-b319-41df-99f1-5458418387f6/scratchpad/tmp.4WjXTioW7u/.adhd/sox-ecosystem/stealth-search/logs/stealth-search.live-service-2026-10-24.jsonl"
+        "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/c8273d10-b319-41df-99f1-5458418387f6/scratchpad/tlv2/home.qZ6xxi/.adhd/sox-ecosystem/stealth-search/logs/stealth-search.cli-2026-10-24.jsonl",
+        "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/c8273d10-b319-41df-99f1-5458418387f6/scratchpad/tlv2/home.qZ6xxi/.adhd/sox-ecosystem/stealth-search/logs/stealth-search.live-service-2026-10-24.jsonl"
       ],
-      "sink_dir": "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/c8273d10-b319-41df-99f1-5458418387f6/scratchpad/tmp.4WjXTioW7u/.adhd/sox-ecosystem/stealth-search/logs",
+      "sink_dir": "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/c8273d10-b319-41df-99f1-5458418387f6/scratchpad/tlv2/home.qZ6xxi/.adhd/sox-ecosystem/stealth-search/logs",
       "files_non_empty_before_mcp_exit": [
         {
           "f": "stealth-search.live-service-2026-10-24.jsonl",
-          "bytes": 7737
+          "bytes": 8884
         }
       ]
     },
@@ -246,45 +397,45 @@
       "name": "log_dir_flag",
       "status": "PASS",
       "sample_lines": [
-        "{\"ts\":\"2026-10-24T02:12:40.346Z\",\"level\":\"info\",\"event\":\"adhd.stealth/list-providers.start\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:9577e3912e1d900bd124d7bc03f64f58f27f267901336211a0fb2b509a8c9361\",\"git_sha\":\"9db13b7e0f3770777d4399f580a8f820963aaf4c\"},\"trace_id\":\"01M5NTWZQZQ6JQ2T0DZTTARRM7\",\"pid\":65842,\"adhd.op\":\"stealth/list-providers\",\"adhd.transport\":\"cli\",\"session_id\":\"427172ed-c1ac-41c7-bdf0-2a65083a22b6\",\"worktree\":\"linked\",\"release.git_sha\":\"9db13b7e0f3770777d4399f580a8f820963aaf4c\",\"release.artifact_sha256\":\"sha256:9577e3912e1d900bd124d7bc03f64f58f27f267901336211a0fb2b509a8c9361\",\"span_id\":\"eaca0aecdcb989db\",\"parent_span_id\":null,\"otel_trace_id\":\"99ffb15fe2c6034f0c6c12ee41fc5d5e\"}",
-        "{\"ts\":\"2026-10-24T02:12:40.348Z\",\"level\":\"info\",\"event\":\"adhd.stealth/list-providers.finish\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:9577e3912e1d900bd124d7bc03f64f58f27f267901336211a0fb2b509a8c9361\",\"git_sha\":\"9db13b7e0f3770777d4399f580a8f820963aaf4c\"},\"trace_id\":\"01M5NTWZQZQ6JQ2T0DZTTARRM7\",\"pid\":65842,\"adhd.op\":\"stealth/list-providers\",\"adhd.transport\":\"cli\",\"session_id\":\"427172ed-c1ac-41c7-bdf0-2a65083a22b6\",\"worktree\":\"linked\",\"release.git_sha\":\"9db13b7e0f3770777d4399f580a8f820963aaf4c\",\"release.artifact_sha256\":\"sha256:9577e3912e1d900bd124d7bc03f64f58f27f267901336211a0fb2b509a8c9361\",\"span_id\":\"eaca0aecdcb989db\",\"parent_span_id\":null,\"otel_trace_id\":\"99ffb15fe2c6034f0c6c12ee41fc5d5e\",\"duration_ms\":2}",
-        "{\"ts\":\"2026-10-24T02:12:40.586Z\",\"level\":\"info\",\"event\":\"adhd.stealth/describe-provider.start\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:9577e3912e1d900bd124d7bc03f64f58f27f267901336211a0fb2b509a8c9361\",\"git_sha\":\"9db13b7e0f3770777d4399f580a8f820963aaf4c\"},\"trace_id\":\"01M5NTWZZCHGRD1BWES7EGX53T\",\"pid\":65903,\"adhd.op\":\"stealth/describe-provider\",\"adhd.transport\":\"cli\",\"session_id\":\"35585151-06d8-489f-857c-01e9747e0575\",\"worktree\":\"linked\",\"release.git_sha\":\"9db13b7e0f3770777d4399f580a8f820963aaf4c\",\"release.artifact_sha256\":\"sha256:9577e3912e1d900bd124d7bc03f64f58f27f267901336211a0fb2b509a8c9361\",\"span_id\":\"25cb64b4718543c3\",\"parent_span_id\":null,\"otel_trace_id\":\"e1dbeb6bb24a2e44d086b306cf99af5a\"}",
-        "{\"ts\":\"2026-10-24T02:12:40.588Z\",\"level\":\"error\",\"event\":\"adhd.stealth/describe-provider.error\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:9577e3912e1d900bd124d7bc03f64f58f27f267901336211a0fb2b509a8c9361\",\"git_sha\":\"9db13b7e0f3770777d4399f580a8f820963aaf4c\"},\"trace_id\":\"01M5NTWZZCHGRD1BWES7EGX53T\",\"pid\":65903,\"adhd.op\":\"stealth/describe-provider\",\"adhd.transport\":\"cli\",\"session_id\":\"35585151-06d8-489f-857c-01e9747e0575\",\"worktree\":\"linked\",\"release.git_sha\":\"9db13b7e0f3770777d4399f580a8f820963aaf4c\",\"release.artifact_sha256\":\"sha256:9577e3912e1d900bd124d7bc03f64f58f27f267901336211a0fb2b509a8c9361\",\"span_id\":\"25cb64b4718543c3\",\"parent_span_id\":null,\"otel_trace_id\":\"e1dbeb6bb24a2e44d086b306cf99af5a\",\"duration_ms\":2,\"error\":\"Unknown provider \\\"nope\\\". Available: duckduckgo, google, arxiv, npm, github, maven, wikipedia, crates, pypi, mdn, stackoverflow, fetch — Use one of the registered provider ids (see the providers list), then retry.\"}"
+        "{\"ts\":\"2026-10-24T10:41:10.624Z\",\"level\":\"info\",\"event\":\"adhd.stealth/list-providers.start\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\"},\"trace_id\":\"01M5PR02Y4MSCK1A7DDVW1Y6D4\",\"pid\":42927,\"adhd.op\":\"stealth/list-providers\",\"adhd.transport\":\"cli\",\"session_id\":\"743d7308-d09a-4787-9f47-e3e78848210d\",\"worktree\":\"linked\",\"release.git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\",\"release.artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"span_id\":\"458693912ef06635\",\"parent_span_id\":null,\"otel_trace_id\":\"164278fabb4fa5075a1a35eeb6dd2aaf\"}",
+        "{\"ts\":\"2026-10-24T10:41:10.626Z\",\"level\":\"info\",\"event\":\"adhd.stealth/list-providers.finish\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\"},\"trace_id\":\"01M5PR02Y4MSCK1A7DDVW1Y6D4\",\"pid\":42927,\"adhd.op\":\"stealth/list-providers\",\"adhd.transport\":\"cli\",\"session_id\":\"743d7308-d09a-4787-9f47-e3e78848210d\",\"worktree\":\"linked\",\"release.git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\",\"release.artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"span_id\":\"458693912ef06635\",\"parent_span_id\":null,\"otel_trace_id\":\"164278fabb4fa5075a1a35eeb6dd2aaf\",\"duration_ms\":2}",
+        "{\"ts\":\"2026-10-24T10:41:10.855Z\",\"level\":\"info\",\"event\":\"adhd.stealth/describe-provider.start\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\"},\"trace_id\":\"01M5PR035BDCBGSTB26G6S4ZNJ\",\"pid\":42991,\"adhd.op\":\"stealth/describe-provider\",\"adhd.transport\":\"cli\",\"session_id\":\"d871de9e-3479-4f51-98fa-3bb5e13c94a7\",\"worktree\":\"linked\",\"release.git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\",\"release.artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"span_id\":\"dc1857bb55b52b0d\",\"parent_span_id\":null,\"otel_trace_id\":\"48723b83b421d7531847d7c84458cbd0\"}",
+        "{\"ts\":\"2026-10-24T10:41:10.857Z\",\"level\":\"error\",\"event\":\"adhd.stealth/describe-provider.error\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\"},\"trace_id\":\"01M5PR035BDCBGSTB26G6S4ZNJ\",\"pid\":42991,\"adhd.op\":\"stealth/describe-provider\",\"adhd.transport\":\"cli\",\"session_id\":\"d871de9e-3479-4f51-98fa-3bb5e13c94a7\",\"worktree\":\"linked\",\"release.git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\",\"release.artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"span_id\":\"dc1857bb55b52b0d\",\"parent_span_id\":null,\"otel_trace_id\":\"48723b83b421d7531847d7c84458cbd0\",\"duration_ms\":2,\"error\":\"Unknown provider \\\"nope\\\". Available: duckduckgo, google, arxiv, npm, github, maven, wikipedia, crates, pypi, mdn, stackoverflow, fetch \u2014 Use one of the registered provider ids (see the providers list), then retry.\"}"
       ],
       "log_files": [
-        "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/c8273d10-b319-41df-99f1-5458418387f6/scratchpad/tmp.4WjXTioW7u/logs/stealth-search.cli-2026-10-24.jsonl"
-      ]
+        "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/c8273d10-b319-41df-99f1-5458418387f6/scratchpad/tlv2/home.qZ6xxi/logs/stealth-search.cli-2026-10-24.jsonl"
+      ],
+      "log_dir_flag_dir": "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/c8273d10-b319-41df-99f1-5458418387f6/scratchpad/tlv2/home.qZ6xxi/logs"
     },
     {
       "name": "mcp_stdout_jsonrpc_only",
       "status": "PASS",
       "sample_lines": [
-        "{\"ts\":\"2026-10-24T02:16:18.152Z\",\"level\":\"info\",\"event\":\"adhd.stealth/list-providers.start\",\"service\":\"stealth-search\",\"role\":\"live-service\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"git_sha\":null},\"trace_id\":\"01M5NV3MEC0AJDTYCP746EPW9J\",\"pid\":70438,\"adhd.op\":\"stealth/list-providers\",\"adhd.transport\":\"mcp\",\"session_id\":\"a771aa2f-5bff-4b92-9dab-a8c8de5b658f\",\"worktree\":\"none\",\"release.artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"span_id\":\"e7ba35e1d5b5df20\",\"parent_span_id\":null,\"otel_trace_id\":\"3518ac0e771af92faa3201d0027989be\"}",
-        "{\"ts\":\"2026-10-24T02:16:18.153Z\",\"level\":\"info\",\"event\":\"adhd.stealth/list-providers.finish\",\"service\":\"stealth-search\",\"role\":\"live-service\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"git_sha\":null},\"trace_id\":\"01M5NV3MEC0AJDTYCP746EPW9J\",\"pid\":70438,\"adhd.op\":\"stealth/list-providers\",\"adhd.transport\":\"mcp\",\"session_id\":\"a771aa2f-5bff-4b92-9dab-a8c8de5b658f\",\"worktree\":\"none\",\"release.artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"span_id\":\"e7ba35e1d5b5df20\",\"parent_span_id\":null,\"otel_trace_id\":\"3518ac0e771af92faa3201d0027989be\",\"duration_ms\":1}"
+        "{\"ts\":\"2026-10-24T10:41:11.174Z\",\"level\":\"info\",\"event\":\"adhd.stealth/list-providers.start\",\"service\":\"stealth-search\",\"role\":\"live-service\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\"},\"trace_id\":\"01M5PR03F75762BZHQ922R7EV2\",\"pid\":43053,\"adhd.op\":\"stealth/list-providers\",\"adhd.transport\":\"mcp\",\"session_id\":\"e48e9684-d891-4caf-ad51-5d51f6c453c2\",\"worktree\":\"linked\",\"release.git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\",\"release.artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"span_id\":\"3ad07d4592f05da4\",\"parent_span_id\":null,\"otel_trace_id\":\"38aafd21716567b66b295245a9b09f67\"}",
+        "{\"ts\":\"2026-10-24T10:41:11.175Z\",\"level\":\"info\",\"event\":\"adhd.stealth/list-providers.finish\",\"service\":\"stealth-search\",\"role\":\"live-service\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\"},\"trace_id\":\"01M5PR03F75762BZHQ922R7EV2\",\"pid\":43053,\"adhd.op\":\"stealth/list-providers\",\"adhd.transport\":\"mcp\",\"session_id\":\"e48e9684-d891-4caf-ad51-5d51f6c453c2\",\"worktree\":\"linked\",\"release.git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\",\"release.artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"span_id\":\"3ad07d4592f05da4\",\"parent_span_id\":null,\"otel_trace_id\":\"38aafd21716567b66b295245a9b09f67\",\"duration_ms\":1}"
       ],
       "log_files": [
-        "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/c8273d10-b319-41df-99f1-5458418387f6/scratchpad/tmp.4WjXTioW7u/.adhd/sox-ecosystem/stealth-search/logs/stealth-search.live-service-2026-10-24.jsonl"
+        "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/c8273d10-b319-41df-99f1-5458418387f6/scratchpad/tlv2/home.qZ6xxi/.adhd/sox-ecosystem/stealth-search/logs/stealth-search.live-service-2026-10-24.jsonl"
       ],
       "non_jsonrpc_stdout_lines": 0,
-      "stdout_line_count": 7,
+      "stdout_line_count": 6,
       "stdout_head": [
-        "{\"result\":{\"protocolVersion\":\"2025-11-25\",\"capabilities\":{\"tools\":{}},\"serverInfo\":{\"name\":\"stealth\",\"version\":\"0.1.0\"}},\"jsonrpc\":\"2.0\",\"id\":0}",
-        "{\"result\":{\"tools\":[{\"name\":\"stealth_search\",\"description\":\"Search a provider (duckduckgo, google, github, npm, arxiv and more) or read a URL as markdown with t",
-        "{\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"providers\\\":[{\\\"id\\\":\\\"duckduckgo\\\",\\\"name\\\":\\\"DuckDuckGo\\\",\\\"help\\\":\\\"General web search (via html.duckduckgo.c",
-        "{\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"id\\\":\\\"duckduckgo\\\",\\\"name\\\":\\\"DuckDuckGo\\\",\\\"help\\\":\\\"General web search (via html.duckduckgo.com). Supports si",
+        "{\"result\":{\"tools\":[{\"name\":\"stealth_search\",\"description\":\"Search a provider (duckduckgo, google, github, npm, arxiv and more) or read a URL as markdown with the fetch provider. Returns titles, urls ",
+        "{\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"providers\\\":[{\\\"id\\\":\\\"duckduckgo\\\",\\\"name\\\":\\\"DuckDuckGo\\\",\\\"help\\\":\\\"General web search (via html.duckduckgo.com). Supports site:, intitle:, filetype:",
+        "{\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"id\\\":\\\"duckduckgo\\\",\\\"name\\\":\\\"DuckDuckGo\\\",\\\"help\\\":\\\"General web search (via html.duckduckgo.com). Supports site:, intitle:, filetype: operators.\\\",\\\"",
         "{\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{}\"}],\"structuredContent\":{}},\"jsonrpc\":\"2.0\",\"id\":4}",
-        "{\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"running\\\":false,\\\"managed\\\":false}\"}],\"structuredContent\":{\"running\":false,\"managed\":false}},\"jsonrpc\":\"2.0\",\"id",
-        "{\"jsonrpc\":\"2.0\",\"id\":6,\"error\":{\"code\":-32603,\"message\":\"Unknown provider \\\"nope\\\". Available: duckduckgo, google, arxiv, npm, github, maven, wikipedia, crates"
+        "{\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"running\\\":false,\\\"managed\\\":false}\"}],\"structuredContent\":{\"running\":false,\"managed\":false}},\"jsonrpc\":\"2.0\",\"id\":5}",
+        "{\"result\":{\"_meta\":{\"adhd/error\":{\"code\":\"invalid_argument\"}},\"content\":[{\"type\":\"text\",\"text\":\"invalid_argument: UNKNOWN_PROVIDER: Unknown provider \\\"nope\\\". Available: duckduckgo, google, arxiv, npm"
       ]
     },
     {
       "name": "stdin_eof_shutdown",
       "status": "PASS",
       "sample_lines": [
-        "{\"ts\":\"2026-10-24T02:16:18.166Z\",\"level\":\"error\",\"event\":\"adhd.stealth/describe-provider.error\",\"service\":\"stealth-search\",\"role\":\"live-service\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"git_sha\":null},\"trace_id\":\"01M5NV3MFN17TKAGRKNSF13B3F\",\"pid\":70438,\"adhd.op\":\"stealth/describe-provider\",\"adhd.transport\":\"mcp\",\"session_id\":\"a771aa2f-5bff-4b92-9dab-a8c8de5b658f\",\"worktree\":\"none\",\"release.artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"span_id\":\"0f27f14e75372eb4\",\"parent_span_id\":null,\"otel_trace_id\":\"05c45aff9afe0fd4d1b9449d40146c16\",\"duration_ms\":0,\"error\":\"Unknown provider \\\"nope\\\". Available: duckduckgo, google, arxiv, npm, github, maven, wikipedia, crates, pypi, mdn, stackoverflow, fetch — Use one of the registered provider ids (see the providers list), then retry.\"}"
+        "{\"event\":\"stdin_eof\",\"exit_code\":0,\"signal\":null}"
       ],
       "log_files": [
-        "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/c8273d10-b319-41df-99f1-5458418387f6/scratchpad/tmp.4WjXTioW7u/.adhd/sox-ecosystem/stealth-search/logs/stealth-search.live-service-2026-10-24.jsonl"
+        "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/c8273d10-b319-41df-99f1-5458418387f6/scratchpad/tlv2/home.qZ6xxi/.adhd/sox-ecosystem/stealth-search/logs/stealth-search.live-service-2026-10-24.jsonl"
       ],
       "exit_code": 0,
       "signal": null
@@ -293,27 +444,29 @@
       "name": "every_command_spanned",
       "status": "PASS",
       "sample_lines": [
-        "{\"ts\":\"2026-10-24T02:12:06.858Z\",\"level\":\"info\",\"event\":\"adhd.stealth/list-providers.start\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:9577e3912e1d900bd124d7bc03f64f58f27f267901336211a0fb2b509a8c9361\",\"git_sha\":\"9db13b7e0f3770777d4399f580a8f820963aaf4c\"},\"trace_id\":\"01M5NTVZ1ENHTG2QAS31BDFVPF\",\"pid\":64769,\"adhd.op\":\"stealth/list-providers\",\"adhd.transport\":\"cli\",\"session_id\":\"c43242e0-d8fe-4f49-9407-4615d5b1c592\",\"worktree\":\"linked\",\"release.git_sha\":\"9db13b7e0f3770777d4399f580a8f820963aaf4c\",\"release.artifact_sha256\":\"sha256:9577e3912e1d900bd124d7bc03f64f58f27f267901336211a0fb2b509a8c9361\",\"span_id\":\"ff45c30822abc9f7\",\"parent_span_id\":null,\"otel_trace_id\":\"d6262a178bb22afe6d6a1661edaa7c16\"}",
-        "{\"ts\":\"2026-10-24T02:12:07.094Z\",\"level\":\"info\",\"event\":\"adhd.stealth/describe-provider.start\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:9577e3912e1d900bd124d7bc03f64f58f27f267901336211a0fb2b509a8c9361\",\"git_sha\":\"9db13b7e0f3770777d4399f580a8f820963aaf4c\"},\"trace_id\":\"01M5NTVZ8V3N9K2M9FNPR2Q3FK\",\"pid\":64831,\"adhd.op\":\"stealth/describe-provider\",\"adhd.transport\":\"cli\",\"session_id\":\"1250cc66-86d9-4c60-ae9a-184e8c571d60\",\"worktree\":\"linked\",\"release.git_sha\":\"9db13b7e0f3770777d4399f580a8f820963aaf4c\",\"release.artifact_sha256\":\"sha256:9577e3912e1d900bd124d7bc03f64f58f27f267901336211a0fb2b509a8c9361\",\"span_id\":\"00f87ce893b891c9\",\"parent_span_id\":null,\"otel_trace_id\":\"1de4b11dd3a8f6bb0bb3d78be8419e60\"}",
-        "{\"ts\":\"2026-10-24T02:12:07.329Z\",\"level\":\"info\",\"event\":\"adhd.stealth/tripwire-status.start\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:9577e3912e1d900bd124d7bc03f64f58f27f267901336211a0fb2b509a8c9361\",\"git_sha\":\"9db13b7e0f3770777d4399f580a8f820963aaf4c\"},\"trace_id\":\"01M5NTVZG4XHDZBPMNCJAGHVJC\",\"pid\":64894,\"adhd.op\":\"stealth/tripwire-status\",\"adhd.transport\":\"cli\",\"session_id\":\"e460fd75-8652-4b07-a090-b4f3c6ca9d04\",\"worktree\":\"linked\",\"release.git_sha\":\"9db13b7e0f3770777d4399f580a8f820963aaf4c\",\"release.artifact_sha256\":\"sha256:9577e3912e1d900bd124d7bc03f64f58f27f267901336211a0fb2b509a8c9361\",\"span_id\":\"acaa80200994fef7\",\"parent_span_id\":null,\"otel_trace_id\":\"6cc91b93566e6466666b46b978023490\"}",
-        "{\"ts\":\"2026-10-24T02:12:07.569Z\",\"level\":\"info\",\"event\":\"adhd.stealth/chrome-status.start\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:9577e3912e1d900bd124d7bc03f64f58f27f267901336211a0fb2b509a8c9361\",\"git_sha\":\"9db13b7e0f3770777d4399f580a8f820963aaf4c\"},\"trace_id\":\"01M5NTVZQEYMYDX36K2SGQC9A3\",\"pid\":64956,\"adhd.op\":\"stealth/chrome-status\",\"adhd.transport\":\"cli\",\"session_id\":\"45fa577f-276c-4e8f-acdd-2ffc3ada869c\",\"worktree\":\"linked\",\"release.git_sha\":\"9db13b7e0f3770777d4399f580a8f820963aaf4c\",\"release.artifact_sha256\":\"sha256:9577e3912e1d900bd124d7bc03f64f58f27f267901336211a0fb2b509a8c9361\",\"span_id\":\"31ec085cfa6f4021\",\"parent_span_id\":null,\"otel_trace_id\":\"7a81bb6250ba2da048ba74c5d859a780\"}",
-        "{\"ts\":\"2026-10-24T02:12:07.806Z\",\"level\":\"info\",\"event\":\"adhd.stealth/describe-provider.start\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:9577e3912e1d900bd124d7bc03f64f58f27f267901336211a0fb2b509a8c9361\",\"git_sha\":\"9db13b7e0f3770777d4399f580a8f820963aaf4c\"},\"trace_id\":\"01M5NTVZZ1P1FFK12PDD9J1CWT\",\"pid\":65017,\"adhd.op\":\"stealth/describe-provider\",\"adhd.transport\":\"cli\",\"session_id\":\"5cb7e5c9-e82b-41c9-b569-cba6e5953d26\",\"worktree\":\"linked\",\"release.git_sha\":\"9db13b7e0f3770777d4399f580a8f820963aaf4c\",\"release.artifact_sha256\":\"sha256:9577e3912e1d900bd124d7bc03f64f58f27f267901336211a0fb2b509a8c9361\",\"span_id\":\"8671269c6dfe5243\",\"parent_span_id\":null,\"otel_trace_id\":\"c490525ec24e0ed6704422edfddfde9f\"}",
-        "{\"ts\":\"2026-10-24T02:12:08.024Z\",\"level\":\"info\",\"event\":\"adhd.stealth/chrome-status.start\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:9577e3912e1d900bd124d7bc03f64f58f27f267901336211a0fb2b509a8c9361\",\"git_sha\":\"9db13b7e0f3770777d4399f580a8f820963aaf4c\"},\"trace_id\":\"01M5NTW06A983P4SDTJEE291D0\",\"pid\":65078,\"adhd.op\":\"stealth/chrome-status\",\"adhd.transport\":\"cli\",\"session_id\":\"096c9738-728a-408a-b45c-580211cd3591\",\"worktree\":\"linked\",\"release.git_sha\":\"9db13b7e0f3770777d4399f580a8f820963aaf4c\",\"release.artifact_sha256\":\"sha256:9577e3912e1d900bd124d7bc03f64f58f27f267901336211a0fb2b509a8c9361\",\"span_id\":\"c1d26d4fc56be14b\",\"parent_span_id\":null,\"otel_trace_id\":\"3d370873f659121c2046e5d6c64bae20\"}",
-        "{\"ts\":\"2026-10-24T02:16:18.152Z\",\"level\":\"info\",\"event\":\"adhd.stealth/list-providers.start\",\"service\":\"stealth-search\",\"role\":\"live-service\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"git_sha\":null},\"trace_id\":\"01M5NV3MEC0AJDTYCP746EPW9J\",\"pid\":70438,\"adhd.op\":\"stealth/list-providers\",\"adhd.transport\":\"mcp\",\"session_id\":\"a771aa2f-5bff-4b92-9dab-a8c8de5b658f\",\"worktree\":\"none\",\"release.artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"span_id\":\"e7ba35e1d5b5df20\",\"parent_span_id\":null,\"otel_trace_id\":\"3518ac0e771af92faa3201d0027989be\"}",
-        "{\"ts\":\"2026-10-24T02:16:18.156Z\",\"level\":\"info\",\"event\":\"adhd.stealth/describe-provider.start\",\"service\":\"stealth-search\",\"role\":\"live-service\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"git_sha\":null},\"trace_id\":\"01M5NV3MFA8X6JBYPKVYJBZGXK\",\"pid\":70438,\"adhd.op\":\"stealth/describe-provider\",\"adhd.transport\":\"mcp\",\"session_id\":\"a771aa2f-5bff-4b92-9dab-a8c8de5b658f\",\"worktree\":\"none\",\"release.artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"span_id\":\"69711582a2f1b593\",\"parent_span_id\":null,\"otel_trace_id\":\"b94118e54d1b22adab61a6beed49e616\"}",
-        "{\"ts\":\"2026-10-24T02:16:18.158Z\",\"level\":\"info\",\"event\":\"adhd.stealth/tripwire-status.start\",\"service\":\"stealth-search\",\"role\":\"live-service\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"git_sha\":null},\"trace_id\":\"01M5NV3MFCBY28D99R84DJ9BX8\",\"pid\":70438,\"adhd.op\":\"stealth/tripwire-status\",\"adhd.transport\":\"mcp\",\"session_id\":\"a771aa2f-5bff-4b92-9dab-a8c8de5b658f\",\"worktree\":\"none\",\"release.artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"span_id\":\"e7adc943a8b26f44\",\"parent_span_id\":null,\"otel_trace_id\":\"ec214b461c93bcb0fe70a21dfdd2d43e\"}",
-        "{\"ts\":\"2026-10-24T02:16:18.163Z\",\"level\":\"info\",\"event\":\"adhd.stealth/chrome-status.start\",\"service\":\"stealth-search\",\"role\":\"live-service\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"git_sha\":null},\"trace_id\":\"01M5NV3MFFYMGDWGBDNGDGCV4V\",\"pid\":70438,\"adhd.op\":\"stealth/chrome-status\",\"adhd.transport\":\"mcp\",\"session_id\":\"a771aa2f-5bff-4b92-9dab-a8c8de5b658f\",\"worktree\":\"none\",\"release.artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"span_id\":\"27b4884843fcf733\",\"parent_span_id\":null,\"otel_trace_id\":\"b5a379a3a2a88ca9885acb3e20603415\"}",
-        "{\"ts\":\"2026-10-24T02:16:18.165Z\",\"level\":\"info\",\"event\":\"adhd.stealth/describe-provider.start\",\"service\":\"stealth-search\",\"role\":\"live-service\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"git_sha\":null},\"trace_id\":\"01M5NV3MFN17TKAGRKNSF13B3F\",\"pid\":70438,\"adhd.op\":\"stealth/describe-provider\",\"adhd.transport\":\"mcp\",\"session_id\":\"a771aa2f-5bff-4b92-9dab-a8c8de5b658f\",\"worktree\":\"none\",\"release.artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"span_id\":\"0f27f14e75372eb4\",\"parent_span_id\":null,\"otel_trace_id\":\"05c45aff9afe0fd4d1b9449d40146c16\"}"
+        "{\"ts\":\"2026-10-24T10:41:07.240Z\",\"level\":\"info\",\"event\":\"adhd.stealth/list-providers.start\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\"},\"trace_id\":\"01M5PQZZMB78YYCE1N897QQBXN\",\"pid\":42270,\"adhd.op\":\"stealth/list-providers\",\"adhd.transport\":\"cli\",\"session_id\":\"5b326a27-4037-4130-8b1e-c7dd1071c710\",\"worktree\":\"linked\",\"release.git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\",\"release.artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"span_id\":\"27ed120900af6e61\",\"parent_span_id\":null,\"otel_trace_id\":\"1f35667073ca36d858352a69e638c79b\"}",
+        "{\"ts\":\"2026-10-24T10:41:07.476Z\",\"level\":\"info\",\"event\":\"adhd.stealth/describe-provider.start\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\"},\"trace_id\":\"01M5PQZZVPP8P829Q9P47G6WWR\",\"pid\":42338,\"adhd.op\":\"stealth/describe-provider\",\"adhd.transport\":\"cli\",\"session_id\":\"9b8332c2-7562-42d4-8d38-bc52ff5ce501\",\"worktree\":\"linked\",\"release.git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\",\"release.artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"span_id\":\"ce86b6619a4a2408\",\"parent_span_id\":null,\"otel_trace_id\":\"17122087c546c49083e088a3f314ad6b\"}",
+        "{\"ts\":\"2026-10-24T10:41:07.711Z\",\"level\":\"info\",\"event\":\"adhd.stealth/tripwire-status.start\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\"},\"trace_id\":\"01M5PR0031HEQWSA03PWBYJ8Q3\",\"pid\":42401,\"adhd.op\":\"stealth/tripwire-status\",\"adhd.transport\":\"cli\",\"session_id\":\"0ad292e0-a8e5-4bfc-a176-a6de12fa1007\",\"worktree\":\"linked\",\"release.git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\",\"release.artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"span_id\":\"eba373002577cc6d\",\"parent_span_id\":null,\"otel_trace_id\":\"0abeb98821b3861cd03e59f612babdc6\"}",
+        "{\"ts\":\"2026-10-24T10:41:07.947Z\",\"level\":\"info\",\"event\":\"adhd.stealth/chrome-status.start\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\"},\"trace_id\":\"01M5PR00A8XPRVWKQZ9JZ3N6J8\",\"pid\":42463,\"adhd.op\":\"stealth/chrome-status\",\"adhd.transport\":\"cli\",\"session_id\":\"22efc69b-c8cb-4b7f-b7f6-d301e9793e5a\",\"worktree\":\"linked\",\"release.git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\",\"release.artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"span_id\":\"ee62ec0203d8a686\",\"parent_span_id\":null,\"otel_trace_id\":\"cae5904eb882b6e381912de7ff3a1f8c\"}",
+        "{\"ts\":\"2026-10-24T10:41:08.212Z\",\"level\":\"info\",\"event\":\"adhd.stealth/describe-provider.start\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\"},\"trace_id\":\"01M5PR00HSCHYAGWQT5R60BNY5\",\"pid\":42525,\"adhd.op\":\"stealth/describe-provider\",\"adhd.transport\":\"cli\",\"session_id\":\"5ad0d707-be67-4c69-964a-f058c73928c1\",\"worktree\":\"linked\",\"release.git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\",\"release.artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"span_id\":\"863cde181f97cd39\",\"parent_span_id\":null,\"otel_trace_id\":\"aaafea66b4d2b803d239a798b8bfd1bc\"}",
+        "{\"ts\":\"2026-10-24T10:41:08.425Z\",\"level\":\"info\",\"event\":\"adhd.stealth/chrome-status.start\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\"},\"trace_id\":\"01M5PR00SSPQTEMYNMS02WSV5Y\",\"pid\":42589,\"adhd.op\":\"stealth/chrome-status\",\"adhd.transport\":\"cli\",\"session_id\":\"c31aa233-bcb6-4ef7-be71-2a0b2eda170c\",\"worktree\":\"linked\",\"release.git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\",\"release.artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"span_id\":\"1cc27e68d3d067b3\",\"parent_span_id\":null,\"otel_trace_id\":\"48c4cd0f33c3eb51874e2df8e60990a5\"}",
+        "{\"ts\":\"2026-10-24T10:41:11.174Z\",\"level\":\"info\",\"event\":\"adhd.stealth/list-providers.start\",\"service\":\"stealth-search\",\"role\":\"live-service\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\"},\"trace_id\":\"01M5PR03F75762BZHQ922R7EV2\",\"pid\":43053,\"adhd.op\":\"stealth/list-providers\",\"adhd.transport\":\"mcp\",\"session_id\":\"e48e9684-d891-4caf-ad51-5d51f6c453c2\",\"worktree\":\"linked\",\"release.git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\",\"release.artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"span_id\":\"3ad07d4592f05da4\",\"parent_span_id\":null,\"otel_trace_id\":\"38aafd21716567b66b295245a9b09f67\"}",
+        "{\"ts\":\"2026-10-24T10:41:11.178Z\",\"level\":\"info\",\"event\":\"adhd.stealth/describe-provider.start\",\"service\":\"stealth-search\",\"role\":\"live-service\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\"},\"trace_id\":\"01M5PR03G9EXR9T0DF7EYRN97E\",\"pid\":43053,\"adhd.op\":\"stealth/describe-provider\",\"adhd.transport\":\"mcp\",\"session_id\":\"e48e9684-d891-4caf-ad51-5d51f6c453c2\",\"worktree\":\"linked\",\"release.git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\",\"release.artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"span_id\":\"47ad250a277d1b92\",\"parent_span_id\":null,\"otel_trace_id\":\"5c090c79630b0e305f6d2ec095fa7953\"}",
+        "{\"ts\":\"2026-10-24T10:41:11.181Z\",\"level\":\"info\",\"event\":\"adhd.stealth/tripwire-status.start\",\"service\":\"stealth-search\",\"role\":\"live-service\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\"},\"trace_id\":\"01M5PR03GBEYN05YW44M4HTZVE\",\"pid\":43053,\"adhd.op\":\"stealth/tripwire-status\",\"adhd.transport\":\"mcp\",\"session_id\":\"e48e9684-d891-4caf-ad51-5d51f6c453c2\",\"worktree\":\"linked\",\"release.git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\",\"release.artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"span_id\":\"cac476003afad2cb\",\"parent_span_id\":null,\"otel_trace_id\":\"8a0786f49c498c59ae704170958c1b4f\"}",
+        "{\"ts\":\"2026-10-24T10:41:11.188Z\",\"level\":\"info\",\"event\":\"adhd.stealth/chrome-status.start\",\"service\":\"stealth-search\",\"role\":\"live-service\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\"},\"trace_id\":\"01M5PR03GERGPR7HSFES1TX8DG\",\"pid\":43053,\"adhd.op\":\"stealth/chrome-status\",\"adhd.transport\":\"mcp\",\"session_id\":\"e48e9684-d891-4caf-ad51-5d51f6c453c2\",\"worktree\":\"linked\",\"release.git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\",\"release.artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"span_id\":\"31e2b2146fd88f97\",\"parent_span_id\":null,\"otel_trace_id\":\"d3fd631b34f031111551f5e4950bb569\"}",
+        "{\"ts\":\"2026-10-24T10:41:11.191Z\",\"level\":\"info\",\"event\":\"adhd.stealth/describe-provider.start\",\"service\":\"stealth-search\",\"role\":\"live-service\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\"},\"trace_id\":\"01M5PR03GQ1DMYJ9P0CAP6YWHA\",\"pid\":43053,\"adhd.op\":\"stealth/describe-provider\",\"adhd.transport\":\"mcp\",\"session_id\":\"e48e9684-d891-4caf-ad51-5d51f6c453c2\",\"worktree\":\"linked\",\"release.git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\",\"release.artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"span_id\":\"b784626f7eb192b8\",\"parent_span_id\":null,\"otel_trace_id\":\"8067849233f7859a173aa749bf081b37\"}"
       ],
       "log_files": [
-        "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/c8273d10-b319-41df-99f1-5458418387f6/scratchpad/tmp.4WjXTioW7u/.adhd/sox-ecosystem/stealth-search/logs/stealth-search.cli-2026-10-24.jsonl",
-        "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/c8273d10-b319-41df-99f1-5458418387f6/scratchpad/tmp.4WjXTioW7u/.adhd/sox-ecosystem/stealth-search/logs/stealth-search.live-service-2026-10-24.jsonl"
+        "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/c8273d10-b319-41df-99f1-5458418387f6/scratchpad/tlv2/home.qZ6xxi/.adhd/sox-ecosystem/stealth-search/logs/stealth-search.cli-2026-10-24.jsonl",
+        "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/c8273d10-b319-41df-99f1-5458418387f6/scratchpad/tlv2/home.qZ6xxi/.adhd/sox-ecosystem/stealth-search/logs/stealth-search.live-service-2026-10-24.jsonl"
       ],
       "commands": [
         {
           "host": "cli",
-          "command": "listProviders",
-          "trace_id": "01M5NTVZ1ENHTG2QAS31BDFVPF",
+          "command": "stealth-search listProviders",
+          "trace_ids": [
+            "01M5PQZZMB78YYCE1N897QQBXN"
+          ],
           "events": [
             "adhd.stealth/list-providers.start",
             "adhd.stealth/list-providers.finish"
@@ -321,8 +474,10 @@
         },
         {
           "host": "cli",
-          "command": "describeProvider duckduckgo",
-          "trace_id": "01M5NTVZ8V3N9K2M9FNPR2Q3FK",
+          "command": "stealth-search describeProvider --provider duckduckgo",
+          "trace_ids": [
+            "01M5PQZZVPP8P829Q9P47G6WWR"
+          ],
           "events": [
             "adhd.stealth/describe-provider.start",
             "adhd.stealth/describe-provider.finish"
@@ -330,8 +485,10 @@
         },
         {
           "host": "cli",
-          "command": "tripwireStatus",
-          "trace_id": "01M5NTVZG4XHDZBPMNCJAGHVJC",
+          "command": "stealth-search tripwireStatus --data-dir /private/tmp/claude-502/-Users-nix-dev-ai-scratch/c8273d10-b319-41df-99f1-5458418387f6/scratchpad/tlv2/home.qZ6xxi/data",
+          "trace_ids": [
+            "01M5PR0031HEQWSA03PWBYJ8Q3"
+          ],
           "events": [
             "adhd.stealth/tripwire-status.start",
             "adhd.stealth/tripwire-status.finish"
@@ -339,8 +496,10 @@
         },
         {
           "host": "cli",
-          "command": "chromeStatus --cdp-port 19999",
-          "trace_id": "01M5NTVZQEYMYDX36K2SGQC9A3",
+          "command": "stealth-search chromeStatus --cdp-port 19999",
+          "trace_ids": [
+            "01M5PR00A8XPRVWKQZ9JZ3N6J8"
+          ],
           "events": [
             "adhd.stealth/chrome-status.start",
             "adhd.stealth/chrome-status.finish"
@@ -348,8 +507,10 @@
         },
         {
           "host": "cli",
-          "command": "describeProvider nope",
-          "trace_id": "01M5NTVZZ1P1FFK12PDD9J1CWT",
+          "command": "stealth-search describeProvider --provider nope",
+          "trace_ids": [
+            "01M5PR00HSCHYAGWQT5R60BNY5"
+          ],
           "events": [
             "adhd.stealth/describe-provider.start",
             "adhd.stealth/describe-provider.error"
@@ -357,8 +518,10 @@
         },
         {
           "host": "cli",
-          "command": "chromeStatus --cdp-port abc",
-          "trace_id": "01M5NTW06A983P4SDTJEE291D0",
+          "command": "stealth-search chromeStatus --cdp-port abc",
+          "trace_ids": [
+            "01M5PR00SSPQTEMYNMS02WSV5Y"
+          ],
           "events": [
             "adhd.stealth/chrome-status.start",
             "adhd.stealth/chrome-status.error"
@@ -366,8 +529,10 @@
         },
         {
           "host": "mcp",
-          "command": "stealth_listProviders",
-          "trace_id": "01M5NV3MEC0AJDTYCP746EPW9J",
+          "command": "stealth_listProviders \"listProviders\"",
+          "trace_ids": [
+            "01M5PR03F75762BZHQ922R7EV2"
+          ],
           "events": [
             "adhd.stealth/list-providers.start",
             "adhd.stealth/list-providers.finish"
@@ -375,8 +540,10 @@
         },
         {
           "host": "mcp",
-          "command": "stealth_describeProvider duckduckgo",
-          "trace_id": "01M5NV3MFA8X6JBYPKVYJBZGXK",
+          "command": "stealth_describeProvider \"describeProvider\"",
+          "trace_ids": [
+            "01M5PR03G9EXR9T0DF7EYRN97E"
+          ],
           "events": [
             "adhd.stealth/describe-provider.start",
             "adhd.stealth/describe-provider.finish"
@@ -384,8 +551,10 @@
         },
         {
           "host": "mcp",
-          "command": "stealth_tripwireStatus",
-          "trace_id": "01M5NV3MFCBY28D99R84DJ9BX8",
+          "command": "stealth_tripwireStatus \"tripwireStatus\"",
+          "trace_ids": [
+            "01M5PR03GBEYN05YW44M4HTZVE"
+          ],
           "events": [
             "adhd.stealth/tripwire-status.start",
             "adhd.stealth/tripwire-status.finish"
@@ -393,8 +562,10 @@
         },
         {
           "host": "mcp",
-          "command": "stealth_chromeStatus port 19999",
-          "trace_id": "01M5NV3MFFYMGDWGBDNGDGCV4V",
+          "command": "stealth_chromeStatus \"chromeStatus\"",
+          "trace_ids": [
+            "01M5PR03GERGPR7HSFES1TX8DG"
+          ],
           "events": [
             "adhd.stealth/chrome-status.start",
             "adhd.stealth/chrome-status.finish"
@@ -402,8 +573,10 @@
         },
         {
           "host": "mcp",
-          "command": "stealth_describeProvider nope",
-          "trace_id": "01M5NV3MFN17TKAGRKNSF13B3F",
+          "command": "stealth_describeProvider \"describeProvider-nope\"",
+          "trace_ids": [
+            "01M5PR03GQ1DMYJ9P0CAP6YWHA"
+          ],
           "events": [
             "adhd.stealth/describe-provider.start",
             "adhd.stealth/describe-provider.error"
@@ -415,11 +588,11 @@
       "name": "cli_unknown_provider_span",
       "status": "PASS",
       "sample_lines": [
-        "{\"ts\":\"2026-10-24T02:12:07.806Z\",\"level\":\"info\",\"event\":\"adhd.stealth/describe-provider.start\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:9577e3912e1d900bd124d7bc03f64f58f27f267901336211a0fb2b509a8c9361\",\"git_sha\":\"9db13b7e0f3770777d4399f580a8f820963aaf4c\"},\"trace_id\":\"01M5NTVZZ1P1FFK12PDD9J1CWT\",\"pid\":65017,\"adhd.op\":\"stealth/describe-provider\",\"adhd.transport\":\"cli\",\"session_id\":\"5cb7e5c9-e82b-41c9-b569-cba6e5953d26\",\"worktree\":\"linked\",\"release.git_sha\":\"9db13b7e0f3770777d4399f580a8f820963aaf4c\",\"release.artifact_sha256\":\"sha256:9577e3912e1d900bd124d7bc03f64f58f27f267901336211a0fb2b509a8c9361\",\"span_id\":\"8671269c6dfe5243\",\"parent_span_id\":null,\"otel_trace_id\":\"c490525ec24e0ed6704422edfddfde9f\"}",
-        "{\"ts\":\"2026-10-24T02:12:07.808Z\",\"level\":\"error\",\"event\":\"adhd.stealth/describe-provider.error\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:9577e3912e1d900bd124d7bc03f64f58f27f267901336211a0fb2b509a8c9361\",\"git_sha\":\"9db13b7e0f3770777d4399f580a8f820963aaf4c\"},\"trace_id\":\"01M5NTVZZ1P1FFK12PDD9J1CWT\",\"pid\":65017,\"adhd.op\":\"stealth/describe-provider\",\"adhd.transport\":\"cli\",\"session_id\":\"5cb7e5c9-e82b-41c9-b569-cba6e5953d26\",\"worktree\":\"linked\",\"release.git_sha\":\"9db13b7e0f3770777d4399f580a8f820963aaf4c\",\"release.artifact_sha256\":\"sha256:9577e3912e1d900bd124d7bc03f64f58f27f267901336211a0fb2b509a8c9361\",\"span_id\":\"8671269c6dfe5243\",\"parent_span_id\":null,\"otel_trace_id\":\"c490525ec24e0ed6704422edfddfde9f\",\"duration_ms\":2,\"error\":\"Unknown provider \\\"nope\\\". Available: duckduckgo, google, arxiv, npm, github, maven, wikipedia, crates, pypi, mdn, stackoverflow, fetch — Use one of the registered provider ids (see the providers list), then retry.\"}"
+        "{\"ts\":\"2026-10-24T10:41:08.212Z\",\"level\":\"info\",\"event\":\"adhd.stealth/describe-provider.start\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\"},\"trace_id\":\"01M5PR00HSCHYAGWQT5R60BNY5\",\"pid\":42525,\"adhd.op\":\"stealth/describe-provider\",\"adhd.transport\":\"cli\",\"session_id\":\"5ad0d707-be67-4c69-964a-f058c73928c1\",\"worktree\":\"linked\",\"release.git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\",\"release.artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"span_id\":\"863cde181f97cd39\",\"parent_span_id\":null,\"otel_trace_id\":\"aaafea66b4d2b803d239a798b8bfd1bc\"}",
+        "{\"ts\":\"2026-10-24T10:41:08.215Z\",\"level\":\"error\",\"event\":\"adhd.stealth/describe-provider.error\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\"},\"trace_id\":\"01M5PR00HSCHYAGWQT5R60BNY5\",\"pid\":42525,\"adhd.op\":\"stealth/describe-provider\",\"adhd.transport\":\"cli\",\"session_id\":\"5ad0d707-be67-4c69-964a-f058c73928c1\",\"worktree\":\"linked\",\"release.git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\",\"release.artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"span_id\":\"863cde181f97cd39\",\"parent_span_id\":null,\"otel_trace_id\":\"aaafea66b4d2b803d239a798b8bfd1bc\",\"duration_ms\":2,\"error\":\"Unknown provider \\\"nope\\\". Available: duckduckgo, google, arxiv, npm, github, maven, wikipedia, crates, pypi, mdn, stackoverflow, fetch \u2014 Use one of the registered provider ids (see the providers list), then retry.\"}"
       ],
       "log_files": [
-        "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/c8273d10-b319-41df-99f1-5458418387f6/scratchpad/tmp.4WjXTioW7u/.adhd/sox-ecosystem/stealth-search/logs/stealth-search.cli-2026-10-24.jsonl"
+        "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/c8273d10-b319-41df-99f1-5458418387f6/scratchpad/tlv2/home.qZ6xxi/.adhd/sox-ecosystem/stealth-search/logs/stealth-search.cli-2026-10-24.jsonl"
       ],
       "cli_exit_code": 70,
       "cli_stderr_code": "UNKNOWN_PROVIDER"
@@ -428,44 +601,50 @@
       "name": "mcp_unknown_provider_span",
       "status": "PASS",
       "sample_lines": [
-        "{\"ts\":\"2026-10-24T02:16:18.165Z\",\"level\":\"info\",\"event\":\"adhd.stealth/describe-provider.start\",\"service\":\"stealth-search\",\"role\":\"live-service\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"git_sha\":null},\"trace_id\":\"01M5NV3MFN17TKAGRKNSF13B3F\",\"pid\":70438,\"adhd.op\":\"stealth/describe-provider\",\"adhd.transport\":\"mcp\",\"session_id\":\"a771aa2f-5bff-4b92-9dab-a8c8de5b658f\",\"worktree\":\"none\",\"release.artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"span_id\":\"0f27f14e75372eb4\",\"parent_span_id\":null,\"otel_trace_id\":\"05c45aff9afe0fd4d1b9449d40146c16\"}",
-        "{\"ts\":\"2026-10-24T02:16:18.166Z\",\"level\":\"error\",\"event\":\"adhd.stealth/describe-provider.error\",\"service\":\"stealth-search\",\"role\":\"live-service\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"git_sha\":null},\"trace_id\":\"01M5NV3MFN17TKAGRKNSF13B3F\",\"pid\":70438,\"adhd.op\":\"stealth/describe-provider\",\"adhd.transport\":\"mcp\",\"session_id\":\"a771aa2f-5bff-4b92-9dab-a8c8de5b658f\",\"worktree\":\"none\",\"release.artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"span_id\":\"0f27f14e75372eb4\",\"parent_span_id\":null,\"otel_trace_id\":\"05c45aff9afe0fd4d1b9449d40146c16\",\"duration_ms\":0,\"error\":\"Unknown provider \\\"nope\\\". Available: duckduckgo, google, arxiv, npm, github, maven, wikipedia, crates, pypi, mdn, stackoverflow, fetch — Use one of the registered provider ids (see the providers list), then retry.\"}"
+        "{\"ts\":\"2026-10-24T10:41:11.191Z\",\"level\":\"info\",\"event\":\"adhd.stealth/describe-provider.start\",\"service\":\"stealth-search\",\"role\":\"live-service\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\"},\"trace_id\":\"01M5PR03GQ1DMYJ9P0CAP6YWHA\",\"pid\":43053,\"adhd.op\":\"stealth/describe-provider\",\"adhd.transport\":\"mcp\",\"session_id\":\"e48e9684-d891-4caf-ad51-5d51f6c453c2\",\"worktree\":\"linked\",\"release.git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\",\"release.artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"span_id\":\"b784626f7eb192b8\",\"parent_span_id\":null,\"otel_trace_id\":\"8067849233f7859a173aa749bf081b37\"}",
+        "{\"ts\":\"2026-10-24T10:41:11.191Z\",\"level\":\"error\",\"event\":\"adhd.stealth/describe-provider.error\",\"service\":\"stealth-search\",\"role\":\"live-service\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\"},\"trace_id\":\"01M5PR03GQ1DMYJ9P0CAP6YWHA\",\"pid\":43053,\"adhd.op\":\"stealth/describe-provider\",\"adhd.transport\":\"mcp\",\"session_id\":\"e48e9684-d891-4caf-ad51-5d51f6c453c2\",\"worktree\":\"linked\",\"release.git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\",\"release.artifact_sha256\":\"sha256:8fecc238551835534f4c8273a902edffcc0ab87e16785f71210c0b5d7a9bf56f\",\"span_id\":\"b784626f7eb192b8\",\"parent_span_id\":null,\"otel_trace_id\":\"8067849233f7859a173aa749bf081b37\",\"duration_ms\":0,\"error\":\"UNKNOWN_PROVIDER: Unknown provider \\\"nope\\\". Available: duckduckgo, google, arxiv, npm, github, maven, wikipedia, crates, pypi, mdn, stackoverflow, fetch \u2014 Use one of the registered provider ids (see the providers list), then retry.\"}"
       ],
       "log_files": [
-        "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/c8273d10-b319-41df-99f1-5458418387f6/scratchpad/tmp.4WjXTioW7u/.adhd/sox-ecosystem/stealth-search/logs/stealth-search.live-service-2026-10-24.jsonl"
+        "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/c8273d10-b319-41df-99f1-5458418387f6/scratchpad/tlv2/home.qZ6xxi/.adhd/sox-ecosystem/stealth-search/logs/stealth-search.live-service-2026-10-24.jsonl"
       ],
-      "jsonrpc_code": -32603
+      "mcp_is_error": true,
+      "mcp_error_text": "[{\"type\":\"text\",\"text\":\"invalid_argument: UNKNOWN_PROVIDER: Unknown provider \\\"nope\\\". Available: duckduckgo, google, arxiv, npm, github, maven, wikipedia, crates, pypi, mdn, stackoverflow, fetch \u2014 Use one of the registered provider ids (see the providers list), then retry.\"}]"
     },
     {
       "name": "cli_rejected_flag_span",
       "status": "PASS",
       "sample_lines": [
-        "{\"ts\":\"2026-10-24T02:12:08.024Z\",\"level\":\"info\",\"event\":\"adhd.stealth/chrome-status.start\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:9577e3912e1d900bd124d7bc03f64f58f27f267901336211a0fb2b509a8c9361\",\"git_sha\":\"9db13b7e0f3770777d4399f580a8f820963aaf4c\"},\"trace_id\":\"01M5NTW06A983P4SDTJEE291D0\",\"pid\":65078,\"adhd.op\":\"stealth/chrome-status\",\"adhd.transport\":\"cli\",\"session_id\":\"096c9738-728a-408a-b45c-580211cd3591\",\"worktree\":\"linked\",\"release.git_sha\":\"9db13b7e0f3770777d4399f580a8f820963aaf4c\",\"release.artifact_sha256\":\"sha256:9577e3912e1d900bd124d7bc03f64f58f27f267901336211a0fb2b509a8c9361\",\"span_id\":\"c1d26d4fc56be14b\",\"parent_span_id\":null,\"otel_trace_id\":\"3d370873f659121c2046e5d6c64bae20\"}",
-        "{\"ts\":\"2026-10-24T02:12:08.026Z\",\"level\":\"error\",\"event\":\"adhd.stealth/chrome-status.error\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:9577e3912e1d900bd124d7bc03f64f58f27f267901336211a0fb2b509a8c9361\",\"git_sha\":\"9db13b7e0f3770777d4399f580a8f820963aaf4c\"},\"trace_id\":\"01M5NTW06A983P4SDTJEE291D0\",\"pid\":65078,\"adhd.op\":\"stealth/chrome-status\",\"adhd.transport\":\"cli\",\"session_id\":\"096c9738-728a-408a-b45c-580211cd3591\",\"worktree\":\"linked\",\"release.git_sha\":\"9db13b7e0f3770777d4399f580a8f820963aaf4c\",\"release.artifact_sha256\":\"sha256:9577e3912e1d900bd124d7bc03f64f58f27f267901336211a0fb2b509a8c9361\",\"span_id\":\"c1d26d4fc56be14b\",\"parent_span_id\":null,\"otel_trace_id\":\"3d370873f659121c2046e5d6c64bae20\",\"duration_ms\":2,\"error\":\"--cdp-port: expected an integer, got \\\"abc\\\" — Run the command with --help and pass a valid value for the flag.\"}"
+        "{\"ts\":\"2026-10-24T10:41:08.425Z\",\"level\":\"info\",\"event\":\"adhd.stealth/chrome-status.start\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\"},\"trace_id\":\"01M5PR00SSPQTEMYNMS02WSV5Y\",\"pid\":42589,\"adhd.op\":\"stealth/chrome-status\",\"adhd.transport\":\"cli\",\"session_id\":\"c31aa233-bcb6-4ef7-be71-2a0b2eda170c\",\"worktree\":\"linked\",\"release.git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\",\"release.artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"span_id\":\"1cc27e68d3d067b3\",\"parent_span_id\":null,\"otel_trace_id\":\"48c4cd0f33c3eb51874e2df8e60990a5\"}",
+        "{\"ts\":\"2026-10-24T10:41:08.428Z\",\"level\":\"error\",\"event\":\"adhd.stealth/chrome-status.error\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\"},\"trace_id\":\"01M5PR00SSPQTEMYNMS02WSV5Y\",\"pid\":42589,\"adhd.op\":\"stealth/chrome-status\",\"adhd.transport\":\"cli\",\"session_id\":\"c31aa233-bcb6-4ef7-be71-2a0b2eda170c\",\"worktree\":\"linked\",\"release.git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\",\"release.artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"span_id\":\"1cc27e68d3d067b3\",\"parent_span_id\":null,\"otel_trace_id\":\"48c4cd0f33c3eb51874e2df8e60990a5\",\"duration_ms\":2,\"error\":\"--cdp-port: expected an integer, got \\\"abc\\\" \u2014 Run the command with --help and pass a valid value for the flag.\"}"
       ],
       "log_files": [
-        "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/c8273d10-b319-41df-99f1-5458418387f6/scratchpad/tmp.4WjXTioW7u/.adhd/sox-ecosystem/stealth-search/logs/stealth-search.cli-2026-10-24.jsonl"
+        "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/c8273d10-b319-41df-99f1-5458418387f6/scratchpad/tlv2/home.qZ6xxi/.adhd/sox-ecosystem/stealth-search/logs/stealth-search.cli-2026-10-24.jsonl"
       ],
       "cli_exit_code": 77,
+      "cli_stderr": "HOST_FLAG_INVALID: --cdp-port: expected an integer, got \"abc\" \u2014 Run the command with --help and pass a valid value for the flag.",
       "cli_stderr_code": "HOST_FLAG_INVALID"
     },
     {
       "name": "help_is_not_a_dispatch",
       "status": "PASS",
       "sample_lines": [
-        "HOME /private/tmp/claude-502/-Users-nix-dev-ai-scratch/c8273d10-b319-41df-99f1-5458418387f6/scratchpad/tmp.4WjXTioW7u was empty after 11 per-operation --help, -h and no-argument invocations (ls -A printed nothing; no .adhd directory)",
-        "stealth-search.cli-2026-10-24.jsonl later holds exactly 6 distinct trace_ids for the 6 dispatched CLI commands",
-        "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/c8273d10-b319-41df-99f1-5458418387f6/scratchpad/tmp.4WjXTioW7u/.adhd/sox-ecosystem/stealth-search/logs/stealth-search.cli-2026-10-24.jsonl 11190 bytes",
-        "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/c8273d10-b319-41df-99f1-5458418387f6/scratchpad/tmp.4WjXTioW7u/.adhd/sox-ecosystem/stealth-search/logs/stealth-search.live-service-2026-10-24.jsonl 7737 bytes",
-        "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/c8273d10-b319-41df-99f1-5458418387f6/scratchpad/tmp.4WjXTioW7u/logs/stealth-search.cli-2026-10-24.jsonl 4187 bytes"
+        "{\"ts\":\"2026-10-24T10:41:08.214Z\",\"level\":\"error\",\"event\":\"adhd.op.error\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\"},\"trace_id\":\"01M5PR00HSCHYAGWQT5R60BNY5\",\"pid\":42525,\"adhd.op\":\"stealth/describe-provider\",\"adhd.transport\":\"cli\",\"session_id\":\"5ad0d707-be67-4c69-964a-f058c73928c1\",\"worktree\":\"linked\",\"release.git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\",\"release.artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"span\":\"adhd.stealth/describe-provider\",\"duration_ms\":61,\"err\":\"Unknown provider \\\"nope\\\". Available: duckduckgo, google, arxiv, npm, github, maven, wikipedia, crates, pypi, mdn, stackoverflow, fetch \u2014 Use one of the registered provider ids (see the providers list), then retry.\"}",
+        "{\"ts\":\"2026-10-24T10:41:08.215Z\",\"level\":\"error\",\"event\":\"adhd.stealth/describe-provider.error\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\"},\"trace_id\":\"01M5PR00HSCHYAGWQT5R60BNY5\",\"pid\":42525,\"adhd.op\":\"stealth/describe-provider\",\"adhd.transport\":\"cli\",\"session_id\":\"5ad0d707-be67-4c69-964a-f058c73928c1\",\"worktree\":\"linked\",\"release.git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\",\"release.artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"span_id\":\"863cde181f97cd39\",\"parent_span_id\":null,\"otel_trace_id\":\"aaafea66b4d2b803d239a798b8bfd1bc\",\"duration_ms\":2,\"error\":\"Unknown provider \\\"nope\\\". Available: duckduckgo, google, arxiv, npm, github, maven, wikipedia, crates, pypi, mdn, stackoverflow, fetch \u2014 Use one of the registered provider ids (see the providers list), then retry.\"}",
+        "{\"ts\":\"2026-10-24T10:41:08.425Z\",\"level\":\"info\",\"event\":\"adhd.stealth/chrome-status.start\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\"},\"trace_id\":\"01M5PR00SSPQTEMYNMS02WSV5Y\",\"pid\":42589,\"adhd.op\":\"stealth/chrome-status\",\"adhd.transport\":\"cli\",\"session_id\":\"c31aa233-bcb6-4ef7-be71-2a0b2eda170c\",\"worktree\":\"linked\",\"release.git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\",\"release.artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"span_id\":\"1cc27e68d3d067b3\",\"parent_span_id\":null,\"otel_trace_id\":\"48c4cd0f33c3eb51874e2df8e60990a5\"}",
+        "{\"ts\":\"2026-10-24T10:41:08.427Z\",\"level\":\"error\",\"event\":\"adhd.op.error\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\"},\"trace_id\":\"01M5PR00SSPQTEMYNMS02WSV5Y\",\"pid\":42589,\"adhd.op\":\"stealth/chrome-status\",\"adhd.transport\":\"cli\",\"session_id\":\"c31aa233-bcb6-4ef7-be71-2a0b2eda170c\",\"worktree\":\"linked\",\"release.git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\",\"release.artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"span\":\"adhd.stealth/chrome-status\",\"duration_ms\":18,\"err\":\"--cdp-port: expected an integer, got \\\"abc\\\" \u2014 Run the command with --help and pass a valid value for the flag.\"}",
+        "{\"ts\":\"2026-10-24T10:41:08.428Z\",\"level\":\"error\",\"event\":\"adhd.stealth/chrome-status.error\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\"},\"trace_id\":\"01M5PR00SSPQTEMYNMS02WSV5Y\",\"pid\":42589,\"adhd.op\":\"stealth/chrome-status\",\"adhd.transport\":\"cli\",\"session_id\":\"c31aa233-bcb6-4ef7-be71-2a0b2eda170c\",\"worktree\":\"linked\",\"release.git_sha\":\"e97e82c99c4ad2164f8ebffba8473e3f04160489\",\"release.artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"span_id\":\"1cc27e68d3d067b3\",\"parent_span_id\":null,\"otel_trace_id\":\"48c4cd0f33c3eb51874e2df8e60990a5\",\"duration_ms\":2,\"error\":\"--cdp-port: expected an integer, got \\\"abc\\\" \u2014 Run the command with --help and pass a valid value for the flag.\"}"
       ],
       "log_files": [
-        "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/c8273d10-b319-41df-99f1-5458418387f6/scratchpad/tmp.4WjXTioW7u/.adhd/sox-ecosystem/stealth-search/logs/stealth-search.cli-2026-10-24.jsonl",
-        "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/c8273d10-b319-41df-99f1-5458418387f6/scratchpad/tmp.4WjXTioW7u/.adhd/sox-ecosystem/stealth-search/logs/stealth-search.live-service-2026-10-24.jsonl",
-        "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/c8273d10-b319-41df-99f1-5458418387f6/scratchpad/tmp.4WjXTioW7u/logs/stealth-search.cli-2026-10-24.jsonl"
+        "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/c8273d10-b319-41df-99f1-5458418387f6/scratchpad/tlv2/home.qZ6xxi/.adhd/sox-ecosystem/stealth-search/logs/stealth-search.cli-2026-10-24.jsonl"
       ],
-      "help_invocations": 13,
-      "help_spans": 0
+      "help_invocations": 12,
+      "help_spans": 0,
+      "sink_line_counts_before": {
+        "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/c8273d10-b319-41df-99f1-5458418387f6/scratchpad/tlv2/home.qZ6xxi/.adhd/sox-ecosystem/stealth-search/logs/stealth-search.cli-2026-10-24.jsonl": 14
+      },
+      "sink_line_counts_after": {
+        "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/c8273d10-b319-41df-99f1-5458418387f6/scratchpad/tlv2/home.qZ6xxi/.adhd/sox-ecosystem/stealth-search/logs/stealth-search.cli-2026-10-24.jsonl": 14
+      }
     }
   ]
 }
