@@ -65,6 +65,34 @@ Register the server with an MCP client; the host flags (`--transport`, `--idle-s
 }
 ```
 
+## Calling `stealth_search` over MCP
+
+Every MCP tool takes its input wrapped in `data`. A `tools/call` request for a DuckDuckGo search:
+
+```json
+{ "method": "tools/call", "params": { "name": "stealth_search", "arguments": { "data": { "provider": "duckduckgo", "query": "headless chrome detection", "qualifier": "site:developer.chrome.com" } } } }
+```
+
+`search` inputs (all but `provider` and `query` are optional):
+
+| Input | Values and default |
+| --- | --- |
+| `provider` | A provider id from `listProviders`, or `fetch`. |
+| `query` | The query; for `fetch`, the URL. |
+| `qualifier` | Search syntax prepended to the query (`site:example.com`, `repo:owner/name`); ignored by `fetch`. |
+| `strategy` | `auto` (default), `network`, `dom` or `fetch`. |
+| `content` | `none` (default) or `full` (adds the body as a window). |
+| `offset`, `maxContentSize` | Window start (default 0) and size in bytes (default 20000; 0 = unbounded). |
+| `maxResultBytes` | Byte bound of the result list (default 8192). |
+| `timeoutMs` | One deadline for the whole call (default 30000). |
+| `maxAttempts` | Attempts on a transient failure (the provider's policy, at most 3). |
+| `challengeWaitMs` | Wait for a Cloudflare or CAPTCHA wall to clear (default 25000; 0 disables). |
+| `visibility` | `offscreen` (default, a minimized window) or `foreground` (shows the window, for solving a challenge by hand). |
+| `pageDisposal` | `dispose` (default) or `keep`. |
+| `host`, `port` | CDP endpoint (default `127.0.0.1`, `9222`). |
+
+The result is a `SearchOutput` with `outcome`, `count`, `results` (`title`, `url`, `snippet`, optional `meta`) and, for a `fetch`, `content` and `nextOffset`. Before a search runs, the host asks the Chrome manager for a ready Chrome on the endpoint; on macOS a Chrome launched by `launchChrome` is `/Applications/Google Chrome.app` with the `Chrome-CDP` profile. After `pnpm add`, the bins live in `node_modules/.bin`: use an absolute path or `pnpm exec stealth-search-mcp` as the MCP `command`.
+
 ## Result size
 
 A search over an engine provider (`duckduckgo`, `google`, `github`, ...) bounds the serialized result
