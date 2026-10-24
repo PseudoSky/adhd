@@ -489,7 +489,7 @@
       "artifacts": [
         "packages/stealth/stealth-core-browser/",
         "entrypoint/stealth-search/",
-        "/Users/nix/dev/node/adhd/.worktrees/stealth-browser/docs/plan/stealth-browser/review/PRE-REVIEW-RESOLUTION.json",
+        "docs/plan/stealth-browser/review/PRE-REVIEW-RESOLUTION.json",
         "/Users/nix/dev/ai/scratch/agent-browser/adhd/",
         "/Users/nix/dev/ai/scratch/agent-browser/cdp-query-client.ts",
         "/Users/nix/dev/ai/scratch/agent-browser/cdp-search.ts",
@@ -511,7 +511,8 @@
         "/Users/nix/dev/ai/scratch/agent-browser/FEATURES.md",
         "/Users/nix/dev/ai/scratch/agent-browser/FETCH.md",
         "/Users/nix/dev/ai/scratch/agent-browser/docs/",
-        "packages/resilience/resilience-core-tripwire/"
+        "packages/resilience/resilience-core-tripwire/",
+        "/Users/nix/dev/ai/scratch/INDEX.md"
       ],
       "context": "contexts/audit-fixes.md",
       "notes": "executor=typescript-pro tier=sonnet/high; ONE implementer resolves every pre-review finding"
