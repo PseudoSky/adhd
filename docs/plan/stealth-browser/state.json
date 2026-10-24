@@ -543,10 +543,10 @@
       "end_ref": "f62af06f62226b3776abb24720e61c33a7cb4c3d"
     },
     "search-tracing-fixes": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-10-24T01:07:44.921Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "efad20bcbad8e7df8211bb503ed8649b6e49ddab",
       "end_ref": null
     },
     "plan-notes": {
