@@ -512,7 +512,9 @@
         "/Users/nix/dev/ai/scratch/agent-browser/FETCH.md",
         "/Users/nix/dev/ai/scratch/agent-browser/docs/",
         "packages/resilience/resilience-core-tripwire/",
-        "/Users/nix/dev/ai/scratch/INDEX.md"
+        "/Users/nix/dev/ai/scratch/INDEX.md",
+        "docs/plan/stealth-browser/evidence/tracing-log-validation.json",
+        "docs/plan/stealth-browser/evidence/tracing-log-validation.md"
       ],
       "context": "contexts/audit-fixes.md",
       "notes": "executor=typescript-pro tier=sonnet/high; ONE implementer resolves every pre-review finding"
