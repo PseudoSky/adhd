@@ -128,7 +128,7 @@
       "id": "P21",
       "status": "fixed",
       "commit": "973634e9a60edfb9f58c14716f2f4fd96299761f",
-      "evidence": "After challenge handling a main status >= 400 is never success: 429 is rate_limited, every other 4xx/5xx is error with SEARCH_FAILED: HTTP <status>, the body is kept; a Cloudflare 403 wall still gets its challenge wait first. Test: fetch/fetch-status.spec.ts."
+      "evidence": "After challenge handling a main status >= 400 is never success: 429 is rate_limited, every other 4xx/5xx is error with SEARCH_FAILED: HTTP <status>, the body is kept. A Cloudflare 403 wall gets its challenge wait first and, when the cleared page arrives as a fresh 200 Document response, ends as success (harness laterResponses, commit 2b71918ab); a wall that cleared in content but kept a 403 document status is an error. Test: fetch/fetch-status.spec.ts."
     },
     {
       "id": "P22",
@@ -158,7 +158,7 @@
       "id": "P26",
       "status": "fixed",
       "commit": "283852cdad31a6951e9ff6d82f5e6bb6a2bdb44b",
-      "evidence": "The store sink creates the database 0600 before the adapter opens it (0700 directory), tightens the db and its -wal/-shm, and fails the open with CAPTURE_SINK_UNAVAILABLE if it cannot. Identity redaction stays the recorder default because replay needs the cookies; that is documented in redact.ts, and README, including that URL query tokens are never masked. Test: capture/open-store-sink.spec.ts."
+      "evidence": "The store sink creates the database 0600 before the adapter opens it (0700 directory), tightens the db and its -wal/-shm, and fails the open with CAPTURE_SINK_UNAVAILABLE if it cannot. Identity redaction stays the recorder default as a pinned design: capture/redaction.spec.ts 'without a redact option headers are intact (default identity)' asserts it and replay of a logged-in flow needs the cookies; the redact.ts header, the core reference and the search README now state that the stored recording holds credentials unless redactHeaders() is passed and that URL query tokens are never masked. Test: capture/open-store-sink.spec.ts."
     },
     {
       "id": "P27",
@@ -193,8 +193,8 @@
     {
       "id": "P32",
       "status": "fixed",
-      "commit": "7671e7ed70c32ae3f3268575fe67fd7c23fadc42",
-      "evidence": "The unused duplicate src/lib/helpers.ts openDb is removed (storage/helpers.ts is the one, covered by its own spec); getAutofillData gained { redactValues } for the personal-data values; the ProfileClient docs (which called every method a stub) and the getOpenTabs comment now say what is implemented. getOpenTabs stays the documented warn-and-return-[] stub because the failsafe inventory pins it and the SNSS session format cannot be verified without a real profile (filed as a deferral). Tests: domains-storage/profile.spec.ts, foundation/helpers.spec.ts."
+      "commit": "87df3d968cd2c3b9960985ed161b1c4ebd9b731b",
+      "evidence": "The unused duplicate src/lib/helpers.ts openDb is removed (storage/helpers.ts is the one, covered by domains-storage/helpers.spec.ts); the unimplemented ProfileClient.getOpenTabs stub is removed with its docs row (the failsafe inventory row fs-170 lists top sites, favicons, autofill, search engines, preferences, extension ids and saved-credential presence, not open tabs; helpers.notYet stays because row 3363 names it); getAutofillData gained { redactValues } for the personal-data values; the ProfileClient docs, which called every method a stub, were corrected. Tests: domains-storage/profile.spec.ts (getOpenTabs absent, redactValues), foundation/helpers.spec.ts. Commit 7671e7ed7 holds the first part."
     },
     {
       "id": "P33",
@@ -206,13 +206,13 @@
       "id": "P34",
       "status": "fixed",
       "commit": "2af4bfa14f4fce27aafbcfe1b92b0cabb2cd0867",
-      "evidence": "The manager port is parsed with the IPv6-safe endpoint.portOf. The hideAllWindows catch is kept as a documented contract guard because three pinned failsafe specs drive it through the manager seam (the finding's dead-path half is intentionally retained, commented in the source). Test: chrome-manager specs."
+      "evidence": "The manager port is parsed with the IPv6-safe endpoint.portOf. Test (87df3d968): chrome-manager/chrome-manager.spec.ts launches with cdpHost [::1]:9333 and expects port 9333 (the old split(':')[1] parse gave 9222) and a host without a port falls back to 9222. The hideAllWindows catch is kept with an explanatory comment because the failsafe inventory pins it as a feature (failsafe-inventory.json row at line 86: 'a hide failure is logged and rethrown', pinned by chrome-manager.spec and lifecycle/hide-windows.spec)."
     },
     {
       "id": "P35",
       "status": "fixed",
       "commit": "11a559839d93fb87afef94dc0a049756087320d1",
-      "evidence": "pdfjs loads through the plain dynamic import first (require(esm) works from Node 22.12 and under vitest) and the Function-built native import is only constructed when that fails with ERR_REQUIRE_ESM or ERR_REQUIRE_ASYNC_MODULE (Node 22.5 to 22.11). Test: fetch/fetch-pdf.spec.ts (branches and a source assertion that new Function sits only inside the lazy function)."
+      "evidence": "pdfjs loads through the plain dynamic import first (require(esm) works from Node 22.12 and under vitest) and the Function-built native import is only constructed when that fails with ERR_REQUIRE_ESM or ERR_REQUIRE_ASYNC_MODULE (Node 22.5 to 22.11). Test: fetch/fetch-pdf.spec.ts (branches and a source assertion that new Function sits only inside the lazy function). Built-path proof on the final build: node loads dist/src/lib/fetch/pdf.js and extracts the two-page fixture (2 pages) both normally and with --disallow-code-generation-from-strings (rc 0 both); the vite bundle keeps the native import of pdfjs-dist external."
     },
     {
       "id": "P36",
@@ -241,7 +241,7 @@
     {
       "id": "P40",
       "status": "rejected",
-      "evidence": "The skip is deliberate and documented in the source: dom.ts:215-217 reads \"An anchor without a heading is not a result: there is no reliable title to guess from the collapsed text\", and capture-parsers/dom.spec.ts pins the behaviour. Emitting guessed titles would put wrong data in results; returning no result is the specified contract.",
+      "evidence": "The skip is deliberate and documented in the source: dom.ts:215-217 reads \"An anchor without a heading is not a result: there is no reliable title to guess from the collapsed text\", and capture-parsers/dom.spec.ts:168 (skips an anchor with no heading: the whitespace-split title fallback is gone) pins the behaviour. Emitting guessed titles would put wrong data in results; returning no result is the specified contract.",
       "reproduction": "rg -n \"An anchor without a heading is not a result\" packages/stealth/stealth-core-browser/src/lib/capture/dom.ts",
       "repro": "rg -n \"An anchor without a heading is not a result\" packages/stealth/stealth-core-browser/src/lib/capture/dom.ts"
     },
