@@ -44,8 +44,8 @@ $ echo $?
 70
 ```
 
-MCP: the tool result has `isError: true` and carries the code and message.
+MCP: a `StealthSearchError` extends the core's error class, not apigen's `ApiError`, so the MCP plugin re-throws it and the client's call rejects with a JSON-RPC error response whose message is the error message (the code is not a separate field). Only an `ApiError` becomes a tool result with `isError: true`, text `<code>: <message>` and the code under `_meta['adhd/error']` (apigen ADR-0018): a request the host schema rejects, such as an unregistered provider id or `extraArgs` on `launchChrome`, answers that way with `invalid_argument`.
 
 ```json
-{ "isError": true, "content": [{ "type": "text", "text": "UNKNOWN_PROVIDER: provider \"nope\" is not registered ..." }], "structuredContent": { "code": "UNKNOWN_PROVIDER", "message": "..." } }
+{ "isError": true, "content": [{ "type": "text", "text": "invalid_argument: ..." }], "_meta": { "adhd/error": { "code": "invalid_argument" } } }
 ```

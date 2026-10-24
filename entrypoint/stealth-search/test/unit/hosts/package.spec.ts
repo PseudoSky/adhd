@@ -14,7 +14,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, describe, expect, it, vi } from 'vitest'
 import * as api from '../../../src/api.js'
-import { OPERATION_DESCRIPTIONS, OPERATION_NAMES, buildStealthSearchPackage, dereferenceSchema, keepVerbWhole } from '../../../src/server.js'
+import { OPERATION_DESCRIPTIONS, OPERATION_NAMES, buildStealthSearchPackage, keepVerbWhole } from '../../../src/server.js'
 import type { StealthSearchPackage, Verbs } from '../../../src/server.js'
 import { API_SOURCE, BUILD_TIMEOUT_MS, fakeVerbs, packageFor } from '../../helpers/hosts/host-harness.js'
 
@@ -49,12 +49,11 @@ describe('the package of the eleven verbs [search-hosts.4] [search-hosts.8]', ()
     expect(built.toolDescriptions['launchChrome']).toBe(OPERATION_DESCRIPTIONS.launchChrome)
   })
 
-  it('the composed schemas hold no $ref and no definitions block (run-mode dispatch cannot resolve them)', () => {
-    for (const [name, s] of Object.entries(built.pkg.schemas)) {
-      const text = JSON.stringify(s)
-      expect(text, name).not.toContain('$ref')
-      expect(text, name).not.toContain('"definitions"')
-    }
+  it('the package is assembled by buildApigenPackage: schemas are composed as extracted (definitions kept for dispatch to resolve) and the id, version and import path are carried', () => {
+    expect(built.pkg.id).toBe('stealth')
+    expect(typeof built.pkg.version).toBe('string')
+    expect(Object.keys(built.pkg.schemas).sort()).toEqual([...OPERATION_NAMES].sort())
+    expect(built.pkg.importPath).toBe(API_SOURCE)
   })
 
   it('P1: the launchChrome input accepts only port and userDataDir and REQUIRES data.input (an empty call can never start a default Chrome)', () => {
@@ -72,29 +71,6 @@ describe('the package of the eleven verbs [search-hosts.4] [search-hosts.8]', ()
     const real = await buildStealthSearchPackage({ apiSource: API_SOURCE })
     expect(real.pkg.fns?.['search']).toBe((api as unknown as Verbs)['search'])
   }, BUILD_TIMEOUT_MS)
-})
-
-describe('$ref inlining [search-hosts.16]', () => {
-  it('inlines definitions, drops the definitions blocks and resolves a recursive reference to {}', () => {
-    const schema = {
-      type: 'object',
-      properties: { a: { $ref: '#/definitions/Leaf' }, b: { type: 'array', items: { $ref: '#/definitions/Tree' } } },
-      definitions: { Leaf: { type: 'string', description: 'leaf' }, Tree: { type: 'object', properties: { child: { $ref: '#/definitions/Tree' }, leaf: { $ref: '#/definitions/Leaf' } } } },
-    }
-    const out = dereferenceSchema(schema) as { properties: { a: unknown; b: { items: { properties: { child: unknown; leaf: unknown } } } } } & Record<string, unknown>
-    expect(out['definitions']).toBeUndefined()
-    expect(out.properties.a).toEqual({ type: 'string', description: 'leaf' })
-    expect(out.properties.b.items.properties.leaf).toEqual({ type: 'string', description: 'leaf' })
-    expect(out.properties.b.items.properties.child).toEqual({})
-    expect(JSON.stringify(out)).not.toContain('$ref')
-  })
-
-  it('a schema with no definitions, a scalar and an unknown reference pass through or resolve to {}', () => {
-    const plain = { type: 'object', properties: { x: { type: 'number' } } }
-    expect(dereferenceSchema(plain)).toBe(plain)
-    expect(dereferenceSchema('x')).toBe('x')
-    expect(dereferenceSchema({ definitions: { A: { type: 'string' } }, properties: { m: { $ref: '#/definitions/Missing' } } })).toEqual({ properties: { m: {} } })
-  })
 })
 
 describe('naming keeps each verb whole [search-hosts.8]', () => {

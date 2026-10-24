@@ -28,10 +28,10 @@ import { createHash } from 'node:crypto'
 import { appendFileSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
-import { composeSchemas, extract } from '@adhd/apigen-core-client'
+import { extract } from '@adhd/apigen-core-client'
 import type { Operation, RunInput } from '@adhd/apigen-core-client'
 import { project } from '@adhd/apigen-engine-naming'
-import { createLogger } from '@adhd/apigen-engine-runtime'
+import { buildApigenPackage, createLogger } from '@adhd/apigen-engine-runtime'
 import { mcpPlugin } from '@adhd/apigen-plugin-mcp'
 import { lifecycle, shutdownChrome } from '@adhd/stealth-core-browser'
 import * as api from './api.js'
@@ -142,55 +142,6 @@ export function readPackageVersion(): string {
   }
 }
 
-/**
- * Run-mode dispatch cannot resolve JSON-Schema `$ref`, so every definition is inlined and the
- * `definitions` blocks dropped (ported from the source `apigen-client-common.mjs`; a recursive
- * reference resolves to `{}`).
- */
-export function dereferenceSchema(schema: unknown): unknown {
-  if (!schema || typeof schema !== 'object') return schema
-  const definitions: Record<string, unknown> = {}
-  const collect = (node: unknown): void => {
-    if (Array.isArray(node)) {
-      for (const item of node) collect(item)
-      return
-    }
-    if (!node || typeof node !== 'object') return
-    const obj = node as Json
-    for (const key of ['definitions', '$defs']) {
-      const defs = obj[key]
-      if (defs && typeof defs === 'object' && !Array.isArray(defs)) {
-        for (const [name, def] of Object.entries(defs as Json)) if (!(name in definitions)) definitions[name] = def
-      }
-    }
-    for (const [key, value] of Object.entries(obj)) {
-      if (key === 'definitions' || key === '$defs') continue
-      collect(value)
-    }
-  }
-  collect(schema)
-  collect(definitions)
-  if (Object.keys(definitions).length === 0) return schema
-  const inline = (node: unknown, seen: Set<string>): unknown => {
-    if (Array.isArray(node)) return node.map((item) => inline(item, seen))
-    if (!node || typeof node !== 'object') return node
-    const obj = node as Json
-    const ref = obj['$ref']
-    if (typeof ref === 'string') {
-      const name = ref.replace(/^#\/(?:definitions|\$defs)\//, '')
-      if (seen.has(name) || !(name in definitions)) return {}
-      return inline(definitions[name], new Set([...seen, name]))
-    }
-    const out: Json = {}
-    for (const [key, value] of Object.entries(obj)) {
-      if (key === 'definitions' || key === '$defs') continue
-      out[key] = inline(value, seen)
-    }
-    return out
-  }
-  return inline(schema, new Set())
-}
-
 /** Each operation keeps its verb as one word: `listProviders` stays `listProviders` in the MCP name and the CLI path. */
 export function keepVerbWhole(ops: readonly Operation[]): Operation[] {
   return ops.map((op) => ({
@@ -272,7 +223,7 @@ function operationName(op: Operation): string {
 
 /**
  * Build the apigen package of the eleven verbs: extract, keep
- * each verb whole, inline `$ref`, compose, bind the live functions. Performs no I/O besides the
+ * each verb whole, then compose and bind the live functions with `buildApigenPackage`. Performs no I/O besides the
  * extraction.
  */
 export async function buildStealthSearchPackage(options: BuildPackageOptions = {}): Promise<StealthSearchPackage> {
@@ -285,15 +236,17 @@ export async function buildStealthSearchPackage(options: BuildPackageOptions = {
   }
   const operations = keepVerbWhole(extracted)
   const actions = operations.filter((op) => op.kind === 'action')
-  const generated = {
-    metadata: { namespace: STEALTH_NAMESPACE, phase: '' },
-    schemas: Object.fromEntries(
-      actions.map((op) => [operationName(op), { input: dereferenceSchema(op.input) as Json, output: dereferenceSchema(op.output) as Json, hasCtx: op.hasCtx, safe: op.safe }])
-    ),
-  }
-  const schemas = composeSchemas(generated, [])
+  const verbs = options.verbs ?? (api as unknown as Verbs)
+  const { pkg } = buildApigenPackage({
+    id: STEALTH_NAMESPACE,
+    version: options.version ?? readPackageVersion(),
+    importPath: apiSource,
+    operations,
+    fns: verbs as unknown as Record<string, (...args: unknown[]) => unknown>,
+    createClient: async () => ({}),
+  })
   for (const name of EXPLICIT_INPUT_OPERATIONS) {
-    const s = schemas[name]
+    const s = pkg.schemas[name]
     if (s) requireExplicitInput(s)
   }
   const surface: SurfaceEntry[] = actions.map((op) => {
@@ -302,16 +255,8 @@ export async function buildStealthSearchPackage(options: BuildPackageOptions = {
     return { operation: name, id: op.id, cliPath: projected.cli.path, mcpTool: projected.mcp.name, description: OPERATION_DESCRIPTIONS[name] ?? name }
   })
   const toolDescriptions: Record<string, string> = Object.fromEntries(surface.map((s) => [s.operation, s.description]))
-  const verbs = options.verbs ?? (api as unknown as Verbs)
   return {
-    pkg: {
-      id: STEALTH_NAMESPACE,
-      version: options.version ?? readPackageVersion(),
-      schemas,
-      importPath: apiSource,
-      fns: verbs as unknown as Record<string, (...args: unknown[]) => unknown>,
-      createClient: async () => ({}),
-    },
+    pkg,
     operations,
     surface,
     toolDescriptions,

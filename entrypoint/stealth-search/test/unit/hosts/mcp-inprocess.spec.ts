@@ -1,13 +1,14 @@
 /**
  * guards: the MCP host does not serve the eleven verbs over the SDK transport, or the in-process path spawns a process
  * tier: S
- * cites: ticket 8468f7b1 [search-hosts.7] [search-hosts.12] [search-hosts.16] [search-hosts.20] [search-hosts.22]
+ * cites: ticket 8468f7b1 [search-hosts.7] [search-hosts.12] [search-hosts.16] [search-hosts.20] [search-hosts.22] [search-mcp-iserror.1]
  * The MCP host driven in-process: the REAL `startMcpHost`, the REAL `mcpPlugin.run` and a real MCP
  * client over the SDK's in-memory transport pair (the stdio transport is replaced by the server end
  * of that pair, so no process is spawned and no pipe or socket is opened). Ticket 8468f7b1 · plan
  * state search-hosts.
  *
- * Criteria: [search-hosts.7] [search-hosts.12] [search-hosts.16] [search-hosts.20] [search-hosts.22]
+ * ADR-0018 (apigen): every ApiError reaches the client as a tool result with `isError: true`, text `<code>: <message>`
+ * and the code under `_meta['adhd/error']`. Criteria: [search-mcp-iserror.1] [search-hosts.7] [search-hosts.12] [search-hosts.16] [search-hosts.20] [search-hosts.22]
  * · backlog 9d05e8b2 (CLI and MCP report the same tripwire status), 591e1a7 (a hitl outcome) ·
  * inventory rows I-34 (stdio transport), I-35 (package build, $ref inlining).
  */
@@ -21,7 +22,7 @@ import type { HostSettings } from '../../../src/host-flags.js'
 import { hitlResponse, input, makeFakeCore, makeWorld, response, scriptedEngine } from '../../helpers/verbs/harness.js'
 import { startMcpHost } from '../../../src/server.js'
 import type { McpHostDeps, McpHostHandle, Verbs } from '../../../src/server.js'
-import { BUILD_TIMEOUT_MS, FakeStdin, cliHarness, fakeVerbs, packageFor, trippedWorld, wire, expectMcpToolError } from '../../helpers/hosts/host-harness.js'
+import { BUILD_TIMEOUT_MS, FakeStdin, cliHarness, fakeVerbs, packageFor, trippedWorld, wire } from '../../helpers/hosts/host-harness.js'
 
 const hoisted = vi.hoisted(() => ({ serverTransport: undefined as unknown }))
 
@@ -34,6 +35,16 @@ vi.mock('@modelcontextprotocol/sdk/server/stdio.js', () => ({
 }))
 
 const MCP_NAMES = ['search', 'listProviders', 'describeProvider', 'tripwireStatus', 'clearTripwire', 'getPageContext', 'chromeStatus', 'launchChrome', 'shutdownChrome', 'listPageTargets', 'checkChromeActivity'].map((n) => `stealth_${n}`)
+
+
+/** ADR-0018 D2: an `ApiError` is a tool result with `isError: true`, text `<code>: <message>` and `_meta['adhd/error'].code`. */
+async function expectInvalidArgument(call: Promise<unknown>, pattern: RegExp): Promise<void> {
+  const res = (await call) as { isError?: boolean; content?: Array<{ text?: string }>; _meta?: Record<string, unknown> }
+  expect(res.isError).toBe(true)
+  expect(res.content?.[0]?.text).toMatch(/^invalid_argument: /)
+  expect(res.content?.[0]?.text).toMatch(pattern)
+  expect(res._meta?.['adhd/error']).toMatchObject({ code: 'invalid_argument' })
+}
 
 const sessions: Array<{ handle: McpHostHandle; client: Client }> = []
 
@@ -90,24 +101,24 @@ describe('MCP host: tools/list over the real mcp plugin [search-hosts.7]', () =>
   )
 
   it(
-    'a launchChrome call carrying extraArgs or chromePath is rejected by the schema and the verb is never called (nothing is spawned)',
+    '[search-mcp-iserror.1] ADR-0018: a launchChrome call carrying extraArgs or chromePath returns isError true with invalid_argument text and the verb is never called (nothing is spawned)',
     async () => {
       const verbs = fakeVerbs(vi.fn)
       const { client } = await session(verbs)
-      await expectMcpToolError(client.callTool({ name: 'stealth_launchChrome', arguments: { data: { input: { port: 19997, extraArgs: ['--evil'] } } } }), /extraArgs/)
-      await expectMcpToolError(client.callTool({ name: 'stealth_launchChrome', arguments: { data: { input: { port: 19997, chromePath: '/bin/sh' } } } }), /chromePath/)
+      await expectInvalidArgument(client.callTool({ name: 'stealth_launchChrome', arguments: { data: { input: { port: 19997, extraArgs: ['--evil'] } } } }), /extraArgs/)
+      await expectInvalidArgument(client.callTool({ name: 'stealth_launchChrome', arguments: { data: { input: { port: 19997, chromePath: '/bin/sh' } } } }), /chromePath/)
       expect(verbs.launchChrome).not.toHaveBeenCalled()
     },
     BUILD_TIMEOUT_MS
   )
 
   it(
-    'a launchChrome call with no input at all is rejected too (the host schema requires data.input), so an empty call can never start a Chrome with defaults',
+    '[search-mcp-iserror.1] ADR-0018: a launchChrome call with no input at all returns isError true with invalid_argument text (the host schema requires data.input), so an empty call can never start a Chrome with defaults',
     async () => {
       const verbs = fakeVerbs(vi.fn)
       const { client } = await session(verbs)
-      await expectMcpToolError(client.callTool({ name: 'stealth_launchChrome', arguments: {} }), /required key 'input'/)
-      await expectMcpToolError(client.callTool({ name: 'stealth_launchChrome', arguments: { data: {} } }), /required key 'input'/)
+      await expectInvalidArgument(client.callTool({ name: 'stealth_launchChrome', arguments: {} }), /required key 'input'/)
+      await expectInvalidArgument(client.callTool({ name: 'stealth_launchChrome', arguments: { data: {} } }), /required key 'input'/)
       expect(verbs.launchChrome).not.toHaveBeenCalled()
       const ok = await client.callTool({ name: 'stealth_launchChrome', arguments: { data: { input: { port: 19990 } } } })
       expect(ok.isError).toBeFalsy()
@@ -165,7 +176,7 @@ describe('CLI and MCP report the same tripwire status [search-hosts.20]', () => 
 
 describe('a hitl outcome on the MCP host [search-hosts.22]', () => {
   it(
-    '591e1a7 isError: the apigen mcp plugin has no isError channel, so a tripped provider answers outcome hitl with attempts 0 as data, and a rejected call is an error response',
+    '591e1a7 isError: a tripped provider answers outcome hitl with attempts 0 as data (isError unset), and ADR-0018 makes a schema-rejected provider an isError result with invalid_argument text',
     async () => {
       const world = await trippedWorld()
       const { client } = await session(api as unknown as Verbs, { build: () => packageFor(api as unknown as Verbs), configure: wire(world, scriptedEngine(response()).strategies) })
@@ -174,7 +185,7 @@ describe('a hitl outcome on the MCP host [search-hosts.22]', () => {
       const out = res.structuredContent as Record<string, unknown>
       expect(out).toMatchObject({ outcome: 'hitl', attempts: 0, provider: 'github' })
       expect(out['hitl']).toMatchObject({ reason: 'captcha' })
-      await expectMcpToolError(client.callTool({ name: 'stealth_describeProvider', arguments: { data: { input: { provider: 'not-a-provider' } } } }), /not one of/)
+      await expectInvalidArgument(client.callTool({ name: 'stealth_describeProvider', arguments: { data: { input: { provider: 'not-a-provider' } } } }), /not one of/)
     },
     BUILD_TIMEOUT_MS
   )
