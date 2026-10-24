@@ -101,7 +101,8 @@
     "packages/stealth/stealth-core-browser/test/unit/surface/"
   ],
   "gates-first": [
-    "docs/plan/stealth-browser/evidence/"
+    "docs/plan/stealth-browser/evidence/",
+    "entrypoint/stealth-search/vite.config.ts"
   ],
   "review-prep": [
     "docs/plan/stealth-browser/review/migration.diff",
