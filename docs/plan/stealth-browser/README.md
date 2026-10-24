@@ -233,6 +233,55 @@ Highest risks: (1) apigen extraction failing opaquely on the verb types (pinned 
 2. `hb-design-evaluations` (provided): the two architect evaluations are recorded in `EVALUATIONS.md`, `EVAL-store-adapter.md` and `EVAL-service-proxy.md` and folded into `capture-upgrade` and `chrome-lifecycle`. Their provisional defaults are the OPEN-DECISIONS OD-1..OD-11 of `EVALUATIONS.md` (all reversible), including the pending service-proxy extension design.
 3. `hb-release-decision`: dispatcher writes `RELEASE-DECISION.md` (`DECISION: publish|defer`, a `CONSUME:` line) per `PUBLISHING.md` (gates `merge-readiness` and `consumer-relink`).
 
+## Known issues
+
+1. Core-seam `.8` is untagged: it sits inside commit `aa5df30a` without its `[psm:...]` tag. History is not rewritten, so this note is the only action.
+2. `compile-task.js` truncates piped output at 64 KiB. This is a plan-tooling bug in the sox plugin cache. The dispatcher files it upstream, and the plugin cache is not edited.
+3. `plan-scaffold` commits with `--no-verify`. This is a plan-tooling bug in the same class as item 2: filed upstream, with the plugin cache not edited.
+4. `plan-scaffold` has no verb to add a dependency edge to an existing state. The 2026-10-23 amendment re-ran `add-state` on `tracing-log-validation` and `audit-pre-review`, which restored their contexts.
+5. Main's test layout moved the packages' tests from `src/test` to `test`. Completed states keep their historical wording, and their guards resolve the new locations.
+6. The shared apigen tracing plugin (`packages/apigen/apigen-plugin-tracing`) emits a documented upstream twin event, `adhd.op.error` (op id `op`), beside every `adhd.<op>.error`. The search entrypoint keeps `makeTracingPlugin({serviceName:'adhd'})` as required and documents the twin in its `OBSERVABILITY.md`. `tracing-log-validation.11` tolerates exactly that event.
+7. The full `--complete` audit of a phase runs every guard of the phase and takes 10 to 15 minutes under load. A loaded run can fail a timing-sensitive criterion that passes standalone.
+
+## Amendment 2026-10-23
+
+The amendment adds these states, listed in wave order: `main-merge`; `conform-tripwire`, `conform-core`, `conform-search`; `fix-tripwire`, `fix-core-parsers`, `fix-core-lifecycle`, `fix-core-errors`, `fix-search-fetch`, `fix-search-engine`, `fix-search-output`; `search-mcp-iserror`; `fix-search-build`; `search-tracing-fixes`; the `tracing-log-validation` re-run; `search-cutover`; `plan-notes`; `release-readiness`; and `audit-pre-review`. Main was merged at `e21558fc1` (merge commit `eb6526ed9`).
+
+Plan-script repairs made during the wave: the `search-usecases` guard resolves `test/unit/use-cases`; the repeat-guard passes `--skip-nx-cache` before `--`; `tracing-log-validation.11` tolerates the upstream twin event; `fix-search-output` owns `tripwire-wiring.spec.ts`; and `search-tracing-fixes` owns `use-cases/hosts.spec.ts` and `docs/ERRORS.md`.
+
+Provisional resolution of OD-11: one SERP walker is kept, in core `capture/dom.ts`. The search `dom.ts` delegates to it, and the dead `\s{2,}` title fallback is deleted. This resolution is reversible; see `docs/plan/stealth-browser/OPEN-DECISIONS.md`.
+
+## Scheduled fixes for the audit-fixes wave
+
+These are resolved by `audit-fixes`. They are not deferrals.
+
+- `extractSnippet`'s forward 5000-char window must be bounded at the next result card (core `parsers.ts`).
+- The pypi `extra.version` selector (`span.package-snippet__version`) matches nothing, because upstream emits `span.package-snippet__created`. This needs a version-vs-created decision.
+- `StealthSearchError` reaches MCP clients as a JSON-RPC rejection with no machine-readable code. It must carry the code in an `isError` result.
+- DNS is resolved and pinned before credential-bearing tiers. Today the fetch policy resolves, then the browser resolves again.
+- The baked `dist/operations.baked.json` file mode (0600 from `nodeHostFs.writeFile`) must survive pack and publish. Verify it.
+- `pypi-dom.spec.ts` has 3 no-non-null-assertion lint warnings (lines 27, 32, 43).
+- `reaper-link.ts` uses `@ts-ignore` on `import.meta.url`, with ban-ts-comment disabled on that line. Replace it with a typed approach.
+
+## Findings for filing
+
+These are filed by the dispatcher.
+
+- The tripwire expiry audit line carries `trippedAt` only; it does not carry the original trip reason.
+- `MemoryFs.schedule` polls with `setImmediate`, so `expiry.spec` (`exploreExhaustive`) and `interleave.spec` can slow under load.
+- The default-entry test in `reaper-link.spec` is weak: it has two branches and needs an injectable `ReaperEntrySource`. `resolveReaperEntry` and `ReaperEntrySource` are not exported, and `public-api.spec` pins members.
+- An invalid endpoint is a plain typed `StealthCoreBrowserError` (`CDP_UNREACHABLE`, `detail.reason` `invalid-endpoint`), not a `RangeError`. `isStealthCoreBrowserError` does not exist.
+- The conform-core `guards:` header lines were derived from each spec's first `it()` title and need hand tightening.
+- The core AGENTS.md mentions an e2e target via `vitest.e2e.config.ts`, which does not exist.
+- `test/helpers/hosts/host-harness.ts` `expectMcpToolError` checks only `isError` plus text, not the code or `_meta`.
+- The pypi fixture is transcribed from the upstream warehouse template, because live pypi.org returns a Client Challenge. A real capture needs a HITL browser session.
+- Heading-less Google anchors are skipped.
+- Core `normalizeUrl` handles `/goto?url=`, and `extractValue` tests the container first.
+- The byte bound (`SearchOutput.omitted`, `maxResultBytes`, `DEFAULT_MAX_RESULT_BYTES`) applies only to engine providers. `search_a.py` and `SPEC-stealth-search.md` do not mention `maxResultBytes` or `omitted`.
+- The baked operations cache is produced by `build-bin`, not by the vite build target.
+- `package.spec.ts` has no direct `$ref`-inlining tests; `buildApigenPackage` keeps `$ref`.
+- The plan guard for the search usecases and the old `src/test` wording in contexts of completed states are historical.
+
 ## Dispatch
 
 Run: `plan-orchestrator execute stealth-browser` (resume: `node $SKILL/scripts/state-transition.js docs/plan/stealth-browser`). Plan-time validators: `node $SKILL/scripts/gap-check.js docs/plan/stealth-browser --discover`, `python3 docs/plan/stealth-browser/scripts/check-disjoint.py`, `python3 docs/plan/stealth-browser/scripts/check-guards-red.py`.
