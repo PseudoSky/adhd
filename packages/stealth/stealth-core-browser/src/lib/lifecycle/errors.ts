@@ -77,7 +77,7 @@ export const lifecycleErrors = {
   launchFailed: (port: number, cause: unknown): LifecycleError =>
     lifecycleError(
       'LAUNCH_FAILED',
-      `Chrome could not be launched on port ${port} (${errorMessage(cause)}); install Chrome or pass chromePath, and free the port.`,
+      `Chrome could not be launched on port ${port} (${errorMessage(cause)}); install Chrome in its standard location (library callers may also pass chromePath), and free the port.`,
       { cause, detail: { port } },
     ),
   launchLockTimeout: (port: number, path: string): LifecycleError =>

@@ -56,6 +56,7 @@ vi.mock('node:fs', () => ({
   readFileSync: (p: string) => sim.fs.readFileSync(p),
   writeFileSync: (p: string, d: string, o?: { mode?: number }) => sim.fs.writeFileSync(p, d, o),
   renameSync: (a: string, b: string) => sim.fs.renameSync(a, b),
+  statSync: (p: string) => sim.fs.statSync(p),
 }))
 vi.mock('node:os', () => ({ homedir: () => '/home/u', platform: () => 'darwin', tmpdir: () => '/tmp' }))
 vi.mock('../../../src/lib/cdp/targets.js', () => ({
@@ -225,21 +226,20 @@ describe('8468f7b1 [chrome-lifecycle.1] ensureChromeRunning and the O_EXCL launc
   })
 
   it('reclaiming a stale lock re-attempts the exclusive create', async () => {
-    // [fs-038] if the second O_EXCL attempt also fails (a rival re-took it) the launch proceeds lock-less, never hangs.
+    // [fs-038] [audit-fixes.2] if a rival re-takes the lock between our reclaim and our retry, the launch never
+    // proceeds lock-less: it keeps waiting (bounded) and ends in LAUNCH_LOCK_TIMEOUT without spawning a second Chrome.
     sim.fs.openSync(LOCK, 'wx')
-    const realUnlink = sim.fs.unlinkSync.bind(sim.fs)
-    let unlinks = 0
-    sim.fs.unlinkSync = (path: string) => {
-      unlinks++
-      realUnlink(path)
-      if (unlinks === 1) sim.fs.openSync(LOCK, 'wx') // a rival re-creates it between unlink and our retry
+    const realRename = sim.fs.renameSync.bind(sim.fs)
+    sim.fs.renameSync = (from: string, to: string) => {
+      realRename(from, to)
+      sim.fs.openSync(LOCK, 'wx') // a rival re-creates it between our reclaim and our retry
     }
     const p = mod.ensureChromeRunning(opts)
-    await vi.advanceTimersByTimeAsync(15_500)
-    await vi.advanceTimersByTimeAsync(400)
-    await expect(p).resolves.toMatchObject({ pid: 7000 })
-    expect(sim.spawn).toHaveBeenCalledTimes(1)
-    // Lock-less: our process never owned the rival's lock, so it did not remove it.
+    const assertion = expect(p).rejects.toMatchObject({ code: 'LAUNCH_LOCK_TIMEOUT' })
+    await vi.advanceTimersByTimeAsync(31_000)
+    await assertion
+    expect(sim.spawn).not.toHaveBeenCalled()
+    // The rival's lock is theirs: our process never removed it.
     expect(sim.fs.existsSync(LOCK)).toBe(true)
   })
 

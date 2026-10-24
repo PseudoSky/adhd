@@ -88,6 +88,9 @@ describe('8468f7b1 [prod-errors.2] launchChrome rejects with a typed code (PA5.4
     const p = launchChrome({ port: PORT, chromePath: CHROME, profileDir: PROFILE })
     await expect(p).rejects.toMatchObject({ code: 'CHROME_NOT_FOUND', message: expect.stringContaining(`Chrome binary not found at "${CHROME}"`), detail: { path: CHROME, port: PORT } })
     await expect(p).rejects.toBeInstanceOf(StealthCoreBrowserError)
+    // [audit-fixes.5] the library reads no environment variable, so the message must not tell the user to set one.
+    await expect(p).rejects.toMatchObject({ message: expect.not.stringContaining('CHROME_PATH') })
+    await expect(p).rejects.toMatchObject({ message: expect.stringContaining('Install Chrome in its standard location') })
     expect(m.spawn).not.toHaveBeenCalled()
   })
 

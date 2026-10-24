@@ -69,7 +69,7 @@ export interface StealthCoreBrowserErrorInit {
 
 /** The concrete next step for each code. One phrasing per code; shown by docs/ERRORS.md. */
 const REMEDIATION: Record<ErrorCode, string> = {
-  CHROME_NOT_FOUND: 'Install Google Chrome or pass the path of an existing Chrome binary.',
+  CHROME_NOT_FOUND: 'Install Google Chrome in its standard location (library callers may also pass chromePath to cdp.launchChrome), then retry.',
   PORT_IN_USE: 'Free the port or choose another remote-debugging port.',
   NODE_TOO_OLD: 'Upgrade Node.js to version 22.5 or newer.',
   CHROME_NOT_RUNNING: 'Start Chrome with launchChrome, then retry.',
@@ -95,7 +95,7 @@ const REMEDIATION: Record<ErrorCode, string> = {
   CAPTURE_SESSION_CLOSED: 'Keep the page open for the whole capture and retry.',
   CAPTURE_SINK_FAILED: 'Check the recording sink storage and retry the capture.',
   CAPTURE_SINK_UNAVAILABLE: 'Install the store adapter and pass a writable database path and a valid table name.',
-  LAUNCH_FAILED: 'Install Chrome or pass chromePath, free the port and retry.',
+  LAUNCH_FAILED: 'Install Chrome in its standard location (library callers may also pass chromePath to cdp.launchChrome), free the port and retry.',
   LAUNCH_LOCK_TIMEOUT: 'Remove the stale launch lock file if no launcher is running, then retry.',
   CHROME_UNREACHABLE_AFTER_LAUNCH: 'Check that nothing else holds the port and the profile is not locked, then retry.',
   LAUNCH_CIRCUIT_OPEN: 'Fix the launch error and retry after retryAfterMs.',

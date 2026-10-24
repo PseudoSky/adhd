@@ -49,6 +49,7 @@ vi.mock('node:fs', () => ({
   readFileSync: (p: string) => sim.fs.readFileSync(p),
   writeFileSync: (p: string, d: string, o?: { mode?: number }) => sim.fs.writeFileSync(p, d, o),
   renameSync: (a: string, b: string) => sim.fs.renameSync(a, b),
+  statSync: (p: string) => sim.fs.statSync(p),
 }))
 vi.mock('node:os', () => ({ homedir: () => '/home/u', platform: () => 'darwin', tmpdir: () => '/tmp' }))
 vi.mock('../../../src/lib/cdp/targets.js', () => ({

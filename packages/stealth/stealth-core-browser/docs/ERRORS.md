@@ -25,7 +25,7 @@ The codes below are listed in the order of `ERROR_CODES`.
 
 | Code | Exit | When | Remediation |
 | --- | --- | --- | --- |
-| `CHROME_NOT_FOUND` | 10 | No Chrome binary exists at the resolved path, or spawning it failed with ENOENT. | Install Google Chrome or pass the path of an existing Chrome binary. |
+| `CHROME_NOT_FOUND` | 10 | No Chrome binary exists at the resolved path, or spawning it failed with ENOENT. | Install Google Chrome in its standard location (library callers may also pass chromePath to cdp.launchChrome), then retry. |
 | `PORT_IN_USE` | 11 | The remote-debugging port is already taken (spawn failed with EADDRINUSE). | Free the port or choose another remote-debugging port. |
 | `NODE_TOO_OLD` | 12 | The running Node.js is older than 22.5. Raised by the host preflight from this registry. | Upgrade Node.js to version 22.5 or newer. |
 | `CHROME_NOT_RUNNING` | 13 | An operation needs a running Chrome and none answers. Raised by hosts from this registry. | Start Chrome with launchChrome, then retry. |
@@ -66,7 +66,7 @@ The codes below are listed in the order of `ERROR_CODES`.
 
 | Code | Exit | When | Remediation |
 | --- | --- | --- | --- |
-| `LAUNCH_FAILED` | 60 | Chrome could not be launched, or the Chrome on the port is not this tool's own (detail.reason is foreign-profile). | Install Chrome or pass chromePath, free the port and retry. |
+| `LAUNCH_FAILED` | 60 | Chrome could not be launched, or the Chrome on the port is not this tool's own (detail.reason is foreign-profile). | Install Chrome in its standard location (library callers may also pass chromePath to cdp.launchChrome), free the port and retry. |
 | `LAUNCH_LOCK_TIMEOUT` | 61 | The per-port launch lock was not released in time. | Remove the stale launch lock file if no launcher is running, then retry. |
 | `CHROME_UNREACHABLE_AFTER_LAUNCH` | 62 | Chrome started but CDP did not answer afterwards. | Check that nothing else holds the port and the profile is not locked, then retry. |
 | `LAUNCH_CIRCUIT_OPEN` | 63 | Three launches failed within 60 s; the breaker refuses until detail.retryAfterMs has passed. | Fix the launch error and retry after retryAfterMs. |

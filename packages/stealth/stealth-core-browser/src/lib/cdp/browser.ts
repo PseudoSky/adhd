@@ -13,7 +13,7 @@
 
 import { execSync, spawn } from 'node:child_process'
 import * as nodeFs from 'node:fs'
-import { existsSync, mkdirSync, openSync, closeSync, unlinkSync } from 'node:fs'
+import { existsSync, mkdirSync, openSync, closeSync, unlinkSync, statSync, renameSync } from 'node:fs'
 import { homedir, platform, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { lifecycleError, type LifecycleError } from '../lifecycle/errors.js'
@@ -188,7 +188,8 @@ function assertOwnChrome(port: number, profileDir: string, opts: LaunchChromeOpt
 
 // ─── Process tracking ─────────────────────────────────────────────────────────
 
-let launchedPid: number | null = null
+/** The pid of the Chrome this process launched, per CDP port: one port's launch never decides another port's kill. */
+const launchedPids = new Map<number, number>()
 
 // ─── Launch ───────────────────────────────────────────────────────────────────
 
@@ -222,7 +223,7 @@ export async function launchChrome(opts: LaunchChromeOptions = {}): Promise<{
     throw StealthCoreBrowserError.of(
       'CHROME_NOT_FOUND',
       `Chrome binary not found at "${chromePath}". ` +
-      `Set CHROME_PATH env var or install Chrome.`,
+      `Install Chrome in its standard location (the library reads no environment variable; library callers may pass chromePath).`,
       { detail: { path: chromePath, port } },
     )
   }
@@ -255,16 +256,32 @@ export async function launchChrome(opts: LaunchChromeOptions = {}): Promise<{
     })
 
     child.unref()
-    launchedPid = child.pid ?? null
+    const spawnedPid = child.pid ?? null
+    if (spawnedPid !== null) {
+      launchedPids.set(port, spawnedPid)
+      // The child handle is the only authority on whether the pid still belongs to this launch: forget the pid the
+      // moment it exits, before the OS can recycle it for an unrelated process.
+      if (typeof child.once === 'function') {
+        child.once('exit', () => {
+          if (launchedPids.get(port) === spawnedPid) launchedPids.delete(port)
+        })
+      }
+    }
 
     // Wait up to 10s for CDP endpoint
     const deadline = Date.now() + 10_000
     const poll = setInterval(async () => {
       if (await isChromeReachable(cdpHost)) {
         clearInterval(poll)
-        resolve({ pid: launchedPid, port, alreadyRunning: false, profileDir })
+        resolve({ pid: spawnedPid, port, alreadyRunning: false, profileDir })
       } else if (Date.now() > deadline) {
         clearInterval(poll)
+        // The spawned Chrome never answered: take its whole process group down and forget the pid, so a timed-out
+        // launch leaves no orphan and no stale tracked pid for a later kill to signal.
+        if (spawnedPid !== null) {
+          launchedPids.delete(port)
+          killGroup(spawnedPid, 'SIGKILL')
+        }
         reject(StealthCoreBrowserError.of('CHROME_START_TIMEOUT', `Chrome did not start CDP on port ${port} within 10s`, { detail: { port } }))
       }
     }, 200)
@@ -316,21 +333,12 @@ export async function ensureChromeRunning(opts: LaunchChromeOptions = {}): Promi
   // Chrome on the same port — duplicate Chrome trees. An exclusive (O_EXCL)
   // lock file per port means only one launcher proceeds; the loser waits,
   // bounded, for the winner's Chrome to appear, and reclaims a stale lock.
-  let fd: number | null = null
-  try {
-    fd = openSync(launchLockPath(port), 'wx')
-  } catch {
-    const deadline = Date.now() + LAUNCH_LOCK_STALE_MS
-    while (Date.now() < deadline) {
-      await new Promise((r) => setTimeout(r, 250))
-      if (await isChromeReachable(cdpHost)) {
-        assertOwnChrome(port, resolvedProfile, opts)
-        return { pid: null, port, profileDir: resolvedProfile }
-      }
-    }
-    try { unlinkSync(launchLockPath(port)) } catch { /* already gone */ }
-    try { fd = openSync(launchLockPath(port), 'wx') } catch { fd = null }
-  }
+  const fd = await acquireLaunchLock(port, async () => {
+    if (!(await isChromeReachable(cdpHost))) return false
+    assertOwnChrome(port, resolvedProfile, opts)
+    return true
+  })
+  if (fd === 'reachable') return { pid: null, port, profileDir: resolvedProfile }
 
   try {
     // Re-check while holding the lock — the winner may have just started it.
@@ -341,11 +349,45 @@ export async function ensureChromeRunning(opts: LaunchChromeOptions = {}): Promi
     if (!opts.quiet) console.error(`[cdp] Chrome not found on port ${port} — launching...`)
     return await launchChrome(opts)
   } finally {
-    if (fd !== null) {
-      try { closeSync(fd) } catch { /* ignore */ }
-      try { unlinkSync(launchLockPath(port)) } catch { /* ignore */ }
-    }
+    try { closeSync(fd) } catch { /* ignore */ }
+    try { unlinkSync(launchLockPath(port)) } catch { /* ignore */ }
   }
+}
+
+/** How long a loser waits for the winner's Chrome before giving up with LAUNCH_LOCK_TIMEOUT. */
+const LAUNCH_LOCK_WAIT_MS = 30_000
+
+function tryOpenLock(port: number): number | null {
+  try { return openSync(launchLockPath(port), 'wx') } catch { return null }
+}
+
+/**
+ * Take the per-port launch lock. A loser polls `chromeUp` (true means the winner's Chrome appeared: returns
+ * `'reachable'`). A lock whose mtime is older than LAUNCH_LOCK_STALE_MS is reclaimed atomically: it is renamed
+ * away (only one reclaimer's rename succeeds) and the exclusive open is retried, so two losers can never both
+ * hold the lock. After LAUNCH_LOCK_WAIT_MS without the lock or a Chrome, LAUNCH_LOCK_TIMEOUT is raised: a launch
+ * never proceeds without the lock.
+ */
+async function acquireLaunchLock(port: number, chromeUp: () => Promise<boolean>): Promise<number | 'reachable'> {
+  const first = tryOpenLock(port)
+  if (first !== null) return first
+  const deadline = Date.now() + LAUNCH_LOCK_WAIT_MS
+  while (Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, 250))
+    if (await chromeUp()) return 'reachable'
+    let ageMs: number | null = null
+    try { ageMs = Date.now() - statSync(launchLockPath(port)).mtimeMs } catch { /* lock vanished */ }
+    if (ageMs !== null && ageMs > LAUNCH_LOCK_STALE_MS) {
+      const graveyard = `${launchLockPath(port)}.stale-${process.pid}-${Date.now()}`
+      try { renameSync(launchLockPath(port), graveyard) } catch { /* another reclaimer won the rename */ }
+      try { unlinkSync(graveyard) } catch { /* ignore */ }
+    }
+    const fd = tryOpenLock(port)
+    if (fd !== null) return fd
+  }
+  throw lifecycleError('LAUNCH_LOCK_TIMEOUT', `The launch lock for port ${port} was not released within ${LAUNCH_LOCK_WAIT_MS / 1000}s`, {
+    detail: { port, lock: launchLockPath(port) },
+  })
 }
 
 /**
@@ -382,7 +424,7 @@ function killGroup(pid: number, signal: NodeJS.Signals): boolean {
  * pid to exit, then SIGKILL the group UNCONDITIONALLY — the main may be gone
  * while its orphaned Helpers linger, and the group stays addressable as long
  * as any member lives. Exported so the out-of-process reaper, which holds a
- * verified owner record instead of `launchedPid`, takes the same branch.
+ * verified owner record instead of the tracked pid, takes the same branch.
  */
 export async function killProcessGroup(pid: number): Promise<void> {
   killGroup(pid, 'SIGTERM')
@@ -414,14 +456,17 @@ export interface KillChromeOptions {
  * operator's real Chrome, an unrelated server) is skipped with a logged reason.
  */
 export async function killChrome(port = DEFAULT_CDP_PORT, opts: KillChromeOptions = {}): Promise<void> {
-  if (launchedPid !== null) {
-    await killProcessGroup(launchedPid)
-    launchedPid = null
+  const probe = opts.probe ?? systemProcessProbe
+  const log = opts.logger ?? ((m: string) => console.error(`[cdp] ${m}`))
+  // Only the Chrome this process launched on THIS port is tracked, and the record is dropped the moment the
+  // child exits (see launchChrome), so a recycled pid is never signalled and another port's Chrome is never hit.
+  const tracked = launchedPids.get(port)
+  if (tracked !== undefined) {
+    launchedPids.delete(port)
+    await killProcessGroup(tracked)
     return
   }
 
-  const probe = opts.probe ?? systemProcessProbe
-  const log = opts.logger ?? ((m: string) => console.error(`[cdp] ${m}`))
   const profileDir = resolvedProfileDir(opts)
   const pids: number[] = []
   for (const pid of probe.listeners(port)) {

@@ -20,6 +20,7 @@ const m = vi.hoisted(() => ({
   closeSync: vi.fn(),
   unlinkSync: vi.fn(),
   statSync: vi.fn(),
+  renameSync: vi.fn(),
   homedir: vi.fn(),
   platform: vi.fn(),
   tmpdir: vi.fn(),
@@ -34,6 +35,7 @@ vi.mock('node:fs', () => ({
   closeSync: m.closeSync,
   unlinkSync: m.unlinkSync,
   statSync: m.statSync,
+  renameSync: m.renameSync,
 }))
 vi.mock('node:os', () => ({ homedir: m.homedir, platform: m.platform, tmpdir: m.tmpdir }))
 vi.mock('../../../src/lib/cdp/targets.js', () => ({ isChromeReachable: m.isChromeReachable }))
@@ -203,7 +205,7 @@ describe('8468f7b1 AC2 [tests-unit-core.1] launchChrome', () => {
     await expect(launchChrome({ port: PORT, chromePath: CHROME, profileDir: PROFILE })).rejects.toThrow(
       `Chrome binary not found at "${CHROME}"`,
     )
-    await expect(launchChrome({ port: PORT, chromePath: CHROME, profileDir: PROFILE })).rejects.toThrow('CHROME_PATH')
+    await expect(launchChrome({ port: PORT, chromePath: CHROME, profileDir: PROFILE })).rejects.toThrow('Install Chrome in its standard location')
     expect(m.spawn).not.toHaveBeenCalled()
   })
 
@@ -341,16 +343,23 @@ describe('8468f7b1 AC2 [tests-unit-core.1] ensureChromeRunning', () => {
 
   it('reclaims a stale lock after 15s, then proceeds to launch', async () => {
     const { ensureChromeRunning } = await loadFresh()
+    let held = true
     m.openSync.mockImplementation(() => {
-      throw Object.assign(new Error('EEXIST'), { code: 'EEXIST' })
+      if (held) throw Object.assign(new Error('EEXIST'), { code: 'EEXIST' })
+      return 11
+    })
+    m.statSync.mockImplementation(() => ({ mtimeMs: Date.now() - 20_000 }))
+    m.renameSync.mockImplementation(() => {
+      held = false
     })
     m.existsSync.mockReturnValue(false)
     const p = ensureChromeRunning({ port: PORT, chromePath: CHROME, profileDir: PROFILE, quiet: true })
     const assertion = expect(p).rejects.toThrow('Chrome binary not found')
-    await vi.advanceTimersByTimeAsync(15_500)
+    await vi.advanceTimersByTimeAsync(500)
     await assertion
-    expect(m.unlinkSync).toHaveBeenCalledWith(LOCK)
+    expect(m.renameSync).toHaveBeenCalledWith(LOCK, expect.stringContaining(`${LOCK}.stale-`))
     expect(m.openSync.mock.calls.length).toBe(2)
+    expect(m.unlinkSync).toHaveBeenCalledWith(LOCK)
   })
 
   it('re-checks under the lock and skips the launch if a rival just started Chrome', async () => {

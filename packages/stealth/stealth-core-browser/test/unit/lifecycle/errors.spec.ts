@@ -60,7 +60,7 @@ describe('8468f7b1 [chrome-lifecycle.20] every code is reachable with cause/deta
     expect(e.code).toBe('LAUNCH_FAILED')
     expect(e.cause).toBe(cause)
     expect(e.detail).toEqual({ port: 9333 })
-    expect(e.message).toMatch(/install Chrome or pass chromePath/)
+    expect(e.message).toMatch(/install Chrome in its standard location \(library callers may also pass chromePath\)/)
     oneLine(e)
   })
 

@@ -35,6 +35,7 @@
 
 import { ensureChromeRunning, killChrome } from './cdp/browser.js'
 import { IdleShutdown } from './cdp/shutdown.js'
+import { portOf } from './endpoint.js'
 import { closeAllPageTargets, hideAllWindows, isChromeReachable, listPageTargetsOnly } from './cdp/targets.js'
 import { errorMessage, isLifecycleError, lifecycleError, lifecycleErrors, type LifecycleError } from './lifecycle/errors.js'
 import { createLaunchBreaker, type LaunchBreaker } from './lifecycle/launch-breaker.js'
@@ -160,7 +161,7 @@ export class ChromeManager {
 
   constructor(opts: ChromeManagerOptions = {}) {
     this.cdpHost = opts.cdpHost ?? '127.0.0.1:9222'
-    this.port = parseInt(this.cdpHost.split(':')[1] ?? '9222', 10) || 9222
+    this.port = portOf(this.cdpHost)
     this.idleTimeoutMs = opts.idleTimeoutMs ?? 120_000
     this.keepAlive = opts.keepAlive ?? false
     this.entryPath = opts.entryPath
@@ -285,6 +286,8 @@ export class ChromeManager {
       this.ownership?.write(launched.pid, launched.profileDir)
     }
     try {
+      // hideAllWindows is best-effort today (it logs and swallows its own failures); this guard keeps a future
+      // throwing implementation from leaving a visible window while the manager reports ready.
       // Hide ALL Chrome windows — prevents the default window from appearing on-screen
       // after auto-launch, even when Chrome ignores --window-position from saved state.
       // Only on this (launch) path: the fast path above never re-hides.
