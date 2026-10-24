@@ -343,7 +343,8 @@ export const PROVIDERS = {
         // no page URL to absolutize against, so a urlTemplate is required.
         urlTemplate: 'https://pypi.org{}',
         snippet: 'p.package-snippet__description',
-        meta: { version: 'span.package-snippet__version' },
+        // The search page carries the release date, not a version (warehouse templates/search/results.html emits only name, created and description).
+        meta: { created: 'span.package-snippet__created' },
       },
       extraWaitMs: 3000,  // Cloudflare managed challenge needs ~2-3s to auto-clear
     },
@@ -355,7 +356,7 @@ export const PROVIDERS = {
         link: { tag: 'A', attrs: { class: 'package-snippet' }, attr: 'href' },
         snippet: { tag: 'P', attrs: { class: 'package-snippet__description' } },
         extra: {
-          version: { tag: 'SPAN', attrs: { class: 'package-snippet__version' } },
+          created: { tag: 'SPAN', attrs: { class: 'package-snippet__created' } },
         },
       },
     },
