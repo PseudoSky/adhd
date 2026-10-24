@@ -7,8 +7,8 @@
  * flat page session without a targetId parameter; Browser.getWindowBounds must carry the windowId that
  * Browser.getWindowForTarget returned; every failure is a typed StealthCoreBrowserError, never null or [] (F146-F152).
  * Inventory pin names (row wording predates the typed-error fix; the behaviour pinned is the one-shot,
- * 10 s-bounded, failure-surfacing call): [fs-177] cdpCall returns null on failure and times out ·
- * [fs-180] reports the browser version or null · [fs-181] maps system network and page services.
+ * 10 s-bounded, failure-surfacing call): [fs-177] [fs-180] [fs-181].
+ * guards: [fs-177] cdpCall fails typed (never null) and times out · [fs-180] browser version reports or fails typed · [fs-181] page and network commands reach the attached page session
  * tier: S
  * cites: 8468f7b1 [tests-unit-data.1] [tests-unit-data.2] [tests-unit-data.3] [tests-unit-data.4] [tests-unit-data.6] [resolve-findings.1]
  */
