@@ -9,6 +9,8 @@
  * seam (`managerFor`, `shutdownIdleAt`) is mocked. No Chrome, no process, no socket, no port 9222.
  * guards: chromeStatus: reports a running Chrome and a missing one
  * tier: S
+ * plan: resolve-findings
+ * teeth: red: npx vitest run test/unit/examples/examples.spec.ts -> exit 1; with an example file under examples/verbs that this spec never imports the F99 guard reports it as missing
  * cites: 8468f7b1 [prod-examples.1] [prod-examples.2] [prod-examples.4] [prod-examples.5] [prod-examples.6] [resolve-findings.3]
  */
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs'
