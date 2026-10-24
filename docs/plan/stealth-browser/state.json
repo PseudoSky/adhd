@@ -536,10 +536,10 @@
       "end_ref": "de35d528611fbf2c6d2dec4b51aff9eb15fe3568"
     },
     "fix-search-build": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-10-24T00:43:50.786Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "1d647d0bb4f2d81fbf2c6005028659a54dfe3cb6",
       "end_ref": null
     },
     "search-tracing-fixes": {
