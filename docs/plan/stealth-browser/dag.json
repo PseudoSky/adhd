@@ -246,7 +246,7 @@
     },
     "gates-first": {
       "kind": "work",
-      "phase": "verify",
+      "phase": "review",
       "depends_on": [
         "tests-unit-core",
         "tests-unit-data",
