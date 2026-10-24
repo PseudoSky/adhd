@@ -2380,6 +2380,9 @@ def tarball_missing(d=None):
 @check("audit-final", 9)
 def _af9():
     """(PA10.3, re-checked after the docs states) `npm pack --dry-run` against each final dist output still lists README.md, CHANGELOG.md and the main/types targets (stealth-search also bin/cli.js and bin/mcp.js), and the packed stealth-core-browser README is the rewritten one (it links docs/RESPONSIBLE-USE.md)."""
+    # `nx run <p>:build` re-copies the source manifest over dist/package.json; the publish chain regenerates the dist-relative manifest with `dist-manifest` (nx-release-publish dependsOn), so pack the manifest that chain produces
+    for proj in ("stealth-core-browser", "stealth-search"):
+        sh([NX, "run", f"{proj}:dist-manifest"], timeout=900)
     rc, miss = tarballs_missing()
     return rc == 0 and not miss and "docs/RESPONSIBLE-USE.md" in read(f"{CORE_DIR}/dist/README.md") and exists(f"{SEARCH_DIR}/dist"), f"missing from tarballs: {miss}"
 
