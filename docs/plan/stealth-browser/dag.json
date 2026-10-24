@@ -1415,7 +1415,8 @@
         "fix-tripwire",
         "fix-core-parsers",
         "fix-core-lifecycle",
-        "fix-core-errors"
+        "fix-core-errors",
+        "release-gate-fixes"
       ],
       "guard": "python3 docs/plan/stealth-browser/scripts/guard.py release-readiness",
       "artifacts": [
