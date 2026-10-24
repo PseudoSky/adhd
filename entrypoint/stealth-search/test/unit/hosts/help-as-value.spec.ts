@@ -1,7 +1,7 @@
 /**
  * guards: -h or --help typed as the VALUE of an operation flag is read as a help request and the operation never runs
  * tier: S
- * cites: 8468f7b1 [resolve-findings.4] (F48)
+ * cites: ticket 8468f7b1 [search-hosts.16] [resolve-findings.4] (F48)
  * plan: resolve-findings
  * teeth: red: nx run stealth-search:test --skip-nx-cache -- test/unit/hosts/help-as-value.spec.ts -> exit 1 (2 failed | 1 passed) with parseHostFlags counting every -h or --help token as help.
  * Real use: an agent searches for the text "-h" (`search --provider npm --query -h`); a person asks for help on one operation.

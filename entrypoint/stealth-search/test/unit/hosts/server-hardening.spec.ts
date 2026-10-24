@@ -1,7 +1,7 @@
 /**
  * guards: a failed build leaves hooks, trace listeners or the pid registered; the trace listeners go on before the exit hooks; a 0 or negative pid reaches process.kill; an unreadable dependency version silently blinds the cache key
  * tier: S
- * cites: 8468f7b1 [resolve-findings.4] (F49 F50 F83 F84 F85)
+ * cites: ticket 8468f7b1 [search-hosts.16] [resolve-findings.4] (F49 F50 F83 F84 F85)
  * plan: resolve-findings
  * teeth: red: nx run stealth-search:test --skip-nx-cache -- test/unit/hosts/server-hardening.spec.ts -> exit 1 (4 failed | 3 passed) with no unwind around build() or installHooks, the pid filter back to !Number.isNaN and packageVersionOf returning ''.
  * Real use: an in-process host retries a boot whose package build threw; a stale pid file holds a 0 or a negative number.
