@@ -43,27 +43,52 @@ export interface PdfjsLike {
 /** Loads pdfjs (injectable for tests). */
 export type PdfjsLoader = () => Promise<PdfjsLike>
 
-/**
- * A real dynamic `import()` that the CommonJS emit cannot rewrite. The package builds to CommonJS and
- * `tsc` turns a literal `import(x)` into `require(x)`, which cannot load the ESM-only pdfjs on the
- * supported Node floor (22.5; `require(esm)` is only unflagged from 22.12). Building the call through
- * the Function constructor keeps it a native ESM import, resolved against this module's location.
- * Evidence: docs/plan/stealth-browser/evidence/split/u-pdf.json (probe U-PDF, [search-port-fetch.1]).
- */
-const nativeImport = new Function('specifier', 'return import(specifier)') as (specifier: string) => Promise<unknown>
-
 const PDFJS_SPECIFIER = 'pdfjs-dist/legacy/build/pdf.mjs'
 
-const defaultLoader: PdfjsLoader = async () => {
-  try {
-    return (await nativeImport(PDFJS_SPECIFIER)) as PdfjsLike
-  } catch (cause) {
-    // A host that evaluates modules in a vm context (the vitest transform) has no import callback for
-    // Function-constructor code; there the plain dynamic import is a real ESM import already.
-    if ((cause as { code?: string }).code !== 'ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING') throw cause
-    return (await import(PDFJS_SPECIFIER)) as PdfjsLike
+/** How pdfjs is reached; both members are injectable so each branch is testable without loading pdfjs. */
+export interface PdfjsImports {
+  /** The plain dynamic import. The CommonJS emit turns it into `require()`, which loads an ES module from Node 22.12. */
+  plain(): Promise<unknown>
+  /** A native ESM import the compiler cannot rewrite. Only built when `plain` failed because `require(esm)` is unavailable. */
+  native(specifier: string): Promise<unknown>
+}
+
+/**
+ * A native dynamic `import()` built through the Function constructor, which `tsc` (module commonjs) cannot
+ * rewrite into `require()`. It is eval-class, so it is the LAST resort: it is constructed only inside this
+ * function, which the loader calls only after the plain import failed with `ERR_REQUIRE_ESM` or
+ * `ERR_REQUIRE_ASYNC_MODULE` (Node 22.5 to 22.11, where `require(esm)` is not available). On Node 22.12 or newer
+ * and under vitest the plain import succeeds and no code is ever generated from a string, so a host running with
+ * `--disallow-code-generation-from-strings` or a strict CSP is unaffected there.
+ * Evidence: docs/plan/stealth-browser/evidence/split/u-pdf.json (probe U-PDF, [search-port-fetch.1]).
+ */
+function nativeImportViaFunction(specifier: string): Promise<unknown> {
+  const run = new Function('specifier', 'return import(specifier)') as (spec: string) => Promise<unknown>
+  return run(specifier)
+}
+
+const DEFAULT_IMPORTS: PdfjsImports = {
+  plain: () => import('pdfjs-dist/legacy/build/pdf.mjs'),
+  native: nativeImportViaFunction,
+}
+
+/** Errors meaning "this Node cannot require() that ES module", the only reason to reach for the native import. */
+const REQUIRE_ESM_UNAVAILABLE = new Set(['ERR_REQUIRE_ESM', 'ERR_REQUIRE_ASYNC_MODULE'])
+
+/** Build the pdfjs loader over the given import functions. */
+export function createPdfjsLoader(imports: PdfjsImports = DEFAULT_IMPORTS): PdfjsLoader {
+  return async () => {
+    try {
+      return (await imports.plain()) as PdfjsLike
+    } catch (cause) {
+      const code = (cause as { code?: unknown } | null)?.code
+      if (typeof code !== 'string' || !REQUIRE_ESM_UNAVAILABLE.has(code)) throw cause
+      return (await imports.native(PDFJS_SPECIFIER)) as PdfjsLike
+    }
   }
 }
+
+const defaultLoader: PdfjsLoader = createPdfjsLoader()
 
 /**
  * Extract text from PDF bytes, page by page, reading at most `maxPages` pages.
