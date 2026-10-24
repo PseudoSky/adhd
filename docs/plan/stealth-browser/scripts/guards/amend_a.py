@@ -283,7 +283,11 @@ def am_tlv_reach(slug, p):
     need = ("cli_unknown_provider_span", "mcp_unknown_provider_span", "cli_rejected_flag_span", "help_is_not_a_dispatch")
     miss = [n for n in need if names.get(n, {}).get("status") != "PASS" or not names.get(n, {}).get("sample_lines")]
     cmds = json.dumps(ev.get("commands_run", [])) + json.dumps(ev.get("mcp_calls", []))
-    dup = [ln for c in ev.get("checks", []) if isinstance(c, dict) for ln in c.get("sample_lines", []) if '"adhd.op":"op"' in str(ln).replace(" ", "")]
+    # the shared apigen tracing plugin emits one documented upstream twin, event `adhd.op.error` with op id `op`; it is the only tolerated record carrying that op id
+    def _bogus_op(ln):
+        t = str(ln).replace(" ", "")
+        return '"adhd.op":"op"' in t and '"event":"adhd.op.error"' not in t
+    dup = [ln for c in ev.get("checks", []) if isinstance(c, dict) for ln in c.get("sample_lines", []) if _bogus_op(ln)]
     return not miss and ev.get("process_spawn_mocked") is True and "9222" not in cmds and ev.get("real_chrome_launched") is False and '"input"' in cmds and not dup, f"checks missing/not PASS {miss}; spawn mocked={ev.get('process_spawn_mocked')}; 9222 used={'9222' in cmds}; data.input envelope used={'\"input\"' in cmds}; bogus op id lines {len(dup)}"
 
 

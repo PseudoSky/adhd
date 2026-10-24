@@ -1056,7 +1056,7 @@
   "p": {}
  },
  "tracing-log-validation.11": {
-  "text": "The re-run covers the fixes without side effects: checks cli_unknown_provider_span, mcp_unknown_provider_span, cli_rejected_flag_span and help_is_not_a_dispatch are PASS with sample lines; `process_spawn_mocked` is true and `real_chrome_launched` false; no command or call mentions port 9222; MCP inputs are passed in the `data.input` envelope; no sample line carries the op id `op`.",
+  "text": "The re-run covers the fixes without side effects: checks cli_unknown_provider_span, mcp_unknown_provider_span, cli_rejected_flag_span and help_is_not_a_dispatch are PASS with sample lines; `process_spawn_mocked` is true and `real_chrome_launched` false; no command or call mentions port 9222; MCP inputs are passed in the `data.input` envelope; no sample line carries the op id `op` except the single documented upstream twin event `adhd.op.error` of the shared tracing plugin.",
   "type": "tlv_reach",
   "p": {}
  }
