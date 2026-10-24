@@ -2,6 +2,265 @@
   "agent": "resolve-findings-implementer",
   "resolutions": [
     {
+      "id": "F14",
+      "status": "fixed",
+      "commit": "e0d039afbb8248bb904175c3e344e1fb164b4ae9",
+      "evidence": "tripwire.ts: expire() now compare-and-removes the lock it read; the in-memory latch keeps the first record when persist fails twice; unreadable locks use one stable timestamp; legacy blockedCount is clamped to a non-negative integer; resolve audits only after clearNow reports the result. hardening.spec.ts covers each with interleaved clear+trip and double-failure simulations (pre-fix src fails 53/58).",
+      "reproduction": "./node_modules/.bin/nx run resilience-core-tripwire:test --skip-nx-cache -- test/unit/hardening.spec.ts"
+    },
+    {
+      "id": "F15",
+      "status": "fixed",
+      "commit": "e0d039afbb8248bb904175c3e344e1fb164b4ae9",
+      "evidence": "tripwire.ts: expire() now compare-and-removes the lock it read; the in-memory latch keeps the first record when persist fails twice; unreadable locks use one stable timestamp; legacy blockedCount is clamped to a non-negative integer; resolve audits only after clearNow reports the result. hardening.spec.ts covers each with interleaved clear+trip and double-failure simulations (pre-fix src fails 53/58).",
+      "reproduction": "./node_modules/.bin/nx run resilience-core-tripwire:test --skip-nx-cache -- test/unit/hardening.spec.ts"
+    },
+    {
+      "id": "F16",
+      "status": "fixed",
+      "commit": "e0d039afbb8248bb904175c3e344e1fb164b4ae9",
+      "evidence": "tripwire.ts: expire() now compare-and-removes the lock it read; the in-memory latch keeps the first record when persist fails twice; unreadable locks use one stable timestamp; legacy blockedCount is clamped to a non-negative integer; resolve audits only after clearNow reports the result. hardening.spec.ts covers each with interleaved clear+trip and double-failure simulations (pre-fix src fails 53/58).",
+      "reproduction": "./node_modules/.bin/nx run resilience-core-tripwire:test --skip-nx-cache -- test/unit/hardening.spec.ts"
+    },
+    {
+      "id": "F17",
+      "status": "fixed",
+      "commit": "e0d039afbb8248bb904175c3e344e1fb164b4ae9",
+      "evidence": "redact.ts: own-property assignment via setOwn (__proto__ stays data), token-based secret key/param matching shared by isSecretKey/isSecretParam so benign keys survive and api-key/session/jwt/bearer/token variants are dropped. Covered by hardening.spec.ts and redact.spec.ts.",
+      "reproduction": "./node_modules/.bin/nx run resilience-core-tripwire:test --skip-nx-cache -- test/unit/hardening.spec.ts test/unit/redact.spec.ts"
+    },
+    {
+      "id": "F18",
+      "status": "fixed",
+      "commit": "e0d039afbb8248bb904175c3e344e1fb164b4ae9",
+      "evidence": "redact.ts: own-property assignment via setOwn (__proto__ stays data), token-based secret key/param matching shared by isSecretKey/isSecretParam so benign keys survive and api-key/session/jwt/bearer/token variants are dropped. Covered by hardening.spec.ts and redact.spec.ts.",
+      "reproduction": "./node_modules/.bin/nx run resilience-core-tripwire:test --skip-nx-cache -- test/unit/hardening.spec.ts test/unit/redact.spec.ts"
+    },
+    {
+      "id": "F19",
+      "status": "fixed",
+      "commit": "e0d039afbb8248bb904175c3e344e1fb164b4ae9",
+      "evidence": "package.json files now ships docs so README links to docs/ERRORS.md and docs/RECOVERY.md resolve in the tarball.",
+      "reproduction": "rg -n '\"files\"' -A6 packages/resilience/resilience-core-tripwire/package.json"
+    },
+    {
+      "id": "F20",
+      "status": "fixed",
+      "commit": "e0d039afbb8248bb904175c3e344e1fb164b4ae9",
+      "evidence": "cli.ts DEFAULT_UNLOCK_USAGE is generic (no repo-specific tool name); cli.spec.ts asserts the text.",
+      "reproduction": "./node_modules/.bin/nx run resilience-core-tripwire:test --skip-nx-cache -- test/unit/cli.spec.ts"
+    },
+    {
+      "id": "F21",
+      "status": "fixed",
+      "commit": "e0d039afbb8248bb904175c3e344e1fb164b4ae9",
+      "evidence": "tsconfig.lib.json lists vite.config.ts once in exclude.",
+      "reproduction": "rg -c 'vite.config.ts' packages/resilience/resilience-core-tripwire/tsconfig.lib.json"
+    },
+    {
+      "id": "F22",
+      "status": "fixed",
+      "commit": "e0d039afbb8248bb904175c3e344e1fb164b4ae9",
+      "evidence": "index.ts header describes the actual runtime surface; api-surface.spec.ts pins the exact export list.",
+      "reproduction": "./node_modules/.bin/nx run resilience-core-tripwire:test --skip-nx-cache -- test/unit/api-surface.spec.ts"
+    },
+    {
+      "id": "F56",
+      "status": "fixed",
+      "commit": "e0d039afbb8248bb904175c3e344e1fb164b4ae9",
+      "evidence": "Mutation red runs recorded as teeth: lines (cli.ts mismatch returns 0 -> 1 failed; gate open:true -> 7/7/3 failed); headers cite plan/state/task; brittle regex/parser-text assertions replaced with exact-intent checks.",
+      "reproduction": "./node_modules/.bin/nx run resilience-core-tripwire:test --skip-nx-cache -- test/unit/scenario-unlock-cli.spec.ts"
+    },
+    {
+      "id": "F57",
+      "status": "fixed",
+      "commit": "e0d039afbb8248bb904175c3e344e1fb164b4ae9",
+      "evidence": "Mutation red runs recorded as teeth: lines (cli.ts mismatch returns 0 -> 1 failed; gate open:true -> 7/7/3 failed); headers cite plan/state/task; brittle regex/parser-text assertions replaced with exact-intent checks.",
+      "reproduction": "./node_modules/.bin/nx run resilience-core-tripwire:test --skip-nx-cache -- test/unit/scenario-unlock-cli.spec.ts"
+    },
+    {
+      "id": "F58",
+      "status": "fixed",
+      "commit": "e0d039afbb8248bb904175c3e344e1fb164b4ae9",
+      "evidence": "Mutation red runs recorded as teeth: lines (cli.ts mismatch returns 0 -> 1 failed; gate open:true -> 7/7/3 failed); headers cite plan/state/task; brittle regex/parser-text assertions replaced with exact-intent checks.",
+      "reproduction": "./node_modules/.bin/nx run resilience-core-tripwire:test --skip-nx-cache -- test/unit/scenario-unlock-cli.spec.ts"
+    },
+    {
+      "id": "F59",
+      "status": "fixed",
+      "commit": "e0d039afbb8248bb904175c3e344e1fb164b4ae9",
+      "evidence": "Mutation red runs recorded as teeth: lines (cli.ts mismatch returns 0 -> 1 failed; gate open:true -> 7/7/3 failed); headers cite plan/state/task; brittle regex/parser-text assertions replaced with exact-intent checks.",
+      "reproduction": "./node_modules/.bin/nx run resilience-core-tripwire:test --skip-nx-cache -- test/unit/scenario-unlock-cli.spec.ts"
+    },
+    {
+      "id": "F60",
+      "status": "fixed",
+      "commit": "e0d039afbb8248bb904175c3e344e1fb164b4ae9",
+      "evidence": "storage-contract.spec.ts no longer pins read-only stat ops and no longer uses real-disk mkdtemp in a tier S spec (memory fs only).",
+      "reproduction": "./node_modules/.bin/nx run resilience-core-tripwire:test --skip-nx-cache -- test/unit/storage-contract.spec.ts"
+    },
+    {
+      "id": "F61",
+      "status": "fixed",
+      "commit": "e0d039afbb8248bb904175c3e344e1fb164b4ae9",
+      "evidence": "storage-contract.spec.ts no longer pins read-only stat ops and no longer uses real-disk mkdtemp in a tier S spec (memory fs only).",
+      "reproduction": "./node_modules/.bin/nx run resilience-core-tripwire:test --skip-nx-cache -- test/unit/storage-contract.spec.ts"
+    },
+    {
+      "id": "F62",
+      "status": "fixed",
+      "commit": "e0d039afbb8248bb904175c3e344e1fb164b4ae9",
+      "evidence": "storage.spec.ts: adds the empty-lock-file-is-unreadable-not-clear test; tmp-name check no longer hard-codes the 12-hex format.",
+      "reproduction": "./node_modules/.bin/nx run resilience-core-tripwire:test --skip-nx-cache -- test/unit/storage.spec.ts"
+    },
+    {
+      "id": "F63",
+      "status": "fixed",
+      "commit": "e0d039afbb8248bb904175c3e344e1fb164b4ae9",
+      "evidence": "storage.spec.ts: adds the empty-lock-file-is-unreadable-not-clear test; tmp-name check no longer hard-codes the 12-hex format.",
+      "reproduction": "./node_modules/.bin/nx run resilience-core-tripwire:test --skip-nx-cache -- test/unit/storage.spec.ts"
+    },
+    {
+      "id": "F64",
+      "status": "fixed",
+      "commit": "e0d039afbb8248bb904175c3e344e1fb164b4ae9",
+      "evidence": "tsconfig.lib.json lists vite.config.ts once in exclude.",
+      "reproduction": "rg -c 'vite.config.ts' packages/resilience/resilience-core-tripwire/tsconfig.lib.json"
+    },
+    {
+      "id": "F65",
+      "status": "fixed",
+      "commit": "e0d039afbb8248bb904175c3e344e1fb164b4ae9",
+      "evidence": "tripwire.spec.ts test names carry the full JSON key.",
+      "reproduction": "./node_modules/.bin/nx run resilience-core-tripwire:test --skip-nx-cache -- test/unit/tripwire.spec.ts"
+    },
+    {
+      "id": "F66",
+      "status": "rejected",
+      "commit": "e0d039afbb8248bb904175c3e344e1fb164b4ae9",
+      "evidence": "Wrong: the installed Vite 8.3.0 marks rollupOptions @deprecated 'Use rolldownOptions instead' (index.d.ts), so rolldownOptions is the current name and the config is correct.",
+      "reproduction": "rg -n -B3 'rollupOptions' node_modules/vite/dist/node/index.d.ts | rg deprecated"
+    },
+    {
+      "id": "F101",
+      "status": "fixed",
+      "commit": "e0d039afbb8248bb904175c3e344e1fb164b4ae9",
+      "evidence": "scenario-request-builder.spec.ts probes 301/304/399 (never trip) and 599, and waits with vi.waitFor instead of setTimeout(0).",
+      "reproduction": "./node_modules/.bin/nx run resilience-core-tripwire:test --skip-nx-cache -- test/unit/scenario-request-builder.spec.ts"
+    },
+    {
+      "id": "F102",
+      "status": "fixed",
+      "commit": "e0d039afbb8248bb904175c3e344e1fb164b4ae9",
+      "evidence": "scenario-request-builder.spec.ts probes 301/304/399 (never trip) and 599, and waits with vi.waitFor instead of setTimeout(0).",
+      "reproduction": "./node_modules/.bin/nx run resilience-core-tripwire:test --skip-nx-cache -- test/unit/scenario-request-builder.spec.ts"
+    },
+    {
+      "id": "F103",
+      "status": "fixed",
+      "commit": "e0d039afbb8248bb904175c3e344e1fb164b4ae9",
+      "evidence": "redact.spec.ts title names responseStatus; unused _drop binding replaced by delete on a copy.",
+      "reproduction": "./node_modules/.bin/nx run resilience-core-tripwire:test --skip-nx-cache -- test/unit/redact.spec.ts"
+    },
+    {
+      "id": "F104",
+      "status": "fixed",
+      "commit": "e0d039afbb8248bb904175c3e344e1fb164b4ae9",
+      "evidence": "redact.spec.ts title names responseStatus; unused _drop binding replaced by delete on a copy.",
+      "reproduction": "./node_modules/.bin/nx run resilience-core-tripwire:test --skip-nx-cache -- test/unit/redact.spec.ts"
+    },
+    {
+      "id": "F105",
+      "status": "fixed",
+      "commit": "e0d039afbb8248bb904175c3e344e1fb164b4ae9",
+      "evidence": "interleave.spec.ts phasedPicker throws a descriptive error if no pending op exists instead of a TypeError.",
+      "reproduction": "./node_modules/.bin/nx run resilience-core-tripwire:test --skip-nx-cache -- test/unit/interleave.spec.ts"
+    },
+    {
+      "id": "F109",
+      "status": "fixed",
+      "commit": "e0d039afbb8248bb904175c3e344e1fb164b4ae9",
+      "evidence": "tripwire.ts: expire() now compare-and-removes the lock it read; the in-memory latch keeps the first record when persist fails twice; unreadable locks use one stable timestamp; legacy blockedCount is clamped to a non-negative integer; resolve audits only after clearNow reports the result. hardening.spec.ts covers each with interleaved clear+trip and double-failure simulations (pre-fix src fails 53/58).",
+      "reproduction": "./node_modules/.bin/nx run resilience-core-tripwire:test --skip-nx-cache -- test/unit/hardening.spec.ts"
+    },
+    {
+      "id": "F110",
+      "status": "fixed",
+      "commit": "e0d039afbb8248bb904175c3e344e1fb164b4ae9",
+      "evidence": "tripwire.ts: expire() now compare-and-removes the lock it read; the in-memory latch keeps the first record when persist fails twice; unreadable locks use one stable timestamp; legacy blockedCount is clamped to a non-negative integer; resolve audits only after clearNow reports the result. hardening.spec.ts covers each with interleaved clear+trip and double-failure simulations (pre-fix src fails 53/58).",
+      "reproduction": "./node_modules/.bin/nx run resilience-core-tripwire:test --skip-nx-cache -- test/unit/hardening.spec.ts"
+    },
+    {
+      "id": "F111",
+      "status": "fixed",
+      "commit": "e0d039afbb8248bb904175c3e344e1fb164b4ae9",
+      "evidence": "tripwire.ts: expire() now compare-and-removes the lock it read; the in-memory latch keeps the first record when persist fails twice; unreadable locks use one stable timestamp; legacy blockedCount is clamped to a non-negative integer; resolve audits only after clearNow reports the result. hardening.spec.ts covers each with interleaved clear+trip and double-failure simulations (pre-fix src fails 53/58).",
+      "reproduction": "./node_modules/.bin/nx run resilience-core-tripwire:test --skip-nx-cache -- test/unit/hardening.spec.ts"
+    },
+    {
+      "id": "F112",
+      "status": "fixed",
+      "commit": "e0d039afbb8248bb904175c3e344e1fb164b4ae9",
+      "evidence": "api-surface.spec.ts annotates real tripwire values with the exported shapes and scans every token of index.ts (comments stripped) for provider/client.",
+      "reproduction": "./node_modules/.bin/nx run resilience-core-tripwire:test --skip-nx-cache -- test/unit/api-surface.spec.ts"
+    },
+    {
+      "id": "F113",
+      "status": "fixed",
+      "commit": "e0d039afbb8248bb904175c3e344e1fb164b4ae9",
+      "evidence": "api-surface.spec.ts annotates real tripwire values with the exported shapes and scans every token of index.ts (comments stripped) for provider/client.",
+      "reproduction": "./node_modules/.bin/nx run resilience-core-tripwire:test --skip-nx-cache -- test/unit/api-surface.spec.ts"
+    },
+    {
+      "id": "F114",
+      "status": "fixed",
+      "commit": "e0d039afbb8248bb904175c3e344e1fb164b4ae9",
+      "evidence": "audit-expiry.spec.ts last test asserts tripReason/method/blockedCount instead of repeating the ttl-expired assertion.",
+      "reproduction": "./node_modules/.bin/nx run resilience-core-tripwire:test --skip-nx-cache -- test/unit/audit-expiry.spec.ts"
+    },
+    {
+      "id": "F135",
+      "status": "fixed",
+      "commit": "e0d039afbb8248bb904175c3e344e1fb164b4ae9",
+      "evidence": "audit.ts no longer chmods a caller-supplied audit directory; only directories the writer creates are 0700. hardening.spec.ts pins it with a pre-existing 0755 dir.",
+      "reproduction": "./node_modules/.bin/nx run resilience-core-tripwire:test --skip-nx-cache -- test/unit/hardening.spec.ts"
+    },
+    {
+      "id": "F136",
+      "status": "fixed",
+      "commit": "e0d039afbb8248bb904175c3e344e1fb164b4ae9",
+      "evidence": "storage.ts ensureDir applies 0700 only to directories it creates; an existing stateDir keeps its mode. hardening.spec.ts pins it.",
+      "reproduction": "./node_modules/.bin/nx run resilience-core-tripwire:test --skip-nx-cache -- test/unit/hardening.spec.ts"
+    },
+    {
+      "id": "F137",
+      "status": "fixed",
+      "commit": "e0d039afbb8248bb904175c3e344e1fb164b4ae9",
+      "evidence": "redact.ts: own-property assignment via setOwn (__proto__ stays data), token-based secret key/param matching shared by isSecretKey/isSecretParam so benign keys survive and api-key/session/jwt/bearer/token variants are dropped. Covered by hardening.spec.ts and redact.spec.ts.",
+      "reproduction": "./node_modules/.bin/nx run resilience-core-tripwire:test --skip-nx-cache -- test/unit/hardening.spec.ts test/unit/redact.spec.ts"
+    },
+    {
+      "id": "F138",
+      "status": "fixed",
+      "commit": "e0d039afbb8248bb904175c3e344e1fb164b4ae9",
+      "evidence": "RECOVERY.md break-glass section corrected to the real latch behavior (latch survives until the lock is cleared by this process or expires).",
+      "reproduction": "rg -n 'latch' packages/resilience/resilience-core-tripwire/docs/RECOVERY.md"
+    },
+    {
+      "id": "F139",
+      "status": "fixed",
+      "commit": "e0d039afbb8248bb904175c3e344e1fb164b4ae9",
+      "evidence": "package.json files now ships docs so README links to docs/ERRORS.md and docs/RECOVERY.md resolve in the tarball.",
+      "reproduction": "rg -n '\"files\"' -A6 packages/resilience/resilience-core-tripwire/package.json"
+    },
+    {
+      "id": "F140",
+      "status": "fixed",
+      "commit": "e0d039afbb8248bb904175c3e344e1fb164b4ae9",
+      "evidence": "cli.ts DEFAULT_UNLOCK_USAGE is generic (no repo-specific tool name); cli.spec.ts asserts the text.",
+      "reproduction": "./node_modules/.bin/nx run resilience-core-tripwire:test --skip-nx-cache -- test/unit/cli.spec.ts"
+    },
+    {
       "id": "F146",
       "status": "fixed",
       "commit": "9d1514d71f76e4727f4598fc073a0c8a6f914213",
@@ -21,6 +280,13 @@
       "commit": "9d1514d71f76e4727f4598fc073a0c8a6f914213",
       "evidence": "NetworkService cookie reads attach a page session (given or first open page); no page is TARGET_NOT_FOUND; failures reject instead of [] . Proven by domains.spec.ts [F148], network.spec.ts.",
       "reproduction": "./node_modules/.bin/nx run stealth-core-browser:test --skip-nx-cache -- test/unit/domains-storage/network.spec.ts"
+    },
+    {
+      "id": "F149",
+      "status": "fixed",
+      "commit": "296ef2ae408f2dd74d833fff2baa20d0bab4767d",
+      "evidence": "Requests are tracked per requestId (Set) and scoped to the navigation loaderId via the requestWillBeSent loaderId, so a redirect re-announcing the same requestId counts once and returns to zero after one loadingFinished. settle.spec.ts: redirected request, stale-loader request, followed redirect loader.",
+      "reproduction": "./node_modules/.bin/nx run stealth-core-browser:test --skip-nx-cache -- test/unit/cdp/settle.spec.ts"
     },
     {
       "id": "F150",
@@ -44,11 +310,32 @@
       "reproduction": "./node_modules/.bin/nx run stealth-core-browser:test --skip-nx-cache -- test/unit/domains-storage"
     },
     {
+      "id": "F153",
+      "status": "fixed",
+      "commit": "296ef2ae408f2dd74d833fff2baa20d0bab4767d",
+      "evidence": "One cleanup() clears subscribers, deadline/grace/inflight/ui timers and the abort listener on resolve, abort and navigate failure. settle.spec.ts asserts vi.getTimerCount()==0 after abort and failed navigation and removeEventListener on resolve.",
+      "reproduction": "./node_modules/.bin/nx run stealth-core-browser:test --skip-nx-cache -- test/unit/cdp/settle.spec.ts"
+    },
+    {
+      "id": "F154",
+      "status": "fixed",
+      "commit": "296ef2ae408f2dd74d833fff2baa20d0bab4767d",
+      "evidence": "Page.navigate loaderId no longer overwrites a newer main-frame commit seen before the reply (committedLoaderId); a same-document navigation (no loaderId) rejects PAGE_SETTLE_FAILED (reason same-document) instead of ignoring every event until the deadline. settle.spec.ts covers both.",
+      "reproduction": "./node_modules/.bin/nx run stealth-core-browser:test --skip-nx-cache -- test/unit/cdp/settle.spec.ts"
+    },
+    {
       "id": "F156",
       "status": "fixed",
       "commit": "9d1514d71f76e4727f4598fc073a0c8a6f914213",
       "evidence": "closePageTarget, hideAllWindows, reveal and dispose close their CdpSession in finally, so a rejected Target.closeTarget or a failing listing leaves no socket open. Proven by targets.spec.ts leak tests.",
       "reproduction": "./node_modules/.bin/nx run stealth-core-browser:test --skip-nx-cache -- test/unit/cdp/targets.spec.ts"
+    },
+    {
+      "id": "F158",
+      "status": "fixed",
+      "commit": "296ef2ae408f2dd74d833fff2baa20d0bab4767d",
+      "evidence": "Removed the unreachable 'load' member from SettleSignal (load only gates rung 2 and never resolves); header comment updated; the two stealth-search stubs that returned it now return networkIdle. Type check (typecheck + typecheck-spec) proves no remaining use.",
+      "reproduction": "./node_modules/.bin/nx run stealth-core-browser:typecheck --skip-nx-cache"
     }
   ]
 }
