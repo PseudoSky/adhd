@@ -2,6 +2,97 @@
   "agent": "resolve-findings-implementer",
   "resolutions": [
     {
+      "id": "F1",
+      "status": "fixed",
+      "commit": "bf6fabb75b68eef19f16b4c397ee431d96f62cf1",
+      "evidence": "cdp-connection.md quick start no longer calls Runtime.evaluate; it reads DOM.getDocument and states why script injection is avoided.",
+      "reproduction": "rg -n 'Runtime.evaluate' packages/stealth/stealth-core-browser/docs/reference/cdp-connection.md"
+    },
+    {
+      "id": "F2",
+      "status": "fixed",
+      "commit": "bf6fabb75b68eef19f16b4c397ee431d96f62cf1",
+      "evidence": "capture.md error table and the retry example use CaptureError codes (CAPTURE_TIMEOUT, CAPTURE_BAN_DETECTED with detail.signal) instead of message strings.",
+      "reproduction": "rg -n \"Ban detected|Error\\('timeout'\\)\" packages/stealth/stealth-core-browser/docs/reference/capture.md"
+    },
+    {
+      "id": "F3",
+      "status": "fixed",
+      "commit": "bf6fabb75b68eef19f16b4c397ee431d96f62cf1",
+      "evidence": "capture.md error table and the retry example use CaptureError codes (CAPTURE_TIMEOUT, CAPTURE_BAN_DETECTED with detail.signal) instead of message strings.",
+      "reproduction": "rg -n \"Ban detected|Error\\('timeout'\\)\" packages/stealth/stealth-core-browser/docs/reference/capture.md"
+    },
+    {
+      "id": "F4",
+      "status": "fixed",
+      "commit": "bf6fabb75b68eef19f16b4c397ee431d96f62cf1",
+      "evidence": "reference README entrypoint table now lists root namespaces; there are no subpath exports (verified against dist/index.js keys).",
+      "reproduction": "rg -n 'stealth-core-browser/(cdp|storage|capture|parsers|chrome-manager)' packages/stealth/stealth-core-browser/docs/reference/README.md"
+    },
+    {
+      "id": "F5",
+      "status": "fixed",
+      "commit": "bf6fabb75b68eef19f16b4c397ee431d96f62cf1",
+      "evidence": "killChrome documented as the tracked launch's process group, else only a listener whose command line carries --user-data-dir=<profile>; no lsof-kill-anything wording remains in cdp.md or chrome-manager.md.",
+      "reproduction": "rg -n 'lsof' packages/stealth/stealth-core-browser/docs"
+    },
+    {
+      "id": "F6",
+      "status": "fixed",
+      "commit": "bf6fabb75b68eef19f16b4c397ee431d96f62cf1",
+      "evidence": "Page.loadEventFired is documented as an event; cdp.md examples use awaitPageSettled.",
+      "reproduction": "rg -n 'send\\(.Page.loadEventFired' packages/stealth/stealth-core-browser/docs"
+    },
+    {
+      "id": "F7",
+      "status": "fixed",
+      "commit": "bf6fabb75b68eef19f16b4c397ee431d96f62cf1",
+      "evidence": "cdp.md Domain Services rewritten from the source: every CdpClient method is implemented and throws typed errors; stub text and emoji status markers removed.",
+      "reproduction": "rg -n 'stub|Not yet implemented' packages/stealth/stealth-core-browser/docs/reference/cdp.md"
+    },
+    {
+      "id": "F8",
+      "status": "fixed",
+      "commit": "bf6fabb75b68eef19f16b4c397ee431d96f62cf1",
+      "evidence": "cdp/README.md retitled and re-pointed to @adhd/stealth-core-browser.",
+      "reproduction": "rg -n 'agent-browser' packages/stealth/stealth-core-browser/docs/reference/cdp/README.md"
+    },
+    {
+      "id": "F9",
+      "status": "fixed",
+      "commit": "bf6fabb75b68eef19f16b4c397ee431d96f62cf1",
+      "evidence": "cdp-connection.md module paths now src/lib/cdp/*.ts.",
+      "reproduction": "rg -n 'src/(session|targets|browser|monitor)\\.ts' packages/stealth/stealth-core-browser/docs/reference/cdp-connection.md"
+    },
+    {
+      "id": "F10",
+      "status": "fixed",
+      "commit": "bf6fabb75b68eef19f16b4c397ee431d96f62cf1",
+      "evidence": "api-reference.md retitled; the Proposed search()-based design section replaced by the shipped reaper-host description.",
+      "reproduction": "rg -n 'Proposed|search\\(' packages/stealth/stealth-core-browser/docs/reference/cdp/api-reference.md"
+    },
+    {
+      "id": "F11",
+      "status": "fixed",
+      "commit": "bf6fabb75b68eef19f16b4c397ee431d96f62cf1",
+      "evidence": "package README.md rewritten: purpose, install, root-namespace usage, reference links; endpoint-policy section kept.",
+      "reproduction": "head -20 packages/stealth/stealth-core-browser/README.md"
+    },
+    {
+      "id": "F12",
+      "status": "fixed",
+      "commit": "bf6fabb75b68eef19f16b4c397ee431d96f62cf1",
+      "evidence": "cdp.md Domain Services rewritten from the source: every CdpClient method is implemented and throws typed errors; stub text and emoji status markers removed.",
+      "reproduction": "rg -n 'stub|Not yet implemented' packages/stealth/stealth-core-browser/docs/reference/cdp.md"
+    },
+    {
+      "id": "F13",
+      "status": "fixed",
+      "commit": "bf6fabb75b68eef19f16b4c397ee431d96f62cf1",
+      "evidence": "history-db.md separates the Default Chrome path from the dedicated Chrome-CDP path.",
+      "reproduction": "rg -n 'Chrome-CDP' packages/stealth/stealth-core-browser/docs/reference/cdp/history-db.md"
+    },
+    {
       "id": "F14",
       "status": "fixed",
       "commit": "e0d039afbb8248bb904175c3e344e1fb164b4ae9",
@@ -63,6 +154,90 @@
       "commit": "e0d039afbb8248bb904175c3e344e1fb164b4ae9",
       "evidence": "index.ts header describes the actual runtime surface; api-surface.spec.ts pins the exact export list.",
       "reproduction": "./node_modules/.bin/nx run resilience-core-tripwire:test --skip-nx-cache -- test/unit/api-surface.spec.ts"
+    },
+    {
+      "id": "F23",
+      "status": "fixed",
+      "commit": "bf6fabb75b68eef19f16b4c397ee431d96f62cf1",
+      "evidence": "capture-kit.ts imports vitest explicitly.",
+      "reproduction": "./node_modules/.bin/nx run stealth-core-browser:test --skip-nx-cache -- test/unit/capture"
+    },
+    {
+      "id": "F24",
+      "status": "fixed",
+      "commit": "bf6fabb75b68eef19f16b4c397ee431d96f62cf1",
+      "evidence": "manager-world killProcessGroup honours failKill.",
+      "reproduction": "./node_modules/.bin/nx run stealth-core-browser:test --skip-nx-cache -- test/unit/lifecycle"
+    },
+    {
+      "id": "F25",
+      "status": "fixed",
+      "commit": "bf6fabb75b68eef19f16b4c397ee431d96f62cf1",
+      "evidence": "network.spec asserts a literal base64 decode expectation instead of recomputing it.",
+      "reproduction": "./node_modules/.bin/nx run stealth-core-browser:test --skip-nx-cache -- test/unit/capture-parsers/network.spec.ts"
+    },
+    {
+      "id": "F26",
+      "status": "fixed",
+      "commit": "bf6fabb75b68eef19f16b4c397ee431d96f62cf1",
+      "evidence": "dom.spec ban-probe count assertion no longer pins an incidental number.",
+      "reproduction": "./node_modules/.bin/nx run stealth-core-browser:test --skip-nx-cache -- test/unit/capture-parsers/dom.spec.ts"
+    },
+    {
+      "id": "F27",
+      "status": "fixed",
+      "commit": "bf6fabb75b68eef19f16b4c397ee431d96f62cf1",
+      "evidence": "keep-chrome-open use case asserts the exact count (2).",
+      "reproduction": "./node_modules/.bin/nx run stealth-core-browser:test --skip-nx-cache -- test/unit/use-cases"
+    },
+    {
+      "id": "F28",
+      "status": "fixed",
+      "commit": "bf6fabb75b68eef19f16b4c397ee431d96f62cf1",
+      "evidence": "idle-tiers log regex loosened to the stable part of the message.",
+      "reproduction": "./node_modules/.bin/nx run stealth-core-browser:test --skip-nx-cache -- test/unit/lifecycle/idle-tiers.spec.ts"
+    },
+    {
+      "id": "F29",
+      "status": "fixed",
+      "commit": "bf6fabb75b68eef19f16b4c397ee431d96f62cf1",
+      "evidence": "fake-cdp.spec uses a microtask flush helper and an arrayContaining check for HC4.",
+      "reproduction": "./node_modules/.bin/nx run stealth-core-browser:test --skip-nx-cache -- test/unit/support/fake-cdp.spec.ts"
+    },
+    {
+      "id": "F30",
+      "status": "fixed",
+      "commit": "bf6fabb75b68eef19f16b4c397ee431d96f62cf1",
+      "evidence": "agents-md.spec bin check matches the filesystem.",
+      "reproduction": "./node_modules/.bin/nx run stealth-core-browser:test --skip-nx-cache -- test/unit/docs/agents-md.spec.ts"
+    },
+    {
+      "id": "F31",
+      "status": "fixed",
+      "commit": "bf6fabb75b68eef19f16b4c397ee431d96f62cf1",
+      "evidence": "fake-cdp.spec uses a microtask flush helper and an arrayContaining check for HC4.",
+      "reproduction": "./node_modules/.bin/nx run stealth-core-browser:test --skip-nx-cache -- test/unit/support/fake-cdp.spec.ts"
+    },
+    {
+      "id": "F32",
+      "status": "fixed",
+      "commit": "bf6fabb75b68eef19f16b4c397ee431d96f62cf1",
+      "evidence": "scenario-kit.ts imports hoisted to the top.",
+      "reproduction": "head -20 packages/stealth/stealth-core-browser/test/helpers/use-cases/scenario-kit.ts"
+    },
+    {
+      "id": "F33",
+      "status": "fixed",
+      "commit": "bf6fabb75b68eef19f16b4c397ee431d96f62cf1",
+      "evidence": "Duplicate chromeMicros removed from profile-fixture.ts; importers use helpers/profile-fixtures.js.",
+      "reproduction": "rg -n 'function chromeMicros' packages/stealth/stealth-core-browser/test"
+    },
+    {
+      "id": "F34",
+      "status": "fixed",
+      "commit": "9d1514d71f76e4727f4598fc073a0c8a6f914213",
+      "evidence": "Header comment of test/helpers/fake-cdp.ts rewritten so every pronoun has a referent.",
+      "reproduction": "rg -n 'FakeCdpServer' packages/stealth/stealth-core-browser/test/helpers/fake-cdp.ts | head -3"
     },
     {
       "id": "F56",
@@ -142,6 +317,174 @@
       "reproduction": "rg -n -B3 'rollupOptions' node_modules/vite/dist/node/index.d.ts | rg deprecated"
     },
     {
+      "id": "F67",
+      "status": "fixed",
+      "commit": "bf6fabb75b68eef19f16b4c397ee431d96f62cf1",
+      "evidence": "openDb builds its URI with pathToFileURL (percent-encoding ?, # and %) and mode=ro&immutable=1; storage-fixes.spec opens a database in a directory named with those characters.",
+      "reproduction": "./node_modules/.bin/nx run stealth-core-browser:test --skip-nx-cache -- test/unit/domains-storage/storage-fixes.spec.ts"
+    },
+    {
+      "id": "F68",
+      "status": "fixed",
+      "commit": "bf6fabb75b68eef19f16b4c397ee431d96f62cf1",
+      "evidence": "openDb builds its URI with pathToFileURL (percent-encoding ?, # and %) and mode=ro&immutable=1; storage-fixes.spec opens a database in a directory named with those characters.",
+      "reproduction": "./node_modules/.bin/nx run stealth-core-browser:test --skip-nx-cache -- test/unit/domains-storage/storage-fixes.spec.ts"
+    },
+    {
+      "id": "F69",
+      "status": "fixed",
+      "commit": "bf6fabb75b68eef19f16b4c397ee431d96f62cf1",
+      "evidence": "Cookie reads accept { redactValues } (value becomes '[redacted]'); documented in storage.md.",
+      "reproduction": "./node_modules/.bin/nx run stealth-core-browser:test --skip-nx-cache -- test/unit/domains-storage/cookies.spec.ts"
+    },
+    {
+      "id": "F70",
+      "status": "fixed",
+      "commit": "bf6fabb75b68eef19f16b4c397ee431d96f62cf1",
+      "evidence": "Unset cookie times are null (CookieInfo.creationUtc/lastAccessUtc are Date|null) and host filters share hostFilterKeys().",
+      "reproduction": "./node_modules/.bin/nx run stealth-core-browser:test --skip-nx-cache -- test/unit/domains-storage/storage-fixes.spec.ts"
+    },
+    {
+      "id": "F71",
+      "status": "fixed",
+      "commit": "bf6fabb75b68eef19f16b4c397ee431d96f62cf1",
+      "evidence": "Unset cookie times are null (CookieInfo.creationUtc/lastAccessUtc are Date|null) and host filters share hostFilterKeys().",
+      "reproduction": "./node_modules/.bin/nx run stealth-core-browser:test --skip-nx-cache -- test/unit/domains-storage/storage-fixes.spec.ts"
+    },
+    {
+      "id": "F72",
+      "status": "fixed",
+      "commit": "bf6fabb75b68eef19f16b4c397ee431d96f62cf1",
+      "evidence": "History LIKE search escapes % and _ with ESCAPE; visit stats and transition breakdown count chain-end visits only, with per-day breakdowns filled.",
+      "reproduction": "./node_modules/.bin/nx run stealth-core-browser:test --skip-nx-cache -- test/unit/domains-storage/history.spec.ts"
+    },
+    {
+      "id": "F73",
+      "status": "fixed",
+      "commit": "bf6fabb75b68eef19f16b4c397ee431d96f62cf1",
+      "evidence": "History LIKE search escapes % and _ with ESCAPE; visit stats and transition breakdown count chain-end visits only, with per-day breakdowns filled.",
+      "reproduction": "./node_modules/.bin/nx run stealth-core-browser:test --skip-nx-cache -- test/unit/domains-storage/history.spec.ts"
+    },
+    {
+      "id": "F74",
+      "status": "fixed",
+      "commit": "bf6fabb75b68eef19f16b4c397ee431d96f62cf1",
+      "evidence": "Bookmark dates use chromeTimeToDateOrNull (no 1601 epoch for unset).",
+      "reproduction": "./node_modules/.bin/nx run stealth-core-browser:test --skip-nx-cache -- test/unit/domains-storage/bookmarks.spec.ts"
+    },
+    {
+      "id": "F75",
+      "status": "fixed",
+      "commit": "bf6fabb75b68eef19f16b4c397ee431d96f62cf1",
+      "evidence": "StoreRecordingSink: empty batch is a no-op, close() waits for admitted writes and refuses later ones, a rejected init is retried, schema version upsert is upgrade-only; redaction ownership is documented in the header (the sink persists what the recorder hands it, exactly as recorder redact option and README describe).",
+      "reproduction": "./node_modules/.bin/nx run stealth-core-browser:test --skip-nx-cache -- test/unit/capture/store-sink-fixes.spec.ts"
+    },
+    {
+      "id": "F76",
+      "status": "fixed",
+      "commit": "bf6fabb75b68eef19f16b4c397ee431d96f62cf1",
+      "evidence": "StoreRecordingSink: empty batch is a no-op, close() waits for admitted writes and refuses later ones, a rejected init is retried, schema version upsert is upgrade-only; redaction ownership is documented in the header (the sink persists what the recorder hands it, exactly as recorder redact option and README describe).",
+      "reproduction": "./node_modules/.bin/nx run stealth-core-browser:test --skip-nx-cache -- test/unit/capture/store-sink-fixes.spec.ts"
+    },
+    {
+      "id": "F77",
+      "status": "fixed",
+      "commit": "bf6fabb75b68eef19f16b4c397ee431d96f62cf1",
+      "evidence": "StoreRecordingSink: empty batch is a no-op, close() waits for admitted writes and refuses later ones, a rejected init is retried, schema version upsert is upgrade-only; redaction ownership is documented in the header (the sink persists what the recorder hands it, exactly as recorder redact option and README describe).",
+      "reproduction": "./node_modules/.bin/nx run stealth-core-browser:test --skip-nx-cache -- test/unit/capture/store-sink-fixes.spec.ts"
+    },
+    {
+      "id": "F78",
+      "status": "fixed",
+      "commit": "bf6fabb75b68eef19f16b4c397ee431d96f62cf1",
+      "evidence": "tsconfig.json uses esnext/bundler without ignoreDeprecations; tsconfig.spec.json includes src test globs; tsconfig.spec.ts guards it.",
+      "reproduction": "./node_modules/.bin/nx run stealth-core-browser:test --skip-nx-cache -- test/unit/foundation/tsconfig.spec.ts"
+    },
+    {
+      "id": "F79",
+      "status": "fixed",
+      "commit": "bf6fabb75b68eef19f16b4c397ee431d96f62cf1",
+      "evidence": "UrlInfo mapping shared through toUrlInfo in history.ts.",
+      "reproduction": "rg -n 'toUrlInfo' packages/stealth/stealth-core-browser/src/lib/storage/history.ts"
+    },
+    {
+      "id": "F80",
+      "status": "fixed",
+      "commit": "bf6fabb75b68eef19f16b4c397ee431d96f62cf1",
+      "evidence": "runtime-deps comment corrected.",
+      "reproduction": "rg -n 'import\\(' packages/stealth/stealth-core-browser/src/lib/runtime-deps.ts | head -3"
+    },
+    {
+      "id": "F81",
+      "status": "fixed",
+      "commit": "bf6fabb75b68eef19f16b4c397ee431d96f62cf1",
+      "evidence": "session.ts uses randomUUID from node:crypto; session.spec injects uuids.",
+      "reproduction": "./node_modules/.bin/nx run stealth-core-browser:test --skip-nx-cache -- test/unit/foundation/session.spec.ts"
+    },
+    {
+      "id": "F92",
+      "status": "fixed",
+      "commit": "bf6fabb75b68eef19f16b4c397ee431d96f62cf1",
+      "evidence": "storage.md, reference README and history-db.md consistently state immutable=1 ignores the WAL and takes no locks, so reads may be stale.",
+      "reproduction": "rg -n 'immutable' packages/stealth/stealth-core-browser/docs"
+    },
+    {
+      "id": "F93",
+      "status": "fixed",
+      "commit": "bf6fabb75b68eef19f16b4c397ee431d96f62cf1",
+      "evidence": "storage.md, reference README and history-db.md consistently state immutable=1 ignores the WAL and takes no locks, so reads may be stale.",
+      "reproduction": "rg -n 'immutable' packages/stealth/stealth-core-browser/docs"
+    },
+    {
+      "id": "F94",
+      "status": "fixed",
+      "commit": "bf6fabb75b68eef19f16b4c397ee431d96f62cf1",
+      "evidence": "chrome-manager.md rewritten around the reaper host: no heartbeat file, real options, methods and status().",
+      "reproduction": "rg -n 'heartbeat' packages/stealth/stealth-core-browser/docs/reference/chrome-manager.md"
+    },
+    {
+      "id": "F95",
+      "status": "fixed",
+      "commit": "6b5a91ffc13774df51772dea2a0ef8d0fb3fb3c0",
+      "evidence": "searchBookmarks is implemented and asserted by examples.spec (storage case); the contradicting 'stub' text in storage.md is corrected and the example states it.",
+      "reproduction": "nx run stealth-core-browser:test --skip-nx-cache -- test/unit/examples/examples.spec.ts"
+    },
+    {
+      "id": "F96",
+      "status": "fixed",
+      "commit": "bf6fabb75b68eef19f16b4c397ee431d96f62cf1",
+      "evidence": "history-db.md separates the Default Chrome path from the dedicated Chrome-CDP path.",
+      "reproduction": "rg -n 'Chrome-CDP' packages/stealth/stealth-core-browser/docs/reference/cdp/history-db.md"
+    },
+    {
+      "id": "F97",
+      "status": "fixed",
+      "commit": "bf6fabb75b68eef19f16b4c397ee431d96f62cf1",
+      "evidence": "usage.md retitled and its command/event tables describe this package.",
+      "reproduction": "rg -n 'agent-browser' packages/stealth/stealth-core-browser/docs/reference/cdp/usage.md"
+    },
+    {
+      "id": "F98",
+      "status": "fixed",
+      "commit": "bf6fabb75b68eef19f16b4c397ee431d96f62cf1",
+      "evidence": "target-timing.md marks the histogram heuristic unverified and replaces the Idle Shutdown Proposal with the shipped model.",
+      "reproduction": "rg -n 'unverified' packages/stealth/stealth-core-browser/docs/reference/cdp/target-timing.md"
+    },
+    {
+      "id": "F99",
+      "status": "rejected",
+      "commit": "6b5a91ffc13774df51772dea2a0ef8d0fb3fb3c0",
+      "evidence": "Every file under examples/verbs and examples/namespaces is imported and its run() executed by test/unit/examples/examples.spec.ts (6 verbs + 8 namespaces; 18 tests pass). A guard test now fails if a new example is not imported.",
+      "reproduction": "rg -n \"from '../../../examples/\" packages/stealth/stealth-core-browser/test/unit/examples/examples.spec.ts"
+    },
+    {
+      "id": "F100",
+      "status": "fixed",
+      "commit": "bf6fabb75b68eef19f16b4c397ee431d96f62cf1",
+      "evidence": "killChrome documented as the tracked launch's process group, else only a listener whose command line carries --user-data-dir=<profile>; no lsof-kill-anything wording remains in cdp.md or chrome-manager.md.",
+      "reproduction": "rg -n 'lsof' packages/stealth/stealth-core-browser/docs"
+    },
+    {
       "id": "F101",
       "status": "fixed",
       "commit": "e0d039afbb8248bb904175c3e344e1fb164b4ae9",
@@ -175,6 +518,27 @@
       "commit": "e0d039afbb8248bb904175c3e344e1fb164b4ae9",
       "evidence": "interleave.spec.ts phasedPicker throws a descriptive error if no pending op exists instead of a TypeError.",
       "reproduction": "./node_modules/.bin/nx run resilience-core-tripwire:test --skip-nx-cache -- test/unit/interleave.spec.ts"
+    },
+    {
+      "id": "F106",
+      "status": "fixed",
+      "commit": "bf6fabb75b68eef19f16b4c397ee431d96f62cf1",
+      "evidence": "cdp-connection.md quick start no longer calls Runtime.evaluate; it reads DOM.getDocument and states why script injection is avoided.",
+      "reproduction": "rg -n 'Runtime.evaluate' packages/stealth/stealth-core-browser/docs/reference/cdp-connection.md"
+    },
+    {
+      "id": "F107",
+      "status": "fixed",
+      "commit": "bf6fabb75b68eef19f16b4c397ee431d96f62cf1",
+      "evidence": "Page.loadEventFired is documented as an event; cdp.md examples use awaitPageSettled.",
+      "reproduction": "rg -n 'send\\(.Page.loadEventFired' packages/stealth/stealth-core-browser/docs"
+    },
+    {
+      "id": "F108",
+      "status": "fixed",
+      "commit": "bf6fabb75b68eef19f16b4c397ee431d96f62cf1",
+      "evidence": "Network list no longer repeats emulateNetworkConditions/takeResponseBodyForInterceptionAsStream and Runtime no longer repeats getExceptionDetails.",
+      "reproduction": "python3 -c \"import re;s=open('packages/stealth/stealth-core-browser/docs/reference/cdp/domains.md').read();print([n for m in re.finditer(r'- \\*\\*Methods:\\*\\* (.*)',s) for n in set(re.findall(r'`(\\w+)`',m.group(1))) if re.findall(r'`(\\w+)`',m.group(1)).count(n)>1])\""
     },
     {
       "id": "F109",
@@ -217,6 +581,104 @@
       "commit": "e0d039afbb8248bb904175c3e344e1fb164b4ae9",
       "evidence": "audit-expiry.spec.ts last test asserts tripReason/method/blockedCount instead of repeating the ttl-expired assertion.",
       "reproduction": "./node_modules/.bin/nx run resilience-core-tripwire:test --skip-nx-cache -- test/unit/audit-expiry.spec.ts"
+    },
+    {
+      "id": "F121",
+      "status": "fixed",
+      "commit": "bf6fabb75b68eef19f16b4c397ee431d96f62cf1",
+      "evidence": "walkDomTree subscribes to Page.loadEventFired before navigating and never sends it as a command; normalizeUrl rewrites only redirect links and keeps /search?q=.",
+      "reproduction": "./node_modules/.bin/nx run stealth-core-browser:test --skip-nx-cache -- test/unit/capture-parsers/dom-load.spec.ts"
+    },
+    {
+      "id": "F122",
+      "status": "fixed",
+      "commit": "bf6fabb75b68eef19f16b4c397ee431d96f62cf1",
+      "evidence": "walkDomTree subscribes to Page.loadEventFired before navigating and never sends it as a command; normalizeUrl rewrites only redirect links and keeps /search?q=.",
+      "reproduction": "./node_modules/.bin/nx run stealth-core-browser:test --skip-nx-cache -- test/unit/capture-parsers/dom-load.spec.ts"
+    },
+    {
+      "id": "F123",
+      "status": "fixed",
+      "commit": "bf6fabb75b68eef19f16b4c397ee431d96f62cf1",
+      "evidence": "killProcessGroup clears both timers; killChrome SIGKILLs the first pid's real process group.",
+      "reproduction": "./node_modules/.bin/nx run stealth-core-browser:test --skip-nx-cache -- test/unit/lifecycle/kill-fixes.spec.ts"
+    },
+    {
+      "id": "F124",
+      "status": "fixed",
+      "commit": "bf6fabb75b68eef19f16b4c397ee431d96f62cf1",
+      "evidence": "killProcessGroup clears both timers; killChrome SIGKILLs the first pid's real process group.",
+      "reproduction": "./node_modules/.bin/nx run stealth-core-browser:test --skip-nx-cache -- test/unit/lifecycle/kill-fixes.spec.ts"
+    },
+    {
+      "id": "F125",
+      "status": "fixed",
+      "commit": "bf6fabb75b68eef19f16b4c397ee431d96f62cf1",
+      "evidence": "shutdownChrome TSDoc matches the invalid-endpoint rejection; noteActivity(input) replaces input ?? {}.",
+      "reproduction": "./node_modules/.bin/nx run stealth-core-browser:test --skip-nx-cache -- test/unit/surface/api.spec.ts"
+    },
+    {
+      "id": "F126",
+      "status": "fixed",
+      "commit": "bf6fabb75b68eef19f16b4c397ee431d96f62cf1",
+      "evidence": "shutdownChrome TSDoc matches the invalid-endpoint rejection; noteActivity(input) replaces input ?? {}.",
+      "reproduction": "./node_modules/.bin/nx run stealth-core-browser:test --skip-nx-cache -- test/unit/surface/api.spec.ts"
+    },
+    {
+      "id": "F127",
+      "status": "fixed",
+      "commit": "bf6fabb75b68eef19f16b4c397ee431d96f62cf1",
+      "evidence": "ban matcher resets lastIndex between uses.",
+      "reproduction": "./node_modules/.bin/nx run stealth-core-browser:test --skip-nx-cache -- test/unit/capture-parsers/bans.spec.ts"
+    },
+    {
+      "id": "F128",
+      "status": "fixed",
+      "commit": "bf6fabb75b68eef19f16b4c397ee431d96f62cf1",
+      "evidence": "Reaper host evaluation is keyed by grace+caller; different keys wait and evaluate fresh.",
+      "reproduction": "./node_modules/.bin/nx run stealth-core-browser:test --skip-nx-cache -- test/unit/lifecycle/reaper-fixes.spec.ts"
+    },
+    {
+      "id": "F129",
+      "status": "fixed",
+      "commit": "bf6fabb75b68eef19f16b4c397ee431d96f62cf1",
+      "evidence": "reaper-link reapIfIdle/status catch rejections, log and return null.",
+      "reproduction": "./node_modules/.bin/nx run stealth-core-browser:test --skip-nx-cache -- test/unit/lifecycle/reaper-link.spec.ts"
+    },
+    {
+      "id": "F130",
+      "status": "fixed",
+      "commit": "bf6fabb75b68eef19f16b4c397ee431d96f62cf1",
+      "evidence": "NetworkRecorder deletes a draft from its lookup map after settle and after failure; tracked exchanges are retained by design (documented).",
+      "reproduction": "./node_modules/.bin/nx run stealth-core-browser:test --skip-nx-cache -- test/unit/capture/draft-release.spec.ts"
+    },
+    {
+      "id": "F131",
+      "status": "fixed",
+      "commit": "bf6fabb75b68eef19f16b4c397ee431d96f62cf1",
+      "evidence": "activity.ts and target.ts share isActiveWebTarget from lifecycle/page-tier.",
+      "reproduction": "./node_modules/.bin/nx run stealth-core-browser:test --skip-nx-cache -- test/unit/queries/activity.spec.ts"
+    },
+    {
+      "id": "F132",
+      "status": "fixed",
+      "commit": "bf6fabb75b68eef19f16b4c397ee431d96f62cf1",
+      "evidence": "Embedded-JSON script finder is attribute-order tolerant and snippets are cleaned.",
+      "reproduction": "./node_modules/.bin/nx run stealth-core-browser:test --skip-nx-cache -- test/unit/capture-parsers/parsers.spec.ts"
+    },
+    {
+      "id": "F133",
+      "status": "fixed",
+      "commit": "bf6fabb75b68eef19f16b4c397ee431d96f62cf1",
+      "evidence": "Embedded-JSON script finder is attribute-order tolerant and snippets are cleaned.",
+      "reproduction": "./node_modules/.bin/nx run stealth-core-browser:test --skip-nx-cache -- test/unit/capture-parsers/parsers.spec.ts"
+    },
+    {
+      "id": "F134",
+      "status": "fixed",
+      "commit": "bf6fabb75b68eef19f16b4c397ee431d96f62cf1",
+      "evidence": "Duplicate errorMessage removed; import type block moved to the top of network-recorder.ts.",
+      "reproduction": "rg -n 'errorMessage' packages/stealth/stealth-core-browser/src/lib/recording/errors.ts"
     },
     {
       "id": "F135",
@@ -324,6 +786,13 @@
       "reproduction": "./node_modules/.bin/nx run stealth-core-browser:test --skip-nx-cache -- test/unit/cdp/settle.spec.ts"
     },
     {
+      "id": "F155",
+      "status": "fixed",
+      "commit": "bf6fabb75b68eef19f16b4c397ee431d96f62cf1",
+      "evidence": "createPageTargetIdleShutdown documents its options and logs a warning when shutDownChrome is set without onShutdown.",
+      "reproduction": "./node_modules/.bin/nx run stealth-core-browser:test --skip-nx-cache -- test/unit/cdp/shutdown.spec.ts"
+    },
+    {
       "id": "F156",
       "status": "fixed",
       "commit": "9d1514d71f76e4727f4598fc073a0c8a6f914213",
@@ -331,11 +800,25 @@
       "reproduction": "./node_modules/.bin/nx run stealth-core-browser:test --skip-nx-cache -- test/unit/cdp/targets.spec.ts"
     },
     {
+      "id": "F157",
+      "status": "fixed",
+      "commit": "bf6fabb75b68eef19f16b4c397ee431d96f62cf1",
+      "evidence": "Chrome-time conversion keeps sub-second precision and Google support dir is resolved per platform (googleSupportDir).",
+      "reproduction": "./node_modules/.bin/nx run stealth-core-browser:test --skip-nx-cache -- test/unit/foundation/helpers.spec.ts"
+    },
+    {
       "id": "F158",
       "status": "fixed",
       "commit": "296ef2ae408f2dd74d833fff2baa20d0bab4767d",
       "evidence": "Removed the unreachable 'load' member from SettleSignal (load only gates rung 2 and never resolves); header comment updated; the two stealth-search stubs that returned it now return networkIdle. Type check (typecheck + typecheck-spec) proves no remaining use.",
       "reproduction": "./node_modules/.bin/nx run stealth-core-browser:typecheck --skip-nx-cache"
+    },
+    {
+      "id": "F159",
+      "status": "fixed",
+      "commit": "bf6fabb75b68eef19f16b4c397ee431d96f62cf1",
+      "evidence": "Chrome-time conversion keeps sub-second precision and Google support dir is resolved per platform (googleSupportDir).",
+      "reproduction": "./node_modules/.bin/nx run stealth-core-browser:test --skip-nx-cache -- test/unit/foundation/helpers.spec.ts"
     }
   ]
 }
