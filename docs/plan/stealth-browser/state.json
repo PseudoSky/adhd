@@ -165,11 +165,11 @@
       "end_ref": "76709a59d418cdb739293de71c79257d2c668189"
     },
     "audit-final": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-10-24T19:57:42.824Z",
-      "done_at": null,
+      "done_at": "2026-10-24T22:11:23.520Z",
       "start_ref": "23ffac5cae0b8cf51e37c9661d3ee94ae4909357",
-      "end_ref": null
+      "end_ref": "33e826fdabe6938044a529ee638b192aaf38cb47"
     },
     "merge-readiness": {
       "status": "pending",
@@ -1507,6 +1507,18 @@
       "audit_criteria_total": 10,
       "by": "pseudosky",
       "note": "both READMEs rewritten, readme-rewrite guard exit 0 (10 criteria)"
+    },
+    {
+      "ts": "2026-10-24T22:11:23.520Z",
+      "from": "audit-final",
+      "to": "audit-final",
+      "start_ref": "23ffac5cae0b8cf51e37c9661d3ee94ae4909357",
+      "end_ref": "33e826fdabe6938044a529ee638b192aaf38cb47",
+      "audit_exit": 0,
+      "audit_criteria_passed": 621,
+      "audit_criteria_total": 621,
+      "by": "pseudosky",
+      "note": "audit_dod.py --phase final: dod.1-8 PASS exit 0; audit-final guard green; 74-state sweep green"
     }
   ],
   "amendment_log": [
@@ -2284,7 +2296,7 @@
     "version": "0.8.35",
     "hash": "0b6bc1f3d70e"
   },
-  "current_state": "audit-final",
+  "current_state": "merge-readiness",
   "dod_provenance": {
     "confirmed_at": "2026-10-12T23:49:38.410Z",
     "by": "pseudosky",
