@@ -130,11 +130,11 @@
       "end_ref": "8d21b983807fe98bcb0082b88a30492a21822305"
     },
     "audit-migration-blind": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-10-24T14:08:21.409Z",
-      "done_at": null,
+      "done_at": "2026-10-24T14:49:42.594Z",
       "start_ref": "0c7cbe282fbc4b93bf1f009218e7bab6c0fb553b",
-      "end_ref": null
+      "end_ref": "9410d766bc8b230b0ebaf3fa35a92a3c7fe28327"
     },
     "resolve-findings": {
       "status": "pending",
@@ -1447,6 +1447,18 @@
       "audit_criteria_total": 5,
       "by": "pseudosky",
       "note": "blind-review diff cut; INPUT.sha256 and BRIEF.txt written; guard 5/5"
+    },
+    {
+      "ts": "2026-10-24T14:49:42.594Z",
+      "from": "audit-migration-blind",
+      "to": "audit-migration-blind",
+      "start_ref": "0c7cbe282fbc4b93bf1f009218e7bab6c0fb553b",
+      "end_ref": "9410d766bc8b230b0ebaf3fa35a92a3c7fe28327",
+      "audit_exit": 0,
+      "audit_criteria_passed": 548,
+      "audit_criteria_total": 548,
+      "by": "pseudosky",
+      "note": "one sharded blind review round recorded: 5 slices then 14 chunks; reviewers saw only the diff slice and the word Review"
     }
   ],
   "amendment_log": [
@@ -2224,7 +2236,7 @@
     "version": "0.8.35",
     "hash": "0b6bc1f3d70e"
   },
-  "current_state": "audit-migration-blind",
+  "current_state": "resolve-findings",
   "dod_provenance": {
     "confirmed_at": "2026-10-12T23:49:38.410Z",
     "by": "pseudosky",
