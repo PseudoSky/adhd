@@ -4,7 +4,7 @@
  * Ticket 8468f7b1 · [prod-errors.2] [prod-errors.8] · PA5.1 / PA5.4 · CHROME_NOT_FOUND, CHROME_START_TIMEOUT, PORT_IN_USE.
  * node:child_process, node:fs, node:os and ./targets are mocked: no Chrome is launched, no process is signalled,
  * and the developer's live Chrome on 9222 is never contacted.
- * guards: rejects with CHROME_NOT_FOUND before spawning when the binary is missing, keeping the CHROME_PATH message
+ * guards: rejects with CHROME_NOT_FOUND before spawning when the binary is missing, naming the standard install location and not an environment variable
  * tier: S
  * cites: 8468f7b1 [prod-errors.2] [prod-errors.8]
  */
@@ -83,7 +83,7 @@ afterEach(() => {
 })
 
 describe('8468f7b1 [prod-errors.2] launchChrome rejects with a typed code (PA5.4)', () => {
-  it('rejects with CHROME_NOT_FOUND before spawning when the binary is missing, keeping the CHROME_PATH message', async () => {
+  it('rejects with CHROME_NOT_FOUND before spawning when the binary is missing, naming the standard install location and not an environment variable', async () => {
     m.existsSync.mockReturnValue(false)
     const p = launchChrome({ port: PORT, chromePath: CHROME, profileDir: PROFILE })
     await expect(p).rejects.toMatchObject({ code: 'CHROME_NOT_FOUND', message: expect.stringContaining(`Chrome binary not found at "${CHROME}"`), detail: { path: CHROME, port: PORT } })

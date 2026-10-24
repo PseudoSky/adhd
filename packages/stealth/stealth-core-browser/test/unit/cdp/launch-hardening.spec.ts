@@ -48,7 +48,6 @@ const CHROME = '/fake/bin/chrome'
 const PROFILE = '/fake/profile'
 const lockOf = (port: number): string => `/fake/tmp/stealth-chrome-launch-${port}.lock`
 
-let kill: ReturnType<typeof vi.spyOn>
 /** The 'exit' listener each fake child registered, by pid: calling it simulates that child exiting. */
 const exits = new Map<number, () => void>()
 const signals: Array<[number, string | number | undefined]> = []
@@ -61,7 +60,7 @@ beforeEach(() => {
   m.isChromeReachable.mockResolvedValue(false)
   signals.length = 0
   exits.clear()
-  kill = vi.spyOn(process, 'kill').mockImplementation(((pid: number, sig?: string | number) => {
+  vi.spyOn(process, 'kill').mockImplementation(((pid: number, sig?: string | number) => {
     signals.push([pid, sig])
     if (sig === 0) throw Object.assign(new Error('ESRCH'), { code: 'ESRCH' })
     return true

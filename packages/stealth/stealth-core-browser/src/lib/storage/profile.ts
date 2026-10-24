@@ -1,8 +1,7 @@
-import { notYet, chromeProfileDir } from '../helpers.js'
+import { chromeProfileDir } from '../helpers.js'
 import { openDb } from './helpers.js'
 import { join } from 'node:path'
 import { readFileSync, readdirSync } from 'node:fs'
-import type { SessionTab } from '../types.js'
 
 /** The value shown in place of an autofill value when `redactValues` is set. */
 export const AUTOFILL_REDACTED = '[REDACTED]'
@@ -84,15 +83,6 @@ export class ProfileClient {
         url: r.url ?? '',
       }))
     } finally { db.close() }
-  }
-
-  /**
-   * Not implemented: always `[]`, and it warns once per call. Chrome keeps the open tabs of a profile in its
-   * binary session files, which this reader does not parse; the live tabs of the controlled Chrome come from
-   * `listPageTargets()`.
-   */
-  getOpenTabs(): SessionTab[] {
-    notYet('getOpenTabs'); return []
   }
 
   getPreference<T = unknown>(key: string): T | undefined {

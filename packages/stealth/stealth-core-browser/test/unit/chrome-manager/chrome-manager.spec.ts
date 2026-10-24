@@ -10,7 +10,7 @@
  * No Chrome, no activity file, no profile, no socket, no signal, and port 9222 is never contacted.
  * guards: counts http and https documents (any case) as active
  * tier: S
- * cites: 8468f7b1 [tests-unit-core.1] [tests-unit-core.2] [tests-unit-core.3] [tests-unit-core.4] [chrome-lifecycle.26]
+ * cites: 8468f7b1 [tests-unit-core.1] [tests-unit-core.2] [tests-unit-core.3] [tests-unit-core.4] [chrome-lifecycle.26] [audit-fixes.5]
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -66,6 +66,19 @@ describe('8468f7b1 AC2 [tests-unit-core.1] ChromeManager.ready', () => {
     expect(c.manager.isReady).toBe(true)
     expect(JSON.parse(world.fs.readFileSync(ownerRecordPath(STATE_DIR, PORT)))).toMatchObject({ pid: world.nextPid - 1, port: PORT, profileDir: '/profile' })
     expect(hub.host!.clients()).toMatchObject([{ pid: 11, checkHistory: true }])
+  })
+
+  it('[audit-fixes.5] P34 the port of a bracketed IPv6 cdpHost is the number after the last colon, not the second colon-separated field', async () => {
+    const c = client(makeHub(), 11, { cdpHost: '[::1]:9333' })
+    await c.manager.ready()
+    expect(ensureChromeRunning).toHaveBeenCalledWith({ port: 9333 })
+    expect(hideAllWindows).toHaveBeenCalledWith('[::1]:9333')
+  })
+
+  it('[audit-fixes.5] P34 a cdpHost without a valid port falls back to 9222', async () => {
+    const c = client(makeHub(), 11, { cdpHost: 'localhost' })
+    await c.manager.ready()
+    expect(ensureChromeRunning).toHaveBeenCalledWith({ port: 9222 })
   })
 
   it('takes the fast path (no relaunch, no re-hide) while Chrome is still reachable', async () => {

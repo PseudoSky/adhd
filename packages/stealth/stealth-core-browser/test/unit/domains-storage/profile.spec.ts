@@ -14,9 +14,8 @@ import { chromeMicros, makeProfile, type Fixture } from '../../helpers/domains-s
 
 describe('8468f7b1 AC2 [tests-unit-data.1] ProfileClient', () => {
   let fx: Fixture
-  let warn: ReturnType<typeof vi.spyOn>
   beforeEach(() => {
-    warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined)
     fx = makeProfile()
   })
   afterEach(() => { fx.cleanup(); vi.restoreAllMocks() })
@@ -87,9 +86,8 @@ describe('8468f7b1 AC2 [tests-unit-data.1] ProfileClient', () => {
     ])
   })
 
-  it('getOpenTabs is a not-yet-implemented stub that warns and returns []', () => {
-    expect(new ProfileClient(fx.root).getOpenTabs()).toEqual([])
-    expect(warn).toHaveBeenCalledWith('[cdp-query] getOpenTabs is not yet implemented')
+  it('[audit-fixes.5] P32 the unimplemented getOpenTabs stub is gone from the public client', () => {
+    expect('getOpenTabs' in new ProfileClient(fx.root)).toBe(false)
   })
 
   it('getPreference walks dotted keys', () => {
@@ -142,7 +140,6 @@ describe('8468f7b1 AC2 [tests-unit-data.1] ProfileClient', () => {
     expect(c.getPreference('anything')).toBeUndefined()
     expect(c.getExtensionIds()).toEqual([])
     expect(c.hasSavedCredentials()).toBe(false)
-    expect(c.getOpenTabs()).toEqual([])
     // populate: limit-100 autofill, search engines, extensions, preferences
     const web = fx.db('Web Data', [
       'CREATE TABLE autofill (name TEXT, value TEXT, count INTEGER, date_last_used INTEGER)',

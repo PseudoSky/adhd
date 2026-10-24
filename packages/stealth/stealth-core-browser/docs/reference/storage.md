@@ -193,6 +193,14 @@ for (const c of example) {
 const github = cookies.getCookiesByDomain('github.com')
 ```
 
+#### `getCookiesForHostname(hostname)` — what a request to a host would carry
+
+Matches by domain, not by substring: the cookies stored for exactly that host (`www.example.com`) and the domain cookies of the host and each parent domain (`.www.example.com`, `.example.com`), never the bare top-level domain. `notexample.com` and `example.com.evil.net` do not match `example.com`. The host keys are matched in SQL, so the 200-row cap of an unfiltered read cannot hide a match.
+
+```typescript
+const forPage = cookies.getCookiesForHostname('www.github.com')
+```
+
 ### `CookieInfo` type
 
 ```typescript
@@ -274,7 +282,7 @@ interface BookmarkNode {
 
 ## `ProfileClient`
 
-Read-only client for the non-history data files of a Chrome profile (top sites, favicons, autofill, search engines, preferences, extensions). Every database is opened immutable and read-only.
+Read-only client for the non-history data files of a Chrome profile (top sites, favicons, autofill, search engines, preferences, extensions). The open tabs of a running Chrome come from `listPageTargets()`; the profile's session files are not parsed. Every database is opened immutable and read-only.
 
 ```typescript
 import { ProfileClient } from '@adhd/stealth-core-browser/storage'
@@ -300,7 +308,6 @@ new ProfileClient(profileDir?: string)
 | `getFaviconData(pageUrl)` | `{url, data?, mimeType?} \| null` | Implemented |
 | `getAutofillData({ redactValues? })` | `Array<{name, value, count, lastUsed}>`, newest first, at most 100 | Implemented. Values are personal data: `redactValues: true` replaces each with `[REDACTED]` |
 | `getSearchEngines()` | `Array<{name, keyword, url}>` | Implemented |
-| `getOpenTabs()` | `SessionTab[]` (always empty, with a warning) | Not implemented: use `listPageTargets()` for the live tabs |
 | `getPreference(key)` | `T \| undefined` | Implemented (dotted key path) |
 | `getExtensionIds()` | `string[]` | Implemented |
 | `hasSavedCredentials()` | `boolean` | Implemented |
