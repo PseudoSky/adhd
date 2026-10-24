@@ -2,9 +2,12 @@
  * @adhd/stealth-core-browser — src/lib/recording/redact.ts
  *
  * Header redaction for persisted recordings. Identity is the recorder default
- * (replay use needs the cookies); pass `redactHeaders()` as `redact` to mask
- * credentials at the sink and `onExchange` boundary while in-memory
- * exchanges stay raw.
+ * (replay use needs the cookies), so a recording written to a sink holds cookies and
+ * authorization headers in clear: the store sink keeps its file owner-only (0600), and
+ * a caller that does not need them stored passes `redactHeaders()` as `redact` to mask
+ * credentials at the sink and `onExchange` boundary while in-memory exchanges stay raw.
+ * Only header values are masked: a token carried in a URL query string is NOT, so a
+ * recording of such requests must be treated as secret whatever `redact` is.
  *
  * Ticket 8468f7b1 · plan state capture-upgrade [capture-upgrade.16].
  */

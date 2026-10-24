@@ -5,16 +5,48 @@
  * and returns a sink that owns it. The package is only ever reached through
  * the injectable loadAdapter, so these specs never load it.
  * guards: calls createStoreAdapter once with { dbPath }, runs the DDL and returns a working sink
+ * guards: the recording database and its side files are owner-only (0600) and an unsecurable file fails the open
  * tier: S
- * cites: 8468f7b1 [capture-upgrade.26]
+ * cites: 8468f7b1 [capture-upgrade.26] [audit-fixes.5]
  */
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+/** node:fs is an in-memory fake: the unit lane never creates, chmods or reads a real file. */
+const fsFake = vi.hoisted(() => ({
+  files: new Map<string, number>(),
+  dirs: [] as Array<{ path: string; mode: number | undefined }>,
+  chmodFail: null as Error | null,
+  mkdirFail: null as Error | null,
+}))
+vi.mock('node:fs', () => ({
+  existsSync: (p: string) => fsFake.files.has(p),
+  mkdirSync: (path: string, opts?: { mode?: number }) => {
+    if (fsFake.mkdirFail) throw fsFake.mkdirFail
+    fsFake.dirs.push({ path, mode: opts?.mode })
+  },
+  openSync: (path: string, _flags: string, mode?: number) => {
+    fsFake.files.set(path, mode ?? 0o666)
+    return 3
+  },
+  closeSync: () => undefined,
+  chmodSync: (path: string, mode: number) => {
+    if (fsFake.chmodFail) throw fsFake.chmodFail
+    fsFake.files.set(path, mode)
+  },
+}))
 import type { createStoreAdapter } from '@adhd/sox-store-adapter'
 import { CaptureError } from '../../../src/lib/recording/errors.js'
 import { openStoreRecordingSink } from '../../../src/lib/recording/open-store-sink.js'
 import { RECORDING_SCHEMA_VERSION } from '../../../src/lib/recording/store-sink.js'
 import type { RecordingEnvelope } from '../../../src/lib/recording/types.js'
 import { makeStoreFake } from '../../helpers/capture/capture-kit.js'
+
+beforeEach(() => {
+  fsFake.files.clear()
+  fsFake.dirs.length = 0
+  fsFake.chmodFail = null
+  fsFake.mkdirFail = null
+})
 
 function fakeAdapterModule(opts: { failCreate?: Error } = {}) {
   const fake = makeStoreFake()
@@ -96,5 +128,51 @@ describe('8468f7b1 [capture-upgrade.26] failures are CAPTURE_SINK_UNAVAILABLE wi
     const err = await openStoreRecordingSink({ dbPath: '/x', loadAdapter: m.loadAdapter }).catch((e: unknown) => e)
     expect(err).toMatchObject({ code: 'CAPTURE_SINK_UNAVAILABLE' })
     expect(m.adapter.close).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('8468f7b1 [audit-fixes.5] P26 the recording database is owner-only', () => {
+  it('a new database file is created 0600 before the adapter opens it, in a 0700 directory', async () => {
+    const m = fakeAdapterModule()
+    const order: string[] = []
+    m.create.mockImplementationOnce(async () => {
+      order.push(`adapter sees mode ${fsFake.files.get('/data/rec.sqlite')?.toString(8)}`)
+      return m.adapter
+    })
+    await openStoreRecordingSink({ dbPath: '/data/rec.sqlite', loadAdapter: m.loadAdapter })
+    expect(order).toEqual(['adapter sees mode 600'])
+    expect(fsFake.dirs).toEqual([{ path: '/data', mode: 0o700 }])
+  })
+
+  it('a database and side files created earlier under a wider umask are tightened to 0600', async () => {
+    fsFake.files.set('/data/rec.sqlite', 0o644)
+    fsFake.files.set('/data/rec.sqlite-wal', 0o644)
+    fsFake.files.set('/data/rec.sqlite-shm', 0o666)
+    await openStoreRecordingSink({ dbPath: '/data/rec.sqlite', loadAdapter: fakeAdapterModule().loadAdapter })
+    expect([...fsFake.files.values()]).toEqual([0o600, 0o600, 0o600])
+  })
+
+  it('an in-memory database touches no file', async () => {
+    await openStoreRecordingSink({ dbPath: ':memory:', loadAdapter: fakeAdapterModule().loadAdapter })
+    expect(fsFake.files.size).toBe(0)
+    expect(fsFake.dirs).toEqual([])
+  })
+
+  it('a file that cannot be restricted fails the open and closes the adapter it opened', async () => {
+    fsFake.files.set('/data/rec.sqlite', 0o644)
+    fsFake.chmodFail = Object.assign(new Error('EPERM'), { code: 'EPERM' })
+    const m = fakeAdapterModule()
+    const err = await openStoreRecordingSink({ dbPath: '/data/rec.sqlite', loadAdapter: m.loadAdapter }).catch((e: unknown) => e)
+    expect(err).toMatchObject({ code: 'CAPTURE_SINK_UNAVAILABLE' })
+    expect(String((err as Error).message)).toMatch(/owner/)
+    expect(m.adapter.close).toHaveBeenCalledTimes(1)
+  })
+
+  it('a directory that cannot be created fails the open before the adapter is created', async () => {
+    fsFake.mkdirFail = Object.assign(new Error('EACCES'), { code: 'EACCES' })
+    const m = fakeAdapterModule()
+    const err = await openStoreRecordingSink({ dbPath: '/locked/rec.sqlite', loadAdapter: m.loadAdapter }).catch((e: unknown) => e)
+    expect(err).toMatchObject({ code: 'CAPTURE_SINK_UNAVAILABLE' })
+    expect(m.create).not.toHaveBeenCalled()
   })
 })
