@@ -81,7 +81,9 @@ export class CdpSession {
       let msg: CdpMessage
       try {
         const parsed: unknown = JSON.parse(String(ev.data))
-        if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) throw new TypeError('the frame is not a JSON object')
+        if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+          throw StealthCoreBrowserError.of('CDP_BAD_RESPONSE', 'the frame is not a JSON object', { detail: { reason: 'malformed-frame' } })
+        }
         msg = parsed as CdpMessage
       } catch (err) {
         // A frame that is not a CDP message means the endpoint is broken or hostile: fail closed with a typed

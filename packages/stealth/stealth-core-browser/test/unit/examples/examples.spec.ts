@@ -40,6 +40,7 @@ import { run as runParsers } from '../../../examples/namespaces/parsers.js'
 import { run as runChromeManager } from '../../../examples/namespaces/chromeManager.js'
 import { run as runRecording } from '../../../examples/namespaces/recording.js'
 import { run as runLifecycle } from '../../../examples/namespaces/lifecycle.js'
+import { run as runEndpoint } from '../../../examples/namespaces/endpoint.js'
 
 const PORT = 9333
 const BROWSER_WS = `ws://127.0.0.1:${PORT}/devtools/browser/B1`
@@ -302,6 +303,17 @@ describe('8468f7b1 [prod-examples.6] namespace examples (PA7.2, PA7.4)', () => {
     const idle = runLifecycle({ port: PORT })
     expect(idle.action).toBe('reap')
     expect(idle.stateDir).toContain(`-${PORT}`)
+  })
+
+  it('endpoint: loopback is accepted, a foreign host needs the policy, and a redirecting WebSocket URL is refused', () => {
+    expect(runEndpoint({ port: PORT })).toEqual({
+      loopback: { host: '127.0.0.1', port: PORT, cdpHost: `127.0.0.1:${PORT}` },
+      remoteIsLoopback: false,
+      remoteRefusedBefore: 'CDP_UNREACHABLE',
+      remoteAllowedAfter: true,
+      redirectRefused: true,
+      parsedPort: PORT,
+    })
   })
 
   it('recording: stores the exchange with credential headers masked', async () => {

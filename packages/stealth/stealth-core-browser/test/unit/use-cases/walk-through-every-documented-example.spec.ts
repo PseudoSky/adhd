@@ -30,6 +30,7 @@ import { run as runParsers } from '../../../examples/namespaces/parsers.js'
 import { run as runChromeManager } from '../../../examples/namespaces/chromeManager.js'
 import { run as runRecording } from '../../../examples/namespaces/recording.js'
 import { run as runLifecycle } from '../../../examples/namespaces/lifecycle.js'
+import { run as runEndpoint } from '../../../examples/namespaces/endpoint.js'
 import { articleListTrace, captchaWallTrace, pageTraceFor, searchApiTrace, emptyShellHtml } from '../../helpers/page-fixtures.js'
 import { ProfileBuilder, type BuiltProfile } from '../../helpers/profile-fixtures.js'
 import { ChromeWorld, tempDir, useProfileHome } from '../../helpers/use-cases/scenario-kit.js'
@@ -159,6 +160,10 @@ describe('Scenario: follow the README by running every documented namespace exam
     expect(runLifecycle({ port: world.port, openWebPages: 2 })).toMatchObject({ action: 'keep', pinnedBy: 'page', launchAllowed: true })
     expect(runLifecycle({ port: world.port, recentHistory: true })).toMatchObject({ action: 'keep', pinnedBy: 'history' })
     expect(runLifecycle({ port: world.port }).action).toBe('reap')
+  })
+
+  it('[tests-use-cases.4] namespaces/endpoint vets a Chrome address before any connection', () => {
+    expect(runEndpoint({ port: world.port })).toMatchObject({ remoteRefusedBefore: 'CDP_UNREACHABLE', remoteAllowedAfter: true, redirectRefused: true, parsedPort: world.port })
   })
 
   it('[tests-use-cases.4] namespaces/recording stores the exchange with credential headers masked', async () => {
