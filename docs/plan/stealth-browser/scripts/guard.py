@@ -1805,7 +1805,9 @@ def _af7():
 @check("audit-final", 8)
 def _af8():
     """[dod.8] structural: the working tree under packages/stealth/stealth-core-browser, entrypoint/stealth-search and docs/plan/stealth-browser is clean (everything committed) and the main checkout node_modules is untouched."""
-    st = git("status", "--porcelain", "--", CORE_DIR, SEARCH_DIR, PLAN)
+    # plan bookkeeping is exempt ([inv:bookkeeping]): the event log, and the run evidence that every guard run re-writes (the committed copies stay canonical)
+    exempt = [f":(exclude){PLAN}/{n}" for n in ("events.ndjson", "evidence/gates-first.json", "evidence/tripwire/pack-gates.json")]
+    st = git("status", "--porcelain", "--", CORE_DIR, SEARCH_DIR, PLAN, *exempt)
     return st == "" and main_nm_untouched()[0], f"dirty: {st[:200]}"
 
 
