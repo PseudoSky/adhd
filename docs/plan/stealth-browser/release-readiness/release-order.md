@@ -8,7 +8,7 @@ Evidence for every value below is in `docs/plan/stealth-browser/release-readines
 REGISTRY-VERSION: 0.3.5
 WORKTREE-VERSION: 0.3.5
 CURRENT-RANGE: ^0.3.3
-PLANNED-VERSION: UNRESOLVED
-PLANNED-RANGE: UNRESOLVED
+PLANNED-VERSION: 0.3.6
+PLANNED-RANGE: ^0.3.6
 
-`PLANNED-VERSION` is unresolved because `release-readiness/release-dry.log.md` (extracted from the `pnpm release:dry` run, exit 0) contains no `bumping to` or `would write` line and no version for `@adhd/apigen-engine-runtime`. `PLANNED-RANGE` follows it as `^<PLANNED-VERSION>`.
+`PLANNED-VERSION` comes from the version executor preview recorded in `release-readiness/release-dry.log.md` (`bumping to 0.3.6 (patch)`). `PLANNED-RANGE` is `^<PLANNED-VERSION>`.

@@ -11,7 +11,14 @@ Command: `pnpm release:dry`, exit code 0 (`/private/tmp/claude-502/-Users-nix-de
 1474:✔  nx run apigen-engine-runtime:publish --dryRun
 ```
 
-No line in the log states a planned version (no `bumping to` or `would write`) for `@adhd/apigen-engine-runtime`; the version dry-run line reports only the task status.
+The `pnpm release:dry` log reports only task status for engine-runtime (nx hides successful task output). The planned version comes from the same version executor, run for this one project in dry mode:
+
+Command: `ADHD_NX_VERSION_DRY_RUN=1 npx nx run apigen-engine-runtime:version --dryRun --skip-nx-cache`, exit code 0, `git status --porcelain` unchanged.
+
+```text
+version: @adhd/apigen-engine-runtime changed since 0.3.5 -> bumping to 0.3.6 (patch) [cache hit, zero network]
+version: [dry-run] would write 0.3.6 to packages/apigen/apigen-engine-runtime/package.json
+```
 
 ## Final summary
 
