@@ -15,7 +15,7 @@ ONE implementer resolves EVERY finding: each is `fixed` (with a commit that touc
 
 - **Primitive:** MODIFY `packages/stealth/stealth-core-browser/**` and `entrypoint/stealth-search/**` as the findings require; WRITE `docs/plan/stealth-browser/review/RESOLUTION.json`.
 
-- **Reference Pattern:** `docs/plan/stealth-browser/review/FINDINGS.json`.
+- **Reference Pattern:** the findings ledger, review/FINDINGS.json under the plan directory (read it from disk; it is deliberately not inlined, because its 80 KB snapshot pushed the compiled work order past the pipe buffer that gap-check reads).
 
 - **Delta Spec:** For each finding F<n> in order: reproduce, fix (or reject with evidence), commit with `[psm:resolve-findings]`, then record `{ id, status: fixed|rejected, commit, evidence, reproduction }`. `RESOLUTION.json` carries a single `agent` value; all commits share one author. Do not add TODO/FIXME. If `no_findings: true`, write `{ agent, resolutions: [] , note }` after confirming FINDINGS.json.
 
@@ -39,7 +39,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 ## Reservations
 
 ```text
-read_only:  ["docs/plan/stealth-browser/review/FINDINGS.json"]
+read_only:  []
 mutates:    ["packages/stealth/stealth-core-browser/", "entrypoint/stealth-search/", "docs/plan/stealth-browser/review/RESOLUTION.json", "packages/resilience/resilience-core-tripwire/"]
 ```
 
