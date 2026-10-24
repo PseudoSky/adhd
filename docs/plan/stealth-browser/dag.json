@@ -1449,7 +1449,9 @@
         "tools/nx-plugins/test/executors/wiring/release-dry-clean.spec.mjs",
         "entrypoint/decompile-cli/test/unit/lib/validators/local/index.spec.ts",
         "entrypoint/backlog/test/unit/c8-vocabulary.spec.ts",
-        "docs/plan/stealth-browser/evidence/release-gate-fixes.md"
+        "entrypoint/backlog/project.json",
+        "docs/plan/stealth-browser/evidence/release-gate-fixes.md",
+        "docs/plan/stealth-browser/evidence/release-gate-fixes.dry.json"
       ],
       "context": "contexts/release-gate-fixes.md",
       "notes": "executor=sonnet tier=sonnet; root-cause fixes for the release gates that were red: check-test-wiring inferred targets, release:dry mutating tracked files, decompile-cli fixture path, backlog c8-vocabulary load-dependence"
