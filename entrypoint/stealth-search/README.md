@@ -189,6 +189,7 @@ The `google` provider's result parsers are provisional: they are verified agains
 - [docs/CONFIGURATION.md](docs/CONFIGURATION.md): every default and host flag (port 9222, the Chrome-CDP profile, the state and data directories); macOS-first.
 - [docs/ERRORS.md](docs/ERRORS.md): the typed error codes, exit statuses and MCP rendering.
 - [docs/OBSERVABILITY.md](docs/OBSERVABILITY.md): `adhd.<op>.start|finish|error` records, `--verbose` diagnostics, what the MCP bin writes to stdout.
+- [docs/LIBRARY.md](docs/LIBRARY.md): the wiring, configuration and error exports of the package root.
 - [docs/EXAMPLES.md](docs/EXAMPLES.md): every file under `examples/` with its scenario.
 - [docs/RESPONSIBLE-USE.md](docs/RESPONSIBLE-USE.md): terms of service, robots.txt, rate limits, no CAPTCHA or ban circumvention, your own profile only.
 - [CHANGELOG.md](CHANGELOG.md), [LICENSE](LICENSE) (MIT).

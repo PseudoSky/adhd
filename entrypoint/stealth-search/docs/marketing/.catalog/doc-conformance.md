@@ -4,7 +4,13 @@ Assessed at `3537748eb` (2026-10-24T14:27:31-04:00), BEFORE state. Yardstick: a 
 
 Scope surface assessed: README.md, AGENTS.md, CHANGELOG.md, docs/ERRORS.md, docs/OBSERVABILITY.md (requested), plus docs/CONFIGURATION.md, docs/EXAMPLES.md, docs/RESPONSIBLE-USE.md and llms.txt (present, read for cross-checks).
 
-## Headline proportions (by doc file, 9 files)
+## Status after doc rewrite
+
+- FIXED (verified in files): AGENTS.md flagged word removed; "evasion" wording replaced by "circumvention" in README.md, llms.txt and RESPONSIBLE-USE.md; docs/ERRORS.md UNKNOWN_PROVIDER samples (CLI and MCP) carry the real message; CHANGELOG [0.1.0] carries a date (2026-10-24); the MCP `{ "data": ... }` input wrapper is documented in AGENTS.md and ERRORS.md.
+- OPEN: 10 undocumented root exports (40%); no sample output for listProviders, describeProvider, tripwireStatus, clearTripwire; operand form not shown in README; github `["network","network"]` strategy pair unexplained; CHANGELOG 0.1.0 compare link is still a tree URL; ERRORS.md remedy column still paraphrases SEARCH_REMEDIATION.
+- Doc-set recommendations now: AGENTS.md KEEP, ERRORS.md KEEP, CHANGELOG.md REVISE (link only), README.md REVISE (library wiring, sample outputs), others KEEP.
+
+## Headline proportions (BEFORE state) (by doc file, 9 files)
 
 - JUNK: 0 of 9 (0%)
 - REDUNDANT: 0 of 9 whole files; partial overlap only (see below)

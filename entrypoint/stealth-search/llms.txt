@@ -8,6 +8,7 @@
 - [Configuration](docs/CONFIGURATION.md): every default and host flag.
 - [Errors](docs/ERRORS.md): the 13 typed error codes, exit statuses, MCP rendering.
 - [Observability](docs/OBSERVABILITY.md): `adhd.<op>.start|finish|error` records, `--verbose`, stdout rules.
+- [Library](docs/LIBRARY.md): wiring, configuration and error exports of the package root.
 - [Examples](docs/EXAMPLES.md): every file under `examples/` with its scenario.
 - [Responsible use](docs/RESPONSIBLE-USE.md): terms of service, robots.txt, rate limits, no CAPTCHA or ban circumvention, own profile only.
 - [Changelog](CHANGELOG.md)
