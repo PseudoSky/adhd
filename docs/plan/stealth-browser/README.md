@@ -245,7 +245,7 @@ Highest risks: (1) apigen extraction failing opaquely on the verb types (pinned 
 
 ## Amendment 2026-10-23
 
-The amendment adds these states, listed in wave order: `main-merge`; `conform-tripwire`, `conform-core`, `conform-search`; `fix-tripwire`, `fix-core-parsers`, `fix-core-lifecycle`, `fix-core-errors`, `fix-search-fetch`, `fix-search-engine`, `fix-search-output`; `search-mcp-iserror`; `fix-search-build`; `search-tracing-fixes`; the `tracing-log-validation` re-run; `search-cutover`; `plan-notes`; `release-readiness`; and `audit-pre-review`. Main was merged at `e21558fc1` (merge commit `eb6526ed9`).
+The amendment adds these states, listed in wave order: `main-merge`; `conform-tripwire`, `conform-core`, `conform-search`; `fix-tripwire`, `fix-core-parsers`, `fix-core-lifecycle`, `fix-core-errors`, `fix-search-fetch`, `fix-search-engine`, `fix-search-output`; `search-mcp-iserror`; `fix-search-build`; `search-tracing-fixes`; the `tracing-log-validation` re-run; `search-cutover`; `plan-notes`; `release-gate-fixes`; `release-readiness`; and `audit-pre-review`. Main was merged at `e21558fc1` (merge commit `eb6526ed9`).
 
 Plan-script repairs made during the wave: the `search-usecases` guard resolves `test/unit/use-cases`; the repeat-guard passes `--skip-nx-cache` before `--`; `tracing-log-validation.11` tolerates the upstream twin event; `fix-search-output` owns `tripwire-wiring.spec.ts`; and `search-tracing-fixes` owns `use-cases/hosts.spec.ts` and `docs/ERRORS.md`.
 
@@ -281,6 +281,10 @@ These are filed by the dispatcher.
 - The baked operations cache is produced by `build-bin`, not by the vite build target.
 - `package.spec.ts` has no direct `$ref`-inlining tests; `buildApigenPackage` keeps `$ref`.
 - The plan guard for the search usecases and the old `src/test` wording in contexts of completed states are historical.
+
+## Release gate fixes (2026-10-24)
+
+The first `release-readiness` run exposed four root causes, repaired by the `release-gate-fixes` state before the gates were re-run: `check-test-wiring` now honours Nx-inferred test targets (project graph), `release:dry` exports `ADHD_NX_VERSION_DRY_RUN=1` for its whole chain and no longer mutates tracked files, the publish executor reports a pending bump in a dry run instead of failing, and the decompile-cli spec reads `test/fixtures`. The affected gate runs with the merge-base of HEAD and LOCAL main as its base. The release order is recorded in `release-readiness/release-order.md`: publish `@adhd/apigen-engine-runtime` (planned 0.3.6) first, then bump `entrypoint/stealth-search` to `^0.3.6`, then the core and search packages.
 
 ## Dispatch
 

@@ -8,7 +8,7 @@ BACKLOG: `8468f7b1-8adc-4237-9986-21ea1e27c537`
 
 This approval covers the three new packages of the plan: `@adhd/stealth-search`, `@adhd/stealth-core-browser` and `@adhd/resilience-core-tripwire`.
 
-Summary corrected 2026-10-23.
+Summary corrected 2026-10-24.
 
 ## Human approval carried by the request
 

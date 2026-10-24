@@ -1068,7 +1068,7 @@
   }
  },
  "release-readiness.6": {
-  "text": "APPROVAL.md and APPROVAL-tripwire.md approve exactly @adhd/stealth-search, @adhd/stealth-core-browser and @adhd/resilience-core-tripwire in their summary: the superseded @adhd/stealth-browser name and the 'exactly ONE/TWO' count are gone outside the human's quoted text, a `Summary corrected 2026-10-23` line is present, and every double-quoted segment of the documents at 6034633c6 is byte-identical.",
+  "text": "APPROVAL.md and APPROVAL-tripwire.md approve exactly @adhd/stealth-search, @adhd/stealth-core-browser and @adhd/resilience-core-tripwire in their summary: the superseded @adhd/stealth-browser name and the 'exactly ONE/TWO' count are gone outside the human's quoted text, a `Summary corrected 2026-10-24` line is present, and every double-quoted segment of the documents at 6034633c6 is byte-identical.",
   "type": "rr_approvals",
   "p": {
    "files": [
