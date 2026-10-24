@@ -1,6 +1,10 @@
 {
   "scratch_commit": "ca1f94d8449ae5211f6c8c1e1d9cc88408d73feb",
   "removed": [
+    "agent-browser/adhd/",
+    "agent-browser/docs/",
+    "agent-browser/search/",
+    "agent-browser/test-fixtures/",
     "agent-browser/.gitignore",
     "agent-browser/AGENTS.md",
     "agent-browser/BACKLOG.md",
@@ -172,5 +176,11 @@
   },
   "not_touched": [
     "INDEX.md (its agent-browser entry needs a one-line update by its owner)"
+  ],
+  "removed_dirs": [
+    "agent-browser/adhd/",
+    "agent-browser/docs/",
+    "agent-browser/search/",
+    "agent-browser/test-fixtures/"
   ]
 }
