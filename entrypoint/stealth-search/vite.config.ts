@@ -15,6 +15,14 @@ import { importMetaUrlCjs } from '../../tools/vite-plugins/import-meta-url-cjs.m
 import { externalizeRealDeps } from '../../tools/vite-plugins/externalize.mjs';
 import { nxCopyAssetsPlugin } from '@nx/vite/plugins/nx-copy-assets.plugin';
 
+/**
+ * The two sibling packages this entrypoint is built on stay EXTERNAL in dist/index.js (ADR-0003, module-format proof gates-first.10):
+ * `externalizeRealDeps` bundles every `@adhd/*` workspace package, which would ship a private copy of the Chrome lifecycle and the
+ * tripwire latch next to the copies a consumer installs from npm (two latches, two lifecycles). Declared in package.json
+ * `dependencies`, so a consumer installs them once and `require()` resolves them from node_modules.
+ */
+const SIBLING_EXTERNALS = ['@adhd/stealth-core-browser', '@adhd/resilience-core-tripwire'];
+
 export default defineConfig(() => ({
   root: import.meta.dirname,
   cacheDir: projectCacheDir(__dirname),
@@ -59,7 +67,11 @@ export default defineConfig(() => ({
     },
     rolldownOptions: {
       // External packages that should not be bundled into your library.
-      external: externalizeRealDeps(__dirname),
+      external: [
+        ...externalizeRealDeps(__dirname),
+        ...SIBLING_EXTERNALS,
+        ...SIBLING_EXTERNALS.map((name) => new RegExp(`^${name}/`)),
+      ],
     },
   },
   test: {
