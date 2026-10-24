@@ -6,7 +6,7 @@ import local from '../../../../../src/lib/validators/local';
 // package's directory), so these fixture/self paths must be resolved via
 // `__dirname` rather than assumed relative to an implicit cwd.
 const srcDir = path.join(__dirname, '..', '..', '..', '..', '..', 'src');
-const fixturesDir = path.join(srcDir, 'tests', 'fixtures');
+const fixturesDir = path.join(__dirname, '..', '..', '..', '..', 'fixtures'); // test/fixtures
 
 test('ensure', () => {
   // Pre-TS-migration this asserted against `./src/index.js`/`./src/local.js`;

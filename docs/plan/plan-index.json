@@ -3681,6 +3681,1250 @@
       "updated_at": "2026-07-17T23:56:00.974Z"
     },
     {
+      "plan": "stealth-browser",
+      "dir": "stealth-browser",
+      "status": "in-progress",
+      "mutate_set": [
+        ".adhd/workspace.json",
+        "/Users/nix/.claude/agents/",
+        "/Users/nix/.config/opencode/",
+        "/Users/nix/dev/ai/scratch/INDEX.md",
+        "/Users/nix/dev/ai/scratch/agent-browser/",
+        "/Users/nix/dev/ai/scratch/agent-browser/AGENTS.md",
+        "/Users/nix/dev/ai/scratch/agent-browser/FEATURES.md",
+        "/Users/nix/dev/ai/scratch/agent-browser/FETCH.md",
+        "/Users/nix/dev/ai/scratch/agent-browser/SEARCH.md",
+        "/Users/nix/dev/ai/scratch/agent-browser/adhd/",
+        "/Users/nix/dev/ai/scratch/agent-browser/cdp-query-client.ts",
+        "/Users/nix/dev/ai/scratch/agent-browser/cdp-search.ts",
+        "/Users/nix/dev/ai/scratch/agent-browser/chrome-lifecycle-test.ts",
+        "/Users/nix/dev/ai/scratch/agent-browser/docs/",
+        "/Users/nix/dev/ai/scratch/agent-browser/network-capture.ts",
+        "/Users/nix/dev/ai/scratch/agent-browser/package.json",
+        "/Users/nix/dev/ai/scratch/agent-browser/search-challenge.ts",
+        "/Users/nix/dev/ai/scratch/agent-browser/search-dom.ts",
+        "/Users/nix/dev/ai/scratch/agent-browser/search-fetch.ts",
+        "/Users/nix/dev/ai/scratch/agent-browser/search-guard-test.ts",
+        "/Users/nix/dev/ai/scratch/agent-browser/search-mcp-source.ts",
+        "/Users/nix/dev/ai/scratch/agent-browser/search-network.ts",
+        "/Users/nix/dev/ai/scratch/agent-browser/search-tripwire.ts",
+        "/Users/nix/dev/ai/scratch/agent-browser/search/queries/activity.ts",
+        "/Users/nix/dev/ai/scratch/agent-browser/search/queries/context.ts",
+        "/Users/nix/dev/ai/scratch/agent-browser/search/queries/last-search.ts",
+        "/Users/nix/dev/ai/scratch/bin/scratch-agent-search",
+        "/Users/nix/dev/ai/scratch/bin/scratch-agent-search-mcp-cli",
+        "/Users/nix/dev/ai/scratch/bin/scratch-agent-search-serve",
+        "/Users/nix/dev/ai/scratch/docs/GIT-POLICY.md",
+        "/Users/nix/dev/ai/sox-ecosystem/docs/guidelines/authoring.md",
+        "/Users/nix/dev/ai/sox-ecosystem/docs/spec/cross-platform-install-rendering.md",
+        "/Users/nix/dev/ai/sox-ecosystem/extensions/agents/",
+        "/Users/nix/dev/ai/sox-ecosystem/libs/host-registry/",
+        "/Users/nix/dev/ai/sox-ecosystem/tools/test-c1b17653-researcher-single-definition.mjs",
+        "/Users/nix/dev/projects/reverse-apis/.git/info/exclude",
+        "/Users/nix/dev/projects/reverse-apis/.worktrees/tripwire-adopt/",
+        "/Users/nix/dev/projects/reverse-apis/.worktrees/tripwire-adopt/package.json",
+        "/Users/nix/dev/projects/reverse-apis/.worktrees/tripwire-adopt/pnpm-lock.yaml",
+        "docs/plan/plan-index.json",
+        "docs/plan/stealth-browser/APPROVAL-split.md",
+        "docs/plan/stealth-browser/APPROVAL-tripwire.md",
+        "docs/plan/stealth-browser/APPROVAL.md",
+        "docs/plan/stealth-browser/APPROVALS.md",
+        "docs/plan/stealth-browser/DEFERRED.md",
+        "docs/plan/stealth-browser/OPEN-DECISIONS.md",
+        "docs/plan/stealth-browser/PRODUCT-REVIEW.md",
+        "docs/plan/stealth-browser/README.md",
+        "docs/plan/stealth-browser/RELEASE-DECISION.md",
+        "docs/plan/stealth-browser/SCOPE.md",
+        "docs/plan/stealth-browser/SPEC-stealth-search.md",
+        "docs/plan/stealth-browser/TOOLS.md",
+        "docs/plan/stealth-browser/USE_CASES.md",
+        "docs/plan/stealth-browser/contexts/",
+        "docs/plan/stealth-browser/dag.json",
+        "docs/plan/stealth-browser/evidence/",
+        "docs/plan/stealth-browser/evidence/conform-core.md",
+        "docs/plan/stealth-browser/evidence/conform-search.md",
+        "docs/plan/stealth-browser/evidence/conform-tripwire.md",
+        "docs/plan/stealth-browser/evidence/cutover/",
+        "docs/plan/stealth-browser/evidence/failsafe-inventory.json",
+        "docs/plan/stealth-browser/evidence/fix-core-errors.md",
+        "docs/plan/stealth-browser/evidence/fix-core-lifecycle.md",
+        "docs/plan/stealth-browser/evidence/fix-core-parsers.md",
+        "docs/plan/stealth-browser/evidence/fix-search-build.md",
+        "docs/plan/stealth-browser/evidence/fix-search-engine.md",
+        "docs/plan/stealth-browser/evidence/fix-search-fetch.md",
+        "docs/plan/stealth-browser/evidence/fix-search-output.md",
+        "docs/plan/stealth-browser/evidence/fix-tripwire.md",
+        "docs/plan/stealth-browser/evidence/lifecycle-definitions.md",
+        "docs/plan/stealth-browser/evidence/main-merge.md",
+        "docs/plan/stealth-browser/evidence/naming-decision.md",
+        "docs/plan/stealth-browser/evidence/plan-notes.md",
+        "docs/plan/stealth-browser/evidence/product-claims.json",
+        "docs/plan/stealth-browser/evidence/release-gate-fixes.dry.json",
+        "docs/plan/stealth-browser/evidence/release-gate-fixes.md",
+        "docs/plan/stealth-browser/evidence/release-readiness.md",
+        "docs/plan/stealth-browser/evidence/relink/",
+        "docs/plan/stealth-browser/evidence/search-failsafe-inventory.json",
+        "docs/plan/stealth-browser/evidence/search-mcp-iserror.md",
+        "docs/plan/stealth-browser/evidence/search-tracing-fixes.md",
+        "docs/plan/stealth-browser/evidence/split/",
+        "docs/plan/stealth-browser/evidence/split/search-verbs-probes.json",
+        "docs/plan/stealth-browser/evidence/split/u-pdf.json",
+        "docs/plan/stealth-browser/evidence/tracing-log-validation.json",
+        "docs/plan/stealth-browser/evidence/tracing-log-validation.md",
+        "docs/plan/stealth-browser/evidence/tripwire/",
+        "docs/plan/stealth-browser/final-review.md",
+        "docs/plan/stealth-browser/human-blockers.json",
+        "docs/plan/stealth-browser/interfaces.json",
+        "docs/plan/stealth-browser/references.json",
+        "docs/plan/stealth-browser/release-readiness/",
+        "docs/plan/stealth-browser/review/BRIEF.txt",
+        "docs/plan/stealth-browser/review/FINDINGS.json",
+        "docs/plan/stealth-browser/review/INPUT.sha256",
+        "docs/plan/stealth-browser/review/PRE-REVIEW-RESOLUTION.json",
+        "docs/plan/stealth-browser/review/PRE-REVIEW.json",
+        "docs/plan/stealth-browser/review/PRE-REVIEW.md",
+        "docs/plan/stealth-browser/review/RESOLUTION.json",
+        "docs/plan/stealth-browser/review/migration.diff",
+        "docs/plan/stealth-browser/scripts/",
+        "docs/plan/stealth-browser/smoke/reaper-load-proof.md",
+        "docs/plan/stealth-browser/smoke/reaper-smoke.json",
+        "docs/plan/stealth-browser/smoke/reaper-smoke.md",
+        "docs/plan/stealth-browser/smoke/reaper-smoke.mjs",
+        "docs/plan/stealth-browser/smoke/sp-link.md",
+        "docs/plan/stealth-browser/smoke/switch.md",
+        "docs/plan/stealth-browser/tripwire-reverse/",
+        "entrypoint/backlog/project.json",
+        "entrypoint/backlog/test/unit/c8-vocabulary.spec.ts",
+        "entrypoint/decompile-cli/test/unit/lib/validators/local/index.spec.ts",
+        "entrypoint/stealth-browser/",
+        "entrypoint/stealth-browser/*",
+        "entrypoint/stealth-browser/docs/reference/",
+        "entrypoint/stealth-browser/eslint.config.mjs",
+        "entrypoint/stealth-browser/package.json",
+        "entrypoint/stealth-browser/src/api.ts",
+        "entrypoint/stealth-browser/src/index.ts",
+        "entrypoint/stealth-browser/src/lib/",
+        "entrypoint/stealth-browser/src/lib/capture/",
+        "entrypoint/stealth-browser/src/lib/capture/index.ts",
+        "entrypoint/stealth-browser/src/lib/capture/network.ts",
+        "entrypoint/stealth-browser/src/lib/cdp/",
+        "entrypoint/stealth-browser/src/lib/cdp/browser.ts",
+        "entrypoint/stealth-browser/src/lib/cdp/targets.ts",
+        "entrypoint/stealth-browser/src/lib/chrome-manager.ts",
+        "entrypoint/stealth-browser/src/lib/domains/",
+        "entrypoint/stealth-browser/src/lib/helpers.ts",
+        "entrypoint/stealth-browser/src/lib/lifecycle/",
+        "entrypoint/stealth-browser/src/lib/parsers.ts",
+        "entrypoint/stealth-browser/src/lib/queries/",
+        "entrypoint/stealth-browser/src/lib/recording/",
+        "entrypoint/stealth-browser/src/lib/runtime-deps.ts",
+        "entrypoint/stealth-browser/src/lib/session.ts",
+        "entrypoint/stealth-browser/src/lib/storage/",
+        "entrypoint/stealth-browser/src/lib/types.ts",
+        "entrypoint/stealth-browser/src/test/fixtures/cdp/",
+        "entrypoint/stealth-browser/src/test/support/",
+        "entrypoint/stealth-browser/src/test/unit/capture-parsers/",
+        "entrypoint/stealth-browser/src/test/unit/capture-parsers/network.spec.ts",
+        "entrypoint/stealth-browser/src/test/unit/capture/",
+        "entrypoint/stealth-browser/src/test/unit/cdp/",
+        "entrypoint/stealth-browser/src/test/unit/cdp/targets.spec.ts",
+        "entrypoint/stealth-browser/src/test/unit/chrome-manager/",
+        "entrypoint/stealth-browser/src/test/unit/chrome-manager/chrome-lifecycle.spec.ts",
+        "entrypoint/stealth-browser/src/test/unit/domains-storage/",
+        "entrypoint/stealth-browser/src/test/unit/foundation/",
+        "entrypoint/stealth-browser/src/test/unit/lifecycle/",
+        "entrypoint/stealth-browser/src/test/unit/queries/",
+        "entrypoint/stealth-browser/src/test/unit/support/",
+        "entrypoint/stealth-browser/src/types/",
+        "entrypoint/stealth-browser/tsconfig.spec.json",
+        "entrypoint/stealth-browser/vite.config.ts",
+        "entrypoint/stealth-search/",
+        "entrypoint/stealth-search/AGENTS.md",
+        "entrypoint/stealth-search/CHANGELOG.md",
+        "entrypoint/stealth-search/README.md",
+        "entrypoint/stealth-search/bin/",
+        "entrypoint/stealth-search/docs/",
+        "entrypoint/stealth-search/docs/CONFIGURATION.md",
+        "entrypoint/stealth-search/docs/ERRORS.md",
+        "entrypoint/stealth-search/docs/OBSERVABILITY.md",
+        "entrypoint/stealth-search/examples/",
+        "entrypoint/stealth-search/llms.txt",
+        "entrypoint/stealth-search/package.json",
+        "entrypoint/stealth-search/project.json",
+        "entrypoint/stealth-search/scripts/",
+        "entrypoint/stealth-search/src/api.ts",
+        "entrypoint/stealth-search/src/cli.ts",
+        "entrypoint/stealth-search/src/errors.ts",
+        "entrypoint/stealth-search/src/host-errors.ts",
+        "entrypoint/stealth-search/src/host-flags.ts",
+        "entrypoint/stealth-search/src/host-projection.ts",
+        "entrypoint/stealth-search/src/index.ts",
+        "entrypoint/stealth-search/src/lib/challenge.ts",
+        "entrypoint/stealth-search/src/lib/config.ts",
+        "entrypoint/stealth-search/src/lib/dom.ts",
+        "entrypoint/stealth-search/src/lib/fetch/",
+        "entrypoint/stealth-search/src/lib/guard.ts",
+        "entrypoint/stealth-search/src/lib/network.ts",
+        "entrypoint/stealth-search/src/lib/output.ts",
+        "entrypoint/stealth-search/src/lib/providers.ts",
+        "entrypoint/stealth-search/src/lib/queries/last-search.ts",
+        "entrypoint/stealth-search/src/lib/search.ts",
+        "entrypoint/stealth-search/src/lib/tripwire.ts",
+        "entrypoint/stealth-search/src/lib/types.ts",
+        "entrypoint/stealth-search/src/lib/utils.ts",
+        "entrypoint/stealth-search/src/server.ts",
+        "entrypoint/stealth-search/src/telemetry.ts",
+        "entrypoint/stealth-search/src/test/unit/engine/",
+        "entrypoint/stealth-search/src/test/unit/errors/",
+        "entrypoint/stealth-search/src/test/unit/examples/",
+        "entrypoint/stealth-search/src/test/unit/fetch/",
+        "entrypoint/stealth-search/src/test/unit/guards/",
+        "entrypoint/stealth-search/src/test/unit/hosts/",
+        "entrypoint/stealth-search/src/test/unit/providers/",
+        "entrypoint/stealth-search/src/test/unit/verbs/",
+        "entrypoint/stealth-search/src/test/use-cases/",
+        "entrypoint/stealth-search/src/tracing.ts",
+        "entrypoint/stealth-search/test/fixtures/engine/",
+        "entrypoint/stealth-search/test/fixtures/fetch/",
+        "entrypoint/stealth-search/test/fixtures/providers/",
+        "entrypoint/stealth-search/test/helpers/engine/",
+        "entrypoint/stealth-search/test/helpers/fetch/",
+        "entrypoint/stealth-search/test/helpers/verbs/",
+        "entrypoint/stealth-search/test/unit/build/",
+        "entrypoint/stealth-search/test/unit/engine/",
+        "entrypoint/stealth-search/test/unit/errors/",
+        "entrypoint/stealth-search/test/unit/fetch/",
+        "entrypoint/stealth-search/test/unit/guards/tripwire-wiring.spec.ts",
+        "entrypoint/stealth-search/test/unit/hosts/",
+        "entrypoint/stealth-search/test/unit/providers/",
+        "entrypoint/stealth-search/test/unit/tracing/",
+        "entrypoint/stealth-search/test/unit/use-cases/hosts.spec.ts",
+        "entrypoint/stealth-search/test/unit/verbs/",
+        "entrypoint/stealth-search/tsconfig.build-bin.json",
+        "entrypoint/stealth-search/vite.config.ts",
+        "entrypoint/stealth-search/vitest.e2e.config.ts",
+        "package.json",
+        "packages/resilience/resilience-core-tripwire/",
+        "packages/resilience/resilience-core-tripwire/*",
+        "packages/resilience/resilience-core-tripwire/CHANGELOG.md",
+        "packages/resilience/resilience-core-tripwire/README.md",
+        "packages/resilience/resilience-core-tripwire/docs/",
+        "packages/resilience/resilience-core-tripwire/package.json",
+        "packages/resilience/resilience-core-tripwire/project.json",
+        "packages/resilience/resilience-core-tripwire/src/",
+        "packages/resilience/resilience-core-tripwire/src/test/unit/readme-examples.spec.ts",
+        "packages/resilience/resilience-core-tripwire/vite.config.ts",
+        "packages/stealth/stealth-core-browser/",
+        "packages/stealth/stealth-core-browser/AGENTS.md",
+        "packages/stealth/stealth-core-browser/CHANGELOG.md",
+        "packages/stealth/stealth-core-browser/README.md",
+        "packages/stealth/stealth-core-browser/docs/",
+        "packages/stealth/stealth-core-browser/docs/ERRORS.md",
+        "packages/stealth/stealth-core-browser/examples/",
+        "packages/stealth/stealth-core-browser/llms.txt",
+        "packages/stealth/stealth-core-browser/src/api.ts",
+        "packages/stealth/stealth-core-browser/src/errors.ts",
+        "packages/stealth/stealth-core-browser/src/index.ts",
+        "packages/stealth/stealth-core-browser/src/lib/",
+        "packages/stealth/stealth-core-browser/src/lib/capture/bans.ts",
+        "packages/stealth/stealth-core-browser/src/lib/capture/dom.ts",
+        "packages/stealth/stealth-core-browser/src/lib/cdp/browser.ts",
+        "packages/stealth/stealth-core-browser/src/lib/cdp/targets.ts",
+        "packages/stealth/stealth-core-browser/src/lib/chrome-manager.ts",
+        "packages/stealth/stealth-core-browser/src/lib/lifecycle/",
+        "packages/stealth/stealth-core-browser/src/lib/lifecycle/index.ts",
+        "packages/stealth/stealth-core-browser/src/lib/lifecycle/reaper-entry.ts",
+        "packages/stealth/stealth-core-browser/src/lib/lifecycle/reaper-host.ts",
+        "packages/stealth/stealth-core-browser/src/lib/lifecycle/reaper-link.ts",
+        "packages/stealth/stealth-core-browser/src/lib/managers.ts",
+        "packages/stealth/stealth-core-browser/src/lib/parsers.ts",
+        "packages/stealth/stealth-core-browser/src/test/support/page-fixtures.ts",
+        "packages/stealth/stealth-core-browser/src/test/support/profile-fixtures.ts",
+        "packages/stealth/stealth-core-browser/src/test/unit/capture-parsers/bans.spec.ts",
+        "packages/stealth/stealth-core-browser/src/test/unit/cdp/browser.spec.ts",
+        "packages/stealth/stealth-core-browser/src/test/unit/errors/",
+        "packages/stealth/stealth-core-browser/src/test/unit/examples/",
+        "packages/stealth/stealth-core-browser/src/test/unit/lifecycle/concurrent-launch.spec.ts",
+        "packages/stealth/stealth-core-browser/src/test/unit/lifecycle/kill.spec.ts",
+        "packages/stealth/stealth-core-browser/src/test/unit/lifecycle/launch.spec.ts",
+        "packages/stealth/stealth-core-browser/src/test/unit/lifecycle/reaper-scope.spec.ts",
+        "packages/stealth/stealth-core-browser/src/test/unit/seam/",
+        "packages/stealth/stealth-core-browser/src/test/unit/surface/",
+        "packages/stealth/stealth-core-browser/src/test/use-cases/",
+        "packages/stealth/stealth-core-browser/test/fixtures/parsers/",
+        "packages/stealth/stealth-core-browser/test/helpers/lifecycle/",
+        "packages/stealth/stealth-core-browser/test/helpers/parsers/",
+        "packages/stealth/stealth-core-browser/test/unit/capture-parsers/dom.spec.ts",
+        "packages/stealth/stealth-core-browser/test/unit/errors/",
+        "packages/stealth/stealth-core-browser/test/unit/lifecycle/",
+        "packages/stealth/stealth-core-browser/test/unit/parsers/",
+        "packages/stealth/stealth-core-browser/test/unit/surface/",
+        "packages/stealth/stealth-core-browser/tsconfig.spec.json",
+        "pnpm-lock.yaml",
+        "tools/nx-plugins/build/executors/publish/impl.js",
+        "tools/nx-plugins/build/executors/publish/impl.spec.mjs",
+        "tools/nx-plugins/build/executors/typecheck-spec/resilience-core-tripwire.baseline.json",
+        "tools/nx-plugins/build/executors/typecheck-spec/stealth-core-browser.baseline.json",
+        "tools/nx-plugins/build/executors/typecheck-spec/stealth-search.baseline.json",
+        "tools/nx-plugins/test/executors/wiring/check-test-wiring.mjs",
+        "tools/nx-plugins/test/executors/wiring/check-test-wiring.spec.mjs",
+        "tools/nx-plugins/test/executors/wiring/release-dry-clean.spec.mjs",
+        "tsconfig.base.json"
+      ],
+      "read_only_set": [
+        "/Users/nix/dev/ai/scratch/agent-browser/",
+        "/Users/nix/dev/ai/scratch/agent-browser/adhd/",
+        "/Users/nix/dev/ai/scratch/agent-browser/adhd/docs/",
+        "/Users/nix/dev/ai/scratch/agent-browser/cdp-query-client.ts",
+        "/Users/nix/dev/ai/scratch/agent-browser/docs/cdp/",
+        "/Users/nix/dev/ai/scratch/agent-browser/package.json",
+        "/Users/nix/dev/ai/scratch/agent-browser/search-mcp-source.ts",
+        "/Users/nix/dev/ai/scratch/agent-browser/search/queries/",
+        "PUBLISHING.md",
+        "docs/plan/stealth-browser/APPROVAL-tripwire.md",
+        "docs/plan/stealth-browser/README.md",
+        "docs/plan/stealth-browser/RELEASE-DECISION.md",
+        "docs/plan/stealth-browser/SPEC-stealth-search.md",
+        "docs/plan/stealth-browser/evidence/naming-decision.md",
+        "docs/plan/stealth-browser/evidence/source-baseline.txt",
+        "docs/plan/stealth-browser/evidence/tripwire/tripwire-tarball.json",
+        "docs/plan/stealth-browser/review/FINDINGS.json",
+        "docs/plan/stealth-browser/scripts/port-manifest.json",
+        "docs/plan/stealth-browser/smoke/reaper-load-proof.md",
+        "docs/plan/stealth-browser/tripwire-reverse/reverse-verify.json",
+        "entrypoint/apigen-cli/",
+        "entrypoint/backlog/",
+        "entrypoint/dispatch-cli/",
+        "entrypoint/stealth-browser/package.json",
+        "entrypoint/stealth-browser/src/",
+        "entrypoint/stealth-browser/src/lib/",
+        "entrypoint/stealth-browser/src/lib/cdp/",
+        "entrypoint/stealth-browser/src/lib/cdp/session.ts",
+        "entrypoint/stealth-browser/src/lib/cdp/shutdown.ts",
+        "entrypoint/stealth-browser/src/lib/domains/",
+        "entrypoint/stealth-browser/src/lib/helpers.ts",
+        "entrypoint/stealth-browser/src/lib/session.ts",
+        "entrypoint/stealth-browser/src/lib/storage/",
+        "entrypoint/stealth-browser/src/lib/types.ts",
+        "entrypoint/stealth-browser/src/test/fixtures/cdp/",
+        "entrypoint/stealth-browser/src/test/support/",
+        "entrypoint/stealth-browser/vite.config.ts",
+        "entrypoint/stealth-search/src/api.ts",
+        "entrypoint/stealth-search/src/host-flags.ts",
+        "entrypoint/stealth-search/src/telemetry.ts",
+        "entrypoint/stealth-search/src/tracing.ts",
+        "packages/resilience/resilience-core-tripwire/",
+        "packages/resilience/resilience-core-tripwire/package.json",
+        "packages/resilience/resilience-core-tripwire/project.json",
+        "packages/resilience/resilience-core-tripwire/src/lib/",
+        "packages/resilience/resilience-core-tripwire/src/lib/types.ts",
+        "packages/resilience/resilience-core-tripwire/vite.config.ts",
+        "packages/stealth/stealth-core-browser/examples/",
+        "packages/stealth/stealth-core-browser/package.json",
+        "packages/stealth/stealth-core-browser/src/api.ts",
+        "packages/stealth/stealth-core-browser/src/index.ts",
+        "packages/stealth/stealth-core-browser/src/lib/chrome-manager.ts",
+        "packages/stealth/stealth-core-browser/src/lib/lifecycle/index.ts"
+      ],
+      "reservations": {
+        "productization-hold": {
+          "mutates": [
+            "docs/plan/stealth-browser/PRODUCT-REVIEW.md"
+          ],
+          "read_only": [
+            "docs/plan/stealth-browser/README.md"
+          ]
+        },
+        "scaffold": {
+          "mutates": [
+            "docs/plan/stealth-browser/evidence/",
+            "entrypoint/stealth-browser/",
+            "tsconfig.base.json"
+          ],
+          "read_only": []
+        },
+        "entrypoint-parity": {
+          "mutates": [
+            "docs/plan/stealth-browser/evidence/",
+            "entrypoint/stealth-browser/*"
+          ],
+          "read_only": [
+            "entrypoint/apigen-cli/",
+            "entrypoint/backlog/",
+            "entrypoint/dispatch-cli/"
+          ]
+        },
+        "deps-install": {
+          "mutates": [
+            "docs/plan/stealth-browser/APPROVALS.md",
+            "entrypoint/stealth-browser/eslint.config.mjs",
+            "entrypoint/stealth-browser/package.json",
+            "pnpm-lock.yaml"
+          ],
+          "read_only": [
+            "/Users/nix/dev/ai/scratch/agent-browser/package.json"
+          ]
+        },
+        "mig-foundation": {
+          "mutates": [
+            "entrypoint/stealth-browser/src/lib/helpers.ts",
+            "entrypoint/stealth-browser/src/lib/session.ts",
+            "entrypoint/stealth-browser/src/lib/types.ts"
+          ],
+          "read_only": [
+            "/Users/nix/dev/ai/scratch/agent-browser/adhd/"
+          ]
+        },
+        "mig-cdp": {
+          "mutates": [
+            "entrypoint/stealth-browser/src/lib/cdp/"
+          ],
+          "read_only": [
+            "/Users/nix/dev/ai/scratch/agent-browser/adhd/",
+            "entrypoint/stealth-browser/src/lib/helpers.ts",
+            "entrypoint/stealth-browser/src/lib/session.ts",
+            "entrypoint/stealth-browser/src/lib/types.ts"
+          ]
+        },
+        "mig-chrome-manager": {
+          "mutates": [
+            "entrypoint/stealth-browser/src/lib/chrome-manager.ts"
+          ],
+          "read_only": [
+            "/Users/nix/dev/ai/scratch/agent-browser/adhd/",
+            "entrypoint/stealth-browser/src/lib/cdp/"
+          ]
+        },
+        "mig-domains-storage": {
+          "mutates": [
+            "entrypoint/stealth-browser/src/lib/domains/",
+            "entrypoint/stealth-browser/src/lib/storage/"
+          ],
+          "read_only": [
+            "/Users/nix/dev/ai/scratch/agent-browser/adhd/",
+            "entrypoint/stealth-browser/src/lib/cdp/",
+            "entrypoint/stealth-browser/src/lib/helpers.ts",
+            "entrypoint/stealth-browser/src/lib/types.ts"
+          ]
+        },
+        "mig-capture-parsers": {
+          "mutates": [
+            "entrypoint/stealth-browser/eslint.config.mjs",
+            "entrypoint/stealth-browser/src/lib/capture/",
+            "entrypoint/stealth-browser/src/lib/parsers.ts"
+          ],
+          "read_only": [
+            "/Users/nix/dev/ai/scratch/agent-browser/adhd/",
+            "entrypoint/stealth-browser/src/lib/types.ts"
+          ]
+        },
+        "mig-queries": {
+          "mutates": [
+            "entrypoint/stealth-browser/src/lib/queries/"
+          ],
+          "read_only": [
+            "/Users/nix/dev/ai/scratch/agent-browser/adhd/",
+            "/Users/nix/dev/ai/scratch/agent-browser/search/queries/",
+            "entrypoint/stealth-browser/src/lib/domains/",
+            "entrypoint/stealth-browser/src/lib/storage/"
+          ]
+        },
+        "mig-docs": {
+          "mutates": [
+            "entrypoint/stealth-browser/docs/reference/"
+          ],
+          "read_only": [
+            "/Users/nix/dev/ai/scratch/agent-browser/adhd/docs/",
+            "/Users/nix/dev/ai/scratch/agent-browser/docs/cdp/"
+          ]
+        },
+        "surface-api": {
+          "mutates": [
+            "docs/plan/stealth-browser/evidence/product-claims.json",
+            "entrypoint/stealth-browser/src/api.ts",
+            "entrypoint/stealth-browser/src/index.ts"
+          ],
+          "read_only": [
+            "/Users/nix/dev/ai/scratch/agent-browser/cdp-query-client.ts",
+            "/Users/nix/dev/ai/scratch/agent-browser/search-mcp-source.ts",
+            "entrypoint/stealth-browser/src/lib/"
+          ]
+        },
+        "tests-unit-core": {
+          "mutates": [
+            "entrypoint/stealth-browser/src/test/unit/cdp/",
+            "entrypoint/stealth-browser/src/test/unit/chrome-manager/",
+            "entrypoint/stealth-browser/src/test/unit/foundation/"
+          ],
+          "read_only": [
+            "entrypoint/stealth-browser/src/lib/"
+          ]
+        },
+        "tests-unit-data": {
+          "mutates": [
+            "entrypoint/stealth-browser/src/test/unit/domains-storage/",
+            "entrypoint/stealth-browser/src/test/unit/queries/"
+          ],
+          "read_only": [
+            "entrypoint/stealth-browser/src/lib/"
+          ]
+        },
+        "tests-unit-extract": {
+          "mutates": [
+            "entrypoint/stealth-browser/src/test/unit/capture-parsers/"
+          ],
+          "read_only": [
+            "entrypoint/stealth-browser/src/lib/"
+          ]
+        },
+        "tests-unit-surface": {
+          "mutates": [
+            "packages/stealth/stealth-core-browser/src/test/unit/surface/"
+          ],
+          "read_only": [
+            "packages/stealth/stealth-core-browser/src/api.ts",
+            "packages/stealth/stealth-core-browser/src/index.ts"
+          ]
+        },
+        "gates-first": {
+          "mutates": [
+            "docs/plan/stealth-browser/evidence/"
+          ],
+          "read_only": []
+        },
+        "review-prep": {
+          "mutates": [
+            "docs/plan/stealth-browser/review/BRIEF.txt",
+            "docs/plan/stealth-browser/review/INPUT.sha256",
+            "docs/plan/stealth-browser/review/migration.diff"
+          ],
+          "read_only": []
+        },
+        "audit-migration-blind": {
+          "mutates": [
+            "docs/plan/stealth-browser/review/FINDINGS.json"
+          ],
+          "read_only": []
+        },
+        "resolve-findings": {
+          "mutates": [
+            "docs/plan/stealth-browser/review/RESOLUTION.json",
+            "entrypoint/stealth-search/",
+            "packages/resilience/resilience-core-tripwire/",
+            "packages/stealth/stealth-core-browser/"
+          ],
+          "read_only": [
+            "docs/plan/stealth-browser/review/FINDINGS.json"
+          ]
+        },
+        "gates-rerun": {
+          "mutates": [
+            "docs/plan/stealth-browser/evidence/"
+          ],
+          "read_only": []
+        },
+        "docs-marketing-run": {
+          "mutates": [
+            "entrypoint/stealth-search/AGENTS.md",
+            "entrypoint/stealth-search/CHANGELOG.md",
+            "entrypoint/stealth-search/README.md",
+            "entrypoint/stealth-search/docs/",
+            "entrypoint/stealth-search/llms.txt",
+            "packages/stealth/stealth-core-browser/AGENTS.md",
+            "packages/stealth/stealth-core-browser/CHANGELOG.md",
+            "packages/stealth/stealth-core-browser/README.md",
+            "packages/stealth/stealth-core-browser/docs/",
+            "packages/stealth/stealth-core-browser/llms.txt"
+          ],
+          "read_only": []
+        },
+        "readme-rewrite": {
+          "mutates": [
+            "entrypoint/stealth-search/README.md",
+            "packages/stealth/stealth-core-browser/README.md"
+          ],
+          "read_only": []
+        },
+        "audit-final": {
+          "mutates": [
+            "docs/plan/stealth-browser/final-review.md"
+          ],
+          "read_only": []
+        },
+        "merge-readiness": {
+          "mutates": [
+            "docs/plan/stealth-browser/RELEASE-DECISION.md"
+          ],
+          "read_only": [
+            "PUBLISHING.md"
+          ]
+        },
+        "prod-errors": {
+          "mutates": [
+            "packages/stealth/stealth-core-browser/docs/ERRORS.md",
+            "packages/stealth/stealth-core-browser/src/api.ts",
+            "packages/stealth/stealth-core-browser/src/errors.ts",
+            "packages/stealth/stealth-core-browser/src/index.ts",
+            "packages/stealth/stealth-core-browser/src/lib/",
+            "packages/stealth/stealth-core-browser/src/test/unit/errors/"
+          ],
+          "read_only": []
+        },
+        "prod-examples": {
+          "mutates": [
+            "packages/stealth/stealth-core-browser/examples/",
+            "packages/stealth/stealth-core-browser/src/test/unit/examples/",
+            "packages/stealth/stealth-core-browser/tsconfig.spec.json"
+          ],
+          "read_only": [
+            "packages/stealth/stealth-core-browser/package.json",
+            "packages/stealth/stealth-core-browser/src/index.ts"
+          ]
+        },
+        "port-fixes": {
+          "mutates": [
+            "entrypoint/stealth-browser/package.json",
+            "entrypoint/stealth-browser/src/lib/",
+            "entrypoint/stealth-browser/src/test/unit/chrome-manager/chrome-lifecycle.spec.ts",
+            "entrypoint/stealth-browser/src/test/unit/domains-storage/",
+            "entrypoint/stealth-browser/src/types/",
+            "entrypoint/stealth-browser/tsconfig.spec.json",
+            "entrypoint/stealth-browser/vite.config.ts",
+            "pnpm-lock.yaml"
+          ],
+          "read_only": [
+            "/Users/nix/dev/ai/scratch/agent-browser/",
+            "docs/plan/stealth-browser/scripts/port-manifest.json"
+          ]
+        },
+        "audit-pre-review": {
+          "mutates": [
+            "docs/plan/stealth-browser/review/PRE-REVIEW.json",
+            "docs/plan/stealth-browser/review/PRE-REVIEW.md"
+          ],
+          "read_only": []
+        },
+        "audit-fixes": {
+          "mutates": [
+            "/Users/nix/dev/ai/scratch/INDEX.md",
+            "/Users/nix/dev/ai/scratch/agent-browser/AGENTS.md",
+            "/Users/nix/dev/ai/scratch/agent-browser/FEATURES.md",
+            "/Users/nix/dev/ai/scratch/agent-browser/FETCH.md",
+            "/Users/nix/dev/ai/scratch/agent-browser/SEARCH.md",
+            "/Users/nix/dev/ai/scratch/agent-browser/adhd/",
+            "/Users/nix/dev/ai/scratch/agent-browser/cdp-query-client.ts",
+            "/Users/nix/dev/ai/scratch/agent-browser/cdp-search.ts",
+            "/Users/nix/dev/ai/scratch/agent-browser/chrome-lifecycle-test.ts",
+            "/Users/nix/dev/ai/scratch/agent-browser/docs/",
+            "/Users/nix/dev/ai/scratch/agent-browser/network-capture.ts",
+            "/Users/nix/dev/ai/scratch/agent-browser/package.json",
+            "/Users/nix/dev/ai/scratch/agent-browser/search-challenge.ts",
+            "/Users/nix/dev/ai/scratch/agent-browser/search-dom.ts",
+            "/Users/nix/dev/ai/scratch/agent-browser/search-fetch.ts",
+            "/Users/nix/dev/ai/scratch/agent-browser/search-guard-test.ts",
+            "/Users/nix/dev/ai/scratch/agent-browser/search-mcp-source.ts",
+            "/Users/nix/dev/ai/scratch/agent-browser/search-network.ts",
+            "/Users/nix/dev/ai/scratch/agent-browser/search-tripwire.ts",
+            "/Users/nix/dev/ai/scratch/agent-browser/search/queries/activity.ts",
+            "/Users/nix/dev/ai/scratch/agent-browser/search/queries/context.ts",
+            "/Users/nix/dev/ai/scratch/agent-browser/search/queries/last-search.ts",
+            "docs/plan/stealth-browser/review/PRE-REVIEW-RESOLUTION.json",
+            "entrypoint/stealth-search/",
+            "packages/resilience/resilience-core-tripwire/",
+            "packages/stealth/stealth-core-browser/"
+          ],
+          "read_only": []
+        },
+        "capture-upgrade": {
+          "mutates": [
+            "entrypoint/stealth-browser/src/lib/capture/index.ts",
+            "entrypoint/stealth-browser/src/lib/capture/network.ts",
+            "entrypoint/stealth-browser/src/lib/recording/",
+            "entrypoint/stealth-browser/src/test/unit/capture-parsers/network.spec.ts",
+            "entrypoint/stealth-browser/src/test/unit/capture/"
+          ],
+          "read_only": [
+            "entrypoint/stealth-browser/package.json",
+            "entrypoint/stealth-browser/src/lib/cdp/session.ts",
+            "entrypoint/stealth-browser/src/test/fixtures/cdp/",
+            "entrypoint/stealth-browser/src/test/support/",
+            "entrypoint/stealth-browser/vite.config.ts"
+          ]
+        },
+        "chrome-lifecycle": {
+          "mutates": [
+            "docs/plan/stealth-browser/evidence/lifecycle-definitions.md",
+            "entrypoint/stealth-browser/src/lib/cdp/browser.ts",
+            "entrypoint/stealth-browser/src/lib/cdp/targets.ts",
+            "entrypoint/stealth-browser/src/lib/chrome-manager.ts",
+            "entrypoint/stealth-browser/src/lib/lifecycle/",
+            "entrypoint/stealth-browser/src/lib/runtime-deps.ts",
+            "entrypoint/stealth-browser/src/test/unit/cdp/targets.spec.ts",
+            "entrypoint/stealth-browser/src/test/unit/chrome-manager/",
+            "entrypoint/stealth-browser/src/test/unit/lifecycle/"
+          ],
+          "read_only": [
+            "docs/plan/stealth-browser/smoke/reaper-load-proof.md",
+            "entrypoint/stealth-browser/package.json",
+            "entrypoint/stealth-browser/src/lib/cdp/shutdown.ts",
+            "entrypoint/stealth-browser/src/test/fixtures/cdp/",
+            "entrypoint/stealth-browser/src/test/support/"
+          ]
+        },
+        "tests-use-cases": {
+          "mutates": [
+            "packages/stealth/stealth-core-browser/src/test/support/page-fixtures.ts",
+            "packages/stealth/stealth-core-browser/src/test/support/profile-fixtures.ts",
+            "packages/stealth/stealth-core-browser/src/test/use-cases/"
+          ],
+          "read_only": [
+            "packages/stealth/stealth-core-browser/examples/",
+            "packages/stealth/stealth-core-browser/src/index.ts"
+          ]
+        },
+        "cdp-test-harness": {
+          "mutates": [
+            "entrypoint/stealth-browser/src/test/fixtures/cdp/",
+            "entrypoint/stealth-browser/src/test/support/",
+            "entrypoint/stealth-browser/src/test/unit/support/"
+          ],
+          "read_only": [
+            "entrypoint/stealth-browser/src/lib/"
+          ]
+        },
+        "failsafe-inventory": {
+          "mutates": [
+            "docs/plan/stealth-browser/evidence/failsafe-inventory.json"
+          ],
+          "read_only": [
+            "/Users/nix/dev/ai/scratch/agent-browser/",
+            "entrypoint/stealth-browser/src/"
+          ]
+        },
+        "sp-reaper-load-proof": {
+          "mutates": [
+            "docs/plan/stealth-browser/smoke/reaper-load-proof.md"
+          ],
+          "read_only": []
+        },
+        "sp-link": {
+          "mutates": [
+            "docs/plan/stealth-browser/smoke/sp-link.md",
+            "entrypoint/stealth-browser/package.json",
+            "package.json",
+            "pnpm-lock.yaml"
+          ],
+          "read_only": [
+            "entrypoint/stealth-browser/src/",
+            "entrypoint/stealth-browser/vite.config.ts"
+          ]
+        },
+        "sp-reaper-smoke": {
+          "mutates": [
+            "docs/plan/stealth-browser/smoke/reaper-smoke.json",
+            "docs/plan/stealth-browser/smoke/reaper-smoke.md",
+            "docs/plan/stealth-browser/smoke/reaper-smoke.mjs"
+          ],
+          "read_only": [
+            "docs/plan/stealth-browser/smoke/reaper-load-proof.md",
+            "packages/stealth/stealth-core-browser/package.json"
+          ]
+        },
+        "tripwire-scaffold": {
+          "mutates": [
+            ".adhd/workspace.json",
+            "docs/plan/stealth-browser/evidence/tripwire/",
+            "packages/resilience/resilience-core-tripwire/",
+            "tools/nx-plugins/build/executors/typecheck-spec/resilience-core-tripwire.baseline.json",
+            "tsconfig.base.json"
+          ],
+          "read_only": [
+            "docs/plan/stealth-browser/APPROVAL-tripwire.md"
+          ]
+        },
+        "tripwire-core": {
+          "mutates": [
+            "packages/resilience/resilience-core-tripwire/*",
+            "packages/resilience/resilience-core-tripwire/src/"
+          ],
+          "read_only": [
+            "packages/resilience/resilience-core-tripwire/package.json",
+            "packages/resilience/resilience-core-tripwire/project.json",
+            "packages/resilience/resilience-core-tripwire/vite.config.ts"
+          ]
+        },
+        "tripwire-interactive": {
+          "mutates": [
+            "packages/resilience/resilience-core-tripwire/*",
+            "packages/resilience/resilience-core-tripwire/src/"
+          ],
+          "read_only": [
+            "packages/resilience/resilience-core-tripwire/package.json",
+            "packages/resilience/resilience-core-tripwire/src/lib/types.ts"
+          ]
+        },
+        "tripwire-docs": {
+          "mutates": [
+            "packages/resilience/resilience-core-tripwire/CHANGELOG.md",
+            "packages/resilience/resilience-core-tripwire/README.md",
+            "packages/resilience/resilience-core-tripwire/docs/",
+            "packages/resilience/resilience-core-tripwire/src/test/unit/readme-examples.spec.ts"
+          ],
+          "read_only": [
+            "packages/resilience/resilience-core-tripwire/package.json",
+            "packages/resilience/resilience-core-tripwire/src/lib/"
+          ]
+        },
+        "tripwire-pack": {
+          "mutates": [
+            "docs/plan/stealth-browser/evidence/tripwire/",
+            "packages/resilience/resilience-core-tripwire/package.json",
+            "packages/resilience/resilience-core-tripwire/project.json",
+            "packages/resilience/resilience-core-tripwire/vite.config.ts"
+          ],
+          "read_only": []
+        },
+        "tripwire-reverse-migrate": {
+          "mutates": [
+            "/Users/nix/dev/projects/reverse-apis/.git/info/exclude",
+            "/Users/nix/dev/projects/reverse-apis/.worktrees/tripwire-adopt/",
+            "docs/plan/stealth-browser/tripwire-reverse/"
+          ],
+          "read_only": [
+            "docs/plan/stealth-browser/evidence/tripwire/tripwire-tarball.json",
+            "packages/resilience/resilience-core-tripwire/"
+          ]
+        },
+        "tripwire-reverse-relink": {
+          "mutates": [
+            "/Users/nix/dev/projects/reverse-apis/.worktrees/tripwire-adopt/package.json",
+            "/Users/nix/dev/projects/reverse-apis/.worktrees/tripwire-adopt/pnpm-lock.yaml",
+            "docs/plan/stealth-browser/tripwire-reverse/"
+          ],
+          "read_only": [
+            "docs/plan/stealth-browser/tripwire-reverse/reverse-verify.json"
+          ]
+        },
+        "split-plan-repair": {
+          "mutates": [
+            "docs/plan/plan-index.json",
+            "docs/plan/stealth-browser/APPROVAL-split.md",
+            "docs/plan/stealth-browser/APPROVAL.md",
+            "docs/plan/stealth-browser/APPROVALS.md",
+            "docs/plan/stealth-browser/DEFERRED.md",
+            "docs/plan/stealth-browser/README.md",
+            "docs/plan/stealth-browser/SCOPE.md",
+            "docs/plan/stealth-browser/SPEC-stealth-search.md",
+            "docs/plan/stealth-browser/TOOLS.md",
+            "docs/plan/stealth-browser/USE_CASES.md",
+            "docs/plan/stealth-browser/contexts/",
+            "docs/plan/stealth-browser/dag.json",
+            "docs/plan/stealth-browser/human-blockers.json",
+            "docs/plan/stealth-browser/interfaces.json",
+            "docs/plan/stealth-browser/references.json",
+            "docs/plan/stealth-browser/scripts/"
+          ],
+          "read_only": []
+        },
+        "core-scaffold": {
+          "mutates": [
+            ".adhd/workspace.json",
+            "docs/plan/stealth-browser/evidence/split/",
+            "entrypoint/stealth-browser/",
+            "packages/stealth/stealth-core-browser/",
+            "pnpm-lock.yaml",
+            "tools/nx-plugins/build/executors/typecheck-spec/stealth-core-browser.baseline.json",
+            "tsconfig.base.json"
+          ],
+          "read_only": [
+            "docs/plan/stealth-browser/SPEC-stealth-search.md"
+          ]
+        },
+        "core-seam": {
+          "mutates": [
+            "packages/stealth/stealth-core-browser/src/api.ts",
+            "packages/stealth/stealth-core-browser/src/index.ts",
+            "packages/stealth/stealth-core-browser/src/lib/capture/bans.ts",
+            "packages/stealth/stealth-core-browser/src/lib/cdp/browser.ts",
+            "packages/stealth/stealth-core-browser/src/lib/cdp/targets.ts",
+            "packages/stealth/stealth-core-browser/src/lib/chrome-manager.ts",
+            "packages/stealth/stealth-core-browser/src/lib/lifecycle/index.ts",
+            "packages/stealth/stealth-core-browser/src/lib/lifecycle/reaper-entry.ts",
+            "packages/stealth/stealth-core-browser/src/lib/lifecycle/reaper-host.ts",
+            "packages/stealth/stealth-core-browser/src/lib/lifecycle/reaper-link.ts",
+            "packages/stealth/stealth-core-browser/src/lib/managers.ts",
+            "packages/stealth/stealth-core-browser/src/lib/parsers.ts",
+            "packages/stealth/stealth-core-browser/src/test/unit/capture-parsers/bans.spec.ts",
+            "packages/stealth/stealth-core-browser/src/test/unit/cdp/browser.spec.ts",
+            "packages/stealth/stealth-core-browser/src/test/unit/lifecycle/concurrent-launch.spec.ts",
+            "packages/stealth/stealth-core-browser/src/test/unit/lifecycle/kill.spec.ts",
+            "packages/stealth/stealth-core-browser/src/test/unit/lifecycle/launch.spec.ts",
+            "packages/stealth/stealth-core-browser/src/test/unit/lifecycle/reaper-scope.spec.ts",
+            "packages/stealth/stealth-core-browser/src/test/unit/seam/"
+          ],
+          "read_only": [
+            "packages/stealth/stealth-core-browser/src/lib/chrome-manager.ts",
+            "packages/stealth/stealth-core-browser/src/lib/lifecycle/index.ts"
+          ]
+        },
+        "search-scaffold": {
+          "mutates": [
+            "docs/plan/stealth-browser/evidence/split/",
+            "entrypoint/stealth-search/",
+            "pnpm-lock.yaml",
+            "tools/nx-plugins/build/executors/typecheck-spec/stealth-search.baseline.json",
+            "tsconfig.base.json"
+          ],
+          "read_only": []
+        },
+        "search-inventory": {
+          "mutates": [
+            "docs/plan/stealth-browser/evidence/search-failsafe-inventory.json"
+          ],
+          "read_only": []
+        },
+        "search-errors": {
+          "mutates": [
+            "entrypoint/stealth-search/docs/ERRORS.md",
+            "entrypoint/stealth-search/src/errors.ts",
+            "entrypoint/stealth-search/src/test/unit/errors/"
+          ],
+          "read_only": []
+        },
+        "search-port-providers": {
+          "mutates": [
+            "entrypoint/stealth-search/src/lib/providers.ts",
+            "entrypoint/stealth-search/src/lib/queries/last-search.ts",
+            "entrypoint/stealth-search/src/lib/types.ts",
+            "entrypoint/stealth-search/src/lib/utils.ts",
+            "entrypoint/stealth-search/src/test/unit/providers/"
+          ],
+          "read_only": []
+        },
+        "search-port-fetch": {
+          "mutates": [
+            "docs/plan/stealth-browser/evidence/split/u-pdf.json",
+            "entrypoint/stealth-search/src/lib/fetch/",
+            "entrypoint/stealth-search/src/test/unit/fetch/"
+          ],
+          "read_only": []
+        },
+        "search-port-engine": {
+          "mutates": [
+            "entrypoint/stealth-search/src/lib/challenge.ts",
+            "entrypoint/stealth-search/src/lib/dom.ts",
+            "entrypoint/stealth-search/src/lib/network.ts",
+            "entrypoint/stealth-search/src/test/unit/engine/"
+          ],
+          "read_only": []
+        },
+        "search-port-guards": {
+          "mutates": [
+            "entrypoint/stealth-search/src/lib/config.ts",
+            "entrypoint/stealth-search/src/lib/guard.ts",
+            "entrypoint/stealth-search/src/lib/tripwire.ts",
+            "entrypoint/stealth-search/src/test/unit/guards/"
+          ],
+          "read_only": []
+        },
+        "search-verbs": {
+          "mutates": [
+            "docs/plan/stealth-browser/evidence/split/search-verbs-probes.json",
+            "entrypoint/stealth-search/src/api.ts",
+            "entrypoint/stealth-search/src/host-projection.ts",
+            "entrypoint/stealth-search/src/index.ts",
+            "entrypoint/stealth-search/src/lib/search.ts",
+            "entrypoint/stealth-search/src/test/unit/verbs/"
+          ],
+          "read_only": []
+        },
+        "search-tracing": {
+          "mutates": [
+            "entrypoint/stealth-search/src/telemetry.ts",
+            "entrypoint/stealth-search/src/tracing.ts"
+          ],
+          "read_only": []
+        },
+        "search-hosts": {
+          "mutates": [
+            "docs/plan/stealth-browser/evidence/naming-decision.md",
+            "entrypoint/stealth-search/bin/",
+            "entrypoint/stealth-search/package.json",
+            "entrypoint/stealth-search/src/cli.ts",
+            "entrypoint/stealth-search/src/host-errors.ts",
+            "entrypoint/stealth-search/src/host-flags.ts",
+            "entrypoint/stealth-search/src/server.ts",
+            "entrypoint/stealth-search/src/test/unit/hosts/",
+            "pnpm-lock.yaml"
+          ],
+          "read_only": [
+            "entrypoint/stealth-search/src/telemetry.ts",
+            "entrypoint/stealth-search/src/tracing.ts"
+          ]
+        },
+        "search-usecases": {
+          "mutates": [
+            "entrypoint/stealth-search/src/test/use-cases/"
+          ],
+          "read_only": [
+            "entrypoint/stealth-search/src/api.ts"
+          ]
+        },
+        "search-examples": {
+          "mutates": [
+            "entrypoint/stealth-search/README.md",
+            "entrypoint/stealth-search/examples/",
+            "entrypoint/stealth-search/src/test/unit/examples/"
+          ],
+          "read_only": [
+            "docs/plan/stealth-browser/evidence/naming-decision.md",
+            "entrypoint/stealth-search/src/host-flags.ts"
+          ]
+        },
+        "tracing-log-validation": {
+          "mutates": [
+            "docs/plan/stealth-browser/evidence/tracing-log-validation.json",
+            "docs/plan/stealth-browser/evidence/tracing-log-validation.md"
+          ],
+          "read_only": []
+        },
+        "search-cutover": {
+          "mutates": [
+            "/Users/nix/dev/ai/scratch/agent-browser/",
+            "/Users/nix/dev/ai/scratch/bin/scratch-agent-search",
+            "/Users/nix/dev/ai/scratch/bin/scratch-agent-search-mcp-cli",
+            "/Users/nix/dev/ai/scratch/bin/scratch-agent-search-serve",
+            "/Users/nix/dev/ai/scratch/docs/GIT-POLICY.md",
+            "docs/plan/stealth-browser/evidence/cutover/"
+          ],
+          "read_only": [
+            "docs/plan/stealth-browser/evidence/source-baseline.txt"
+          ]
+        },
+        "consumer-relink": {
+          "mutates": [
+            "/Users/nix/.claude/agents/",
+            "/Users/nix/.config/opencode/",
+            "/Users/nix/dev/ai/sox-ecosystem/docs/guidelines/authoring.md",
+            "/Users/nix/dev/ai/sox-ecosystem/docs/spec/cross-platform-install-rendering.md",
+            "/Users/nix/dev/ai/sox-ecosystem/extensions/agents/",
+            "/Users/nix/dev/ai/sox-ecosystem/libs/host-registry/",
+            "/Users/nix/dev/ai/sox-ecosystem/tools/test-c1b17653-researcher-single-definition.mjs",
+            "docs/plan/stealth-browser/evidence/relink/"
+          ],
+          "read_only": [
+            "docs/plan/stealth-browser/RELEASE-DECISION.md",
+            "docs/plan/stealth-browser/evidence/naming-decision.md"
+          ]
+        },
+        "main-merge": {
+          "mutates": [
+            ".adhd/workspace.json",
+            "docs/plan/stealth-browser/evidence/main-merge.md",
+            "package.json",
+            "pnpm-lock.yaml",
+            "tsconfig.base.json"
+          ],
+          "read_only": []
+        },
+        "conform-tripwire": {
+          "mutates": [
+            "docs/plan/stealth-browser/evidence/conform-tripwire.md",
+            "packages/resilience/resilience-core-tripwire/",
+            "tools/nx-plugins/build/executors/typecheck-spec/resilience-core-tripwire.baseline.json"
+          ],
+          "read_only": []
+        },
+        "conform-core": {
+          "mutates": [
+            "docs/plan/stealth-browser/evidence/conform-core.md",
+            "packages/stealth/stealth-core-browser/",
+            "tools/nx-plugins/build/executors/typecheck-spec/stealth-core-browser.baseline.json"
+          ],
+          "read_only": []
+        },
+        "conform-search": {
+          "mutates": [
+            "docs/plan/stealth-browser/evidence/conform-search.md",
+            "entrypoint/stealth-search/",
+            "tools/nx-plugins/build/executors/typecheck-spec/stealth-search.baseline.json"
+          ],
+          "read_only": []
+        },
+        "fix-tripwire": {
+          "mutates": [
+            "docs/plan/stealth-browser/evidence/fix-tripwire.md",
+            "packages/resilience/resilience-core-tripwire/"
+          ],
+          "read_only": []
+        },
+        "fix-core-parsers": {
+          "mutates": [
+            "docs/plan/stealth-browser/evidence/fix-core-parsers.md",
+            "packages/stealth/stealth-core-browser/src/lib/parsers.ts",
+            "packages/stealth/stealth-core-browser/test/fixtures/parsers/",
+            "packages/stealth/stealth-core-browser/test/helpers/parsers/",
+            "packages/stealth/stealth-core-browser/test/unit/parsers/"
+          ],
+          "read_only": []
+        },
+        "fix-core-lifecycle": {
+          "mutates": [
+            "docs/plan/stealth-browser/evidence/fix-core-lifecycle.md",
+            "packages/stealth/stealth-core-browser/src/lib/lifecycle/",
+            "packages/stealth/stealth-core-browser/test/helpers/lifecycle/",
+            "packages/stealth/stealth-core-browser/test/unit/lifecycle/"
+          ],
+          "read_only": []
+        },
+        "fix-core-errors": {
+          "mutates": [
+            "docs/plan/stealth-browser/evidence/fix-core-errors.md",
+            "packages/stealth/stealth-core-browser/docs/ERRORS.md",
+            "packages/stealth/stealth-core-browser/src/errors.ts",
+            "packages/stealth/stealth-core-browser/test/unit/errors/",
+            "packages/stealth/stealth-core-browser/test/unit/surface/"
+          ],
+          "read_only": []
+        },
+        "fix-search-fetch": {
+          "mutates": [
+            "docs/plan/stealth-browser/evidence/fix-search-fetch.md",
+            "entrypoint/stealth-search/src/lib/fetch/",
+            "entrypoint/stealth-search/test/fixtures/fetch/",
+            "entrypoint/stealth-search/test/helpers/fetch/",
+            "entrypoint/stealth-search/test/unit/fetch/"
+          ],
+          "read_only": []
+        },
+        "fix-search-engine": {
+          "mutates": [
+            "docs/plan/stealth-browser/OPEN-DECISIONS.md",
+            "docs/plan/stealth-browser/evidence/fix-search-engine.md",
+            "entrypoint/stealth-search/src/lib/challenge.ts",
+            "entrypoint/stealth-search/src/lib/dom.ts",
+            "entrypoint/stealth-search/src/lib/network.ts",
+            "entrypoint/stealth-search/src/lib/providers.ts",
+            "entrypoint/stealth-search/src/lib/utils.ts",
+            "entrypoint/stealth-search/test/fixtures/engine/",
+            "entrypoint/stealth-search/test/fixtures/providers/",
+            "entrypoint/stealth-search/test/helpers/engine/",
+            "entrypoint/stealth-search/test/unit/engine/",
+            "entrypoint/stealth-search/test/unit/providers/",
+            "packages/stealth/stealth-core-browser/src/lib/capture/dom.ts",
+            "packages/stealth/stealth-core-browser/test/unit/capture-parsers/dom.spec.ts"
+          ],
+          "read_only": []
+        },
+        "fix-search-output": {
+          "mutates": [
+            "docs/plan/stealth-browser/evidence/fix-search-output.md",
+            "entrypoint/stealth-search/src/api.ts",
+            "entrypoint/stealth-search/src/lib/output.ts",
+            "entrypoint/stealth-search/src/lib/search.ts",
+            "entrypoint/stealth-search/test/helpers/verbs/",
+            "entrypoint/stealth-search/test/unit/guards/tripwire-wiring.spec.ts",
+            "entrypoint/stealth-search/test/unit/verbs/"
+          ],
+          "read_only": []
+        },
+        "search-mcp-iserror": {
+          "mutates": [
+            "docs/plan/stealth-browser/evidence/search-mcp-iserror.md",
+            "entrypoint/stealth-search/docs/ERRORS.md",
+            "entrypoint/stealth-search/project.json",
+            "entrypoint/stealth-search/src/errors.ts",
+            "entrypoint/stealth-search/src/server.ts",
+            "entrypoint/stealth-search/test/unit/errors/",
+            "entrypoint/stealth-search/test/unit/hosts/",
+            "entrypoint/stealth-search/test/unit/use-cases/hosts.spec.ts",
+            "entrypoint/stealth-search/vitest.e2e.config.ts"
+          ],
+          "read_only": []
+        },
+        "fix-search-build": {
+          "mutates": [
+            "docs/plan/stealth-browser/evidence/fix-search-build.md",
+            "entrypoint/stealth-search/bin/",
+            "entrypoint/stealth-search/package.json",
+            "entrypoint/stealth-search/project.json",
+            "entrypoint/stealth-search/scripts/",
+            "entrypoint/stealth-search/src/server.ts",
+            "entrypoint/stealth-search/test/unit/build/",
+            "entrypoint/stealth-search/tsconfig.build-bin.json",
+            "entrypoint/stealth-search/vite.config.ts"
+          ],
+          "read_only": []
+        },
+        "search-tracing-fixes": {
+          "mutates": [
+            "docs/plan/stealth-browser/evidence/search-tracing-fixes.md",
+            "entrypoint/stealth-search/README.md",
+            "entrypoint/stealth-search/docs/CONFIGURATION.md",
+            "entrypoint/stealth-search/docs/ERRORS.md",
+            "entrypoint/stealth-search/docs/OBSERVABILITY.md",
+            "entrypoint/stealth-search/src/api.ts",
+            "entrypoint/stealth-search/src/cli.ts",
+            "entrypoint/stealth-search/src/host-errors.ts",
+            "entrypoint/stealth-search/src/host-flags.ts",
+            "entrypoint/stealth-search/src/host-projection.ts",
+            "entrypoint/stealth-search/src/index.ts",
+            "entrypoint/stealth-search/src/telemetry.ts",
+            "entrypoint/stealth-search/src/tracing.ts",
+            "entrypoint/stealth-search/test/unit/hosts/",
+            "entrypoint/stealth-search/test/unit/tracing/",
+            "entrypoint/stealth-search/test/unit/use-cases/hosts.spec.ts"
+          ],
+          "read_only": []
+        },
+        "plan-notes": {
+          "mutates": [
+            "docs/plan/stealth-browser/README.md",
+            "docs/plan/stealth-browser/evidence/plan-notes.md"
+          ],
+          "read_only": []
+        },
+        "release-readiness": {
+          "mutates": [
+            "docs/plan/stealth-browser/APPROVAL-split.md",
+            "docs/plan/stealth-browser/APPROVAL-tripwire.md",
+            "docs/plan/stealth-browser/APPROVAL.md",
+            "docs/plan/stealth-browser/APPROVALS.md",
+            "docs/plan/stealth-browser/evidence/release-readiness.md",
+            "docs/plan/stealth-browser/release-readiness/"
+          ],
+          "read_only": []
+        },
+        "release-gate-fixes": {
+          "mutates": [
+            "docs/plan/stealth-browser/evidence/release-gate-fixes.dry.json",
+            "docs/plan/stealth-browser/evidence/release-gate-fixes.md",
+            "entrypoint/backlog/project.json",
+            "entrypoint/backlog/test/unit/c8-vocabulary.spec.ts",
+            "entrypoint/decompile-cli/test/unit/lib/validators/local/index.spec.ts",
+            "package.json",
+            "tools/nx-plugins/build/executors/publish/impl.js",
+            "tools/nx-plugins/build/executors/publish/impl.spec.mjs",
+            "tools/nx-plugins/test/executors/wiring/check-test-wiring.mjs",
+            "tools/nx-plugins/test/executors/wiring/check-test-wiring.spec.mjs",
+            "tools/nx-plugins/test/executors/wiring/release-dry-clean.spec.mjs"
+          ],
+          "read_only": []
+        }
+      },
+      "references": [],
+      "interfaces": [],
+      "demo": {
+        "source": "demo/DEMO.md",
+        "present": true,
+        "validate": "demo/UNRESOLVED.md",
+        "package_artifact": "entrypoint/stealth-browser/src/test/use-cases/"
+      },
+      "assumed_baseline": [],
+      "depends_on": [],
+      "updated_at": "2026-10-24T08:15:04.303Z"
+    },
+    {
       "plan": "task-dependency-dag",
       "dir": "agent-final/superseded/task-dependency-dag",
       "status": "complete",
@@ -4115,6 +5359,6 @@
       "updated_at": "2026-07-17T23:56:00.980Z"
     }
   ],
-  "updated_at": "2026-09-22T19:58:27.076Z",
+  "updated_at": "2026-10-24T08:15:04.310Z",
   "verified_at": null
 }

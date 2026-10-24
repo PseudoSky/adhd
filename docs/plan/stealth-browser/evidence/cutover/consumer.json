@@ -1,0 +1,12 @@
+{
+  "consumer_dir": "/private/tmp/claude-502/cutover-consumer-ur8l",
+  "package_manager": "pnpm 8.15.9 (store ~/Library/pnpm/store)",
+  "linker": "node-linker=hoisted in the consumer .npmrc so node_modules/@adhd/* are real directories",
+  "install": "pnpm install; pnpm.overrides map the three @adhd package names (and the supplementary apigen-engine-runtime) to the tarballs in tarballs.json; the consumer is not committed",
+  "real_dirs": [
+    "node_modules/@adhd/resilience-core-tripwire",
+    "node_modules/@adhd/stealth-core-browser",
+    "node_modules/@adhd/stealth-search"
+  ],
+  "supplementary_tarball_installed": "apigen-engine-runtime (see tarballs.json supplementary)"
+}

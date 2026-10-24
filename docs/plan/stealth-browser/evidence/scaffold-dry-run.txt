@@ -1,0 +1,13 @@
+
+ NX  Generating @adhd/workspace-codegen-nx:entrypoint
+
+Scaffolding stealth-browser at entrypoint/stealth-browser (@adhd/stealth-browser)
+  Tags: domain:entrypoint, pkg-kind:entrypoint, pkg-class:entrypoint, layer:entrypoints, platform:node, access:domain
+CREATE entrypoint/stealth-browser/src/index.ts
+CREATE entrypoint/stealth-browser/project.json
+CREATE entrypoint/stealth-browser/package.json
+CREATE entrypoint/stealth-browser/tsconfig.json
+UPDATE tsconfig.base.json
+CREATE entrypoint/stealth-browser/README.md
+
+NOTE: The "dryRun" flag means no changes were made.

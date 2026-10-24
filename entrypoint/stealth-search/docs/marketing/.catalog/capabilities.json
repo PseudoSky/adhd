@@ -1,0 +1,257 @@
+{
+  "package": "@adhd/stealth-search",
+  "version": "0.1.0",
+  "scope": "entrypoint/stealth-search",
+  "scope_types": [
+    "cli",
+    "service",
+    "library"
+  ],
+  "last_verified_sha": "3537748eb79c7303f62efa5caeb4c64603d3a1b5",
+  "last_verified_at": "2026-10-24T14:27:31-04:00",
+  "error_codes": {
+    "source": [
+      "src/errors.ts SEARCH_ERROR_CODES",
+      "src/host-errors.ts (HOST_FLAG_INVALID, HOST_TRANSPORT_UNSUPPORTED, HOST_BOOT_FAILED, NODE_TOO_OLD constructors; adds no code beyond the 13)"
+    ],
+    "count": 13,
+    "codes": [
+      "UNKNOWN_PROVIDER",
+      "SEARCH_FAILED",
+      "SELECTOR_TIMEOUT",
+      "HITL_ABORTED",
+      "TRIPWIRE_STATE_UNREADABLE",
+      "TRIPWIRE_CLEAR_FAILED",
+      "PROVIDER_STATE_IO",
+      "FETCH_URL_REFUSED",
+      "PDF_EXTRACT_FAILED",
+      "HOST_FLAG_INVALID",
+      "HOST_TRANSPORT_UNSUPPORTED",
+      "HOST_BOOT_FAILED",
+      "NODE_TOO_OLD"
+    ],
+    "exit_status": {
+      "UNKNOWN_PROVIDER": 70,
+      "SEARCH_FAILED": 71,
+      "SELECTOR_TIMEOUT": 33,
+      "HITL_ABORTED": 2,
+      "TRIPWIRE_STATE_UNREADABLE": 72,
+      "TRIPWIRE_CLEAR_FAILED": 73,
+      "PROVIDER_STATE_IO": 74,
+      "FETCH_URL_REFUSED": 75,
+      "PDF_EXTRACT_FAILED": 76,
+      "HOST_FLAG_INVALID": 77,
+      "HOST_TRANSPORT_UNSUPPORTED": 78,
+      "HOST_BOOT_FAILED": 79,
+      "NODE_TOO_OLD": 12
+    },
+    "core_owned": [
+      "SELECTOR_TIMEOUT",
+      "NODE_TOO_OLD"
+    ],
+    "unknown_code_exit": "core exitCodeFor (1 when unknown)"
+  },
+  "capabilities": [
+    {
+      "id": "search",
+      "name": "Search a provider or fetch a URL as markdown",
+      "surface": {
+        "cli": "search",
+        "mcp": "stealth_search",
+        "api": "search"
+      },
+      "status": "shipped",
+      "receipt": "cd entrypoint/stealth-search && timeout 30 node dist/bin/cli.js search --help && cd entrypoint/stealth-search && timeout 60 node dist/bin/cli.js search --provider nope --query q --data-dir \"$(mktemp -d)\" --log-dir \"$(mktemp -d)\" --cdp-port 9333",
+      "verified_output": "stealth-search search\nSearch a provider (duckduckgo, google, github, npm, arxiv and more) or read a URL as markdown with the fetch provider. Returns titles, urls and snippets; a locked provider answers outcome hitl without opening a window.\nOperation flags:\n  --provider <string> (required)\n  --query <string> (required)\n  --qualifier <string>\n  --strategy <auto|network|dom|fetch>  The ways a provider can be run. `auto` follows the provider; `fetch` renders a URL as markdown.\n  --content <none|full>\n  --preview <none|include>\n  --offset <number>\n  --max-content-size <number>\n  --max-result-bytes <number>\n  --timeout-ms <number>\n  --max-attempts <number>\n  --challenge-wait-ms <number>\n  --visibility <offscreen|foreground>\n  --page-disposal <dispose|keep>\n  --host <string>\n  --port <number>\n  --input <json>  the whole input object (flags override it)\nHost flags apply to every operation; run \"stealth-search --help\" for the table.\n--- search --provider nope (exit 70, stderr) ---\nUNKNOWN_PROVIDER: Unknown provider \"nope\". Available: duckduckgo, google, arxiv, npm, github, maven, wikipedia, crates, pypi, mdn, stackoverflow, fetch — Use one of the registered provider ids (see the providers list), then retry.",
+      "notes": "Providers (12): duckduckgo, google, arxiv, npm, github, maven, wikipedia, crates, pypi, mdn, stackoverflow, fetch. PROVISIONAL: the google result parsers are verified against synthetic fixtures only, not live Google pages (AGENTS.md, README \"Provider status\", CHANGELOG). A successful live search was NOT executed (needs Chrome). Unit evidence with fakes: test/unit/verbs/surface.spec.ts (\"search, tripwireStatus and clearTripwire run through the configured service on a fake core\"), test/unit/examples/examples.spec.ts."
+    },
+    {
+      "id": "listProviders",
+      "name": "List registered search providers",
+      "surface": {
+        "cli": "listProviders",
+        "mcp": "stealth_listProviders",
+        "api": "listProviders"
+      },
+      "status": "shipped",
+      "receipt": "cd entrypoint/stealth-search && timeout 60 node dist/bin/cli.js listProviders --data-dir \"$(mktemp -d)\" --log-dir \"$(mktemp -d)\" --cdp-port 9333",
+      "verified_output": "{\"providers\":[{\"id\":\"duckduckgo\",\"name\":\"DuckDuckGo\",\"help\":\"General web search (via html.duckduckgo.com). Supports site:, intitle:, filetype: operators.\",\"strategies\":[\"network\",\"dom\"]},{\"id\":\"google\",\"name\":\"Google\",\"help\":\"General web search (via google.com). Supports site:, filetype:, intitle:, inurl: operators.\",\"strategies\":[\"network\",\"dom\"]},{\"id\":\"arxiv\",\"name\":\"arXiv\",\"help\":\"Academic papers (via arxiv.org). Supports au:, ti:, cat: operators.\",\"strategies\":[\"network\",\"dom\"]},{\"id\":\"npm\",\"name\":\"npm\",\"help\":\"npm packages (via registry.npmjs.org API). Direct fetch. Qualifiers: author:,  ...(truncated; exit 0)",
+      "notes": "Executed for real, no Chrome. Returns 12 providers with id, name, help, strategies. The github provider reports strategies [\"network\",\"network\"] (primary and fallback are both network in src/lib/providers.ts:195). Test: surface.spec.ts \"listProviders lists the twelve providers with strategies [I-03]\"."
+    },
+    {
+      "id": "describeProvider",
+      "name": "Describe one provider (qualifiers, strategies, ban rules)",
+      "surface": {
+        "cli": "describeProvider",
+        "mcp": "stealth_describeProvider",
+        "api": "describeProvider"
+      },
+      "status": "shipped",
+      "receipt": "cd entrypoint/stealth-search && timeout 60 node dist/bin/cli.js describeProvider --provider github --data-dir \"$(mktemp -d)\" --log-dir \"$(mktemp -d)\" --cdp-port 9333",
+      "verified_output": "{\"id\":\"github\",\"name\":\"GitHub\",\"help\":\"GitHub search — repos by default. Use qualifier \\\"type:code\\\" for code search, \\\"type:repositories\\\" to stay explicit. Qualifiers: repo:, org:, user:, language:, license:, is:, path:, symbol:, regex. See docs.github.com/en/search-github (code search).\",\"url\":\"https://github.com/search?q=demo&type=repositories\",\"strategies\":[\"network\",\"network\"],\"qualifierExamples\":[\"type:code           Code search (default: repos)\",\"repo:owner/name     Search within a repo\",\"org:name            Search within an org\",\"user:name           Search within a user\",\"language:go  ...(truncated; exit 0)",
+      "notes": "Executed for real, no Chrome. Unknown id raises UNKNOWN_PROVIDER (surface.spec.ts \"describeProvider returns the qualifier examples and usage [I-18] and raises UNKNOWN_PROVIDER\")."
+    },
+    {
+      "id": "tripwireStatus",
+      "name": "Report providers locked after a hostile response",
+      "surface": {
+        "cli": "tripwireStatus",
+        "mcp": "stealth_tripwireStatus",
+        "api": "tripwireStatus"
+      },
+      "status": "shipped",
+      "receipt": "cd entrypoint/stealth-search && timeout 60 node dist/bin/cli.js tripwireStatus --data-dir \"$(mktemp -d)\" --log-dir \"$(mktemp -d)\" --cdp-port 9333",
+      "verified_output": "{} (exit 0, empty data dir)",
+      "notes": "Executed for real against an empty temporary data dir; non-empty case covered by test/unit/guards/tripwire-status.spec.ts (5 tests pass) and test/unit/hosts/mcp-inprocess.spec.ts (CLI and MCP list the same tripped set)."
+    },
+    {
+      "id": "clearTripwire",
+      "name": "Release a locked provider",
+      "surface": {
+        "cli": "clearTripwire",
+        "mcp": "stealth_clearTripwire",
+        "api": "clearTripwire"
+      },
+      "status": "shipped",
+      "receipt": "cd entrypoint/stealth-search && timeout 60 node dist/bin/cli.js clearTripwire --provider google --data-dir \"$(mktemp -d)\" --log-dir \"$(mktemp -d)\" --cdp-port 9333",
+      "verified_output": "{\"provider\":\"google\",\"cleared\":false} (exit 0)",
+      "notes": "Executed for real against an empty temporary data dir: cleared false when the provider was not locked. The cleared-true path is covered by test/unit/guards/tripwire-status.spec.ts and examples.spec.ts (\"tripwire clears what it lists\")."
+    },
+    {
+      "id": "chromeStatus",
+      "name": "Report whether Chrome answers on the CDP endpoint",
+      "surface": {
+        "cli": "chromeStatus",
+        "mcp": "stealth_chromeStatus",
+        "api": "chromeStatus"
+      },
+      "status": "shipped",
+      "receipt": "cd entrypoint/stealth-search && timeout 30 node dist/bin/cli.js chromeStatus --help",
+      "verified_output": "stealth-search chromeStatus\nReport whether Chrome answers on the CDP endpoint: its version, protocol version and whether this process launched and manages it.\nOperation flags:\n  --host <string>\n  --port <number>\n  --input <json>  the whole input object (flags override it)\nHost flags apply to every operation; run \"stealth-search --help\" for the table.",
+      "notes": "Re-exported core verb (api.ts line 43). Not executed against Chrome by design (would open a connection to a CDP port). Fake-core evidence: surface.spec.ts \"chromeStatus keeps the managed flag [I-16]\"; examples.spec.ts chrome-lifecycle."
+    },
+    {
+      "id": "launchChrome",
+      "name": "Start a Chrome with no automation flag on the CDP port",
+      "surface": {
+        "cli": "launchChrome",
+        "mcp": "stealth_launchChrome",
+        "api": "launchChrome"
+      },
+      "status": "shipped",
+      "receipt": "cd entrypoint/stealth-search && timeout 30 node dist/bin/cli.js launchChrome --help",
+      "verified_output": "stealth-search launchChrome\nStart a stealth Chrome (no automation flag) on the CDP port if none is running, hide its windows and manage its idle shutdown.\nOperation flags:\n  --port <number>\n  --user-data-dir <string>\n  --input <json>  the whole input object (flags override it)\nHost flags apply to every operation; run \"stealth-search --help\" for the table.\n\nOperation flags:\n  --port <number>\n  --user-data-dir <string>\n  --input <json>  the whole input object (flags override it)",
+      "notes": "Re-exported core verb. Input is only {port, userDataDir}; chromePath and extraArgs are rejected (surface.spec.ts \"a launchChrome call with chromePath or extraArgs does not type-check\"; mcp-inprocess.spec.ts isError invalid_argument and nothing spawned). Never executed for real (would launch Chrome)."
+    },
+    {
+      "id": "shutdownChrome",
+      "name": "Soft-shutdown the managed Chrome when idle",
+      "surface": {
+        "cli": "shutdownChrome",
+        "mcp": "stealth_shutdownChrome",
+        "api": "shutdownChrome"
+      },
+      "status": "shipped",
+      "receipt": "cd entrypoint/stealth-search && timeout 30 node dist/bin/cli.js shutdownChrome --help",
+      "verified_output": "stealth-search shutdownChrome\nSoft-shutdown the managed Chrome: close it only when it is genuinely idle, deferring to other sessions and open web pages.\nOperation flags:\n  --host <string>\n  --port <number>\n  --input <json>  the whole input object (flags override it)\nHost flags apply to every operation; run \"stealth-search --help\" for the table.",
+      "notes": "Delegates to the core verb with the same input (surface.spec.ts \"shutdownChrome [I-17] delegates to the core verb\"). Not executed against Chrome."
+    },
+    {
+      "id": "listPageTargets",
+      "name": "List open page targets (tabs)",
+      "surface": {
+        "cli": "listPageTargets",
+        "mcp": "stealth_listPageTargets",
+        "api": "listPageTargets"
+      },
+      "status": "shipped",
+      "receipt": "cd entrypoint/stealth-search && timeout 30 node dist/bin/cli.js listPageTargets --help",
+      "verified_output": "stealth-search listPageTargets\nList the open page targets (tabs) of the controlled Chrome with their target ids and URLs.\nOperation flags:\n  --host <string>\n  --port <number>\n  --input <json>  the whole input object (flags override it)\nHost flags apply to every operation; run \"stealth-search --help\" for the table.",
+      "notes": "Re-exported core verb. Evidence with fakes: examples.spec.ts \"page-targets reads the first page target and handles none and a vanished page\"; test/unit/use-cases/hosts.spec.ts."
+    },
+    {
+      "id": "checkChromeActivity",
+      "name": "Check whether Chrome is in use right now",
+      "surface": {
+        "cli": "checkChromeActivity",
+        "mcp": "stealth_checkChromeActivity",
+        "api": "checkChromeActivity"
+      },
+      "status": "shipped",
+      "receipt": "cd entrypoint/stealth-search && timeout 30 node dist/bin/cli.js checkChromeActivity --help",
+      "verified_output": "stealth-search checkChromeActivity\nCheck whether Chrome is in use right now: open web pages and the most recent history visit, to avoid disturbing a human session.\nOperation flags:\n  --within-minutes <number>\n  --user-data-dir <string>\n  --host <string>\n  --port <number>\n  --input <json>  the whole input object (flags override it)\nHost flags apply to every operation; run \"stealth-search --help\" for the table.",
+      "notes": "Re-exported core verb. Evidence with fakes: examples.spec.ts \"chrome-lifecycle launches only when nothing answers and shuts down only when idle\"."
+    },
+    {
+      "id": "getPageContext",
+      "name": "Describe one open page: URL, title, cookie names and counts, history",
+      "surface": {
+        "cli": "getPageContext",
+        "mcp": "stealth_getPageContext",
+        "api": "getPageContext"
+      },
+      "status": "shipped",
+      "receipt": "cd entrypoint/stealth-search && timeout 30 node dist/bin/cli.js getPageContext --help",
+      "verified_output": "stealth-search getPageContext\nDescribe one open Chrome page: URL, title, cookie names and counts (never cookie values) and how often it appears in history.\nOperation flags:\n  --host <string>\n  --port <number>\n  --target-id <string> (required)\n  --input <json>  the whole input object (flags override it)\nHost flags apply to every operation; run \"stealth-search --help\" for the table.",
+      "notes": "Cookie values are removed at one site, redactCookieValues (surface.spec.ts \"redactCookieValues keeps the cookie names and counts and the output contains no SECRET123 string\"). Not executed against Chrome."
+    },
+    {
+      "id": "host-flags",
+      "name": "Shared host flags with documented defaults",
+      "surface": {
+        "cli": "--help",
+        "mcp": "argv of stealth-search-mcp"
+      },
+      "status": "shipped",
+      "receipt": "cd entrypoint/stealth-search && timeout 30 node dist/bin/cli.js --help",
+      "verified_output": "  --cdp-host <host>           Chrome remote-debugging host (a non-loopback host given here is allowed for this run) (default 127.0.0.1)\n  --allow-cdp-hosts <list>    Comma-separated non-loopback hosts a tool call may address with its host input (loopback only otherwise)\n  --cdp-port <n>              Chrome remote-debugging port (default 9222)\n  --user-data-dir <path>      Chrome profile directory launchChrome uses when none is given\n  --transport <name>          MCP transport: stdio, sse or streaming-http (MCP host) (default stdio)\n  --listen-port <n>           Port the sse and streaming-http transports bind (MCP host) (default 3100)\n  --listen-host <addr>        Address the sse and streaming-http transports bind (MCP host); a non-loopback address needs --allow-remote-listen (default 127.0.0.1)\n  --allow-remote-listen       Allow a non-loopback --listen-host although sse and streaming-http have no authentication (MCP host)\n  --idle-shutdown <ms>        Close the Chrome this host launched after this many idle milliseconds (default 120000)\n  --keep-alive                Never close Chrome on idle\n  --restart-browser           Soft-shut Chrome down before the first operation (shutdownChrome)\n  --check-history             Let a recent Chrome history visit keep Chrome alive\n... (exit 0; 65 host-flags tests pass: pnpm exec vitest run test/unit/hosts/host-flags.spec.ts)",
+      "notes": "30+ flags; every flag has a spec case; a bad value is HOST_FLAG_INVALID exit 77 (CLI run: \"chromeStatus --cdp-port abc\" printed `HOST_FLAG_INVALID: --cdp-port: expected an integer, got \"abc\" — Run the command with --help and pass a valid value for the flag.`, exit 77)."
+    },
+    {
+      "id": "mcp-stdout-json-rpc-only",
+      "name": "MCP stdio server writes only JSON-RPC to stdout; lists the 11 stealth_* tools",
+      "surface": {
+        "mcp": "stealth-search-mcp"
+      },
+      "status": "shipped",
+      "receipt": "cd entrypoint/stealth-search && (printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2024-11-05\",\"capabilities\":{},\"clientInfo\":{\"name\":\"c\",\"version\":\"0\"}}}' '{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}' '{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\"}'; sleep 6) | timeout 12 node dist/bin/mcp.js > ../../tmp/mcp.out 2> ../../tmp/mcp.err; node -e 'for(const l of require(\"fs\").readFileSync(\"../../tmp/mcp.out\",\"utf8\").trim().split(\"\\n\")){const j=JSON.parse(l);if(j.id===2)console.log(j.result.tools.map(t=>t.name).join(\",\"))}'",
+      "verified_output": "exit 0; stdout 2 lines, every line parsed as JSON; tools: stealth_search,stealth_listProviders,stealth_describeProvider,stealth_tripwireStatus,stealth_clearTripwire,stealth_getPageContext,stealth_chromeStatus,stealth_launchChrome,stealth_shutdownChrome,stealth_listPageTargets,stealth_checkChromeActivity; stderr: JSON log lines (\"mcp server starting (stdio)\", \"11 tools available\").",
+      "notes": "Process exited on timeout/stdin close; pgrep afterwards found none. Every MCP tool input schema is {data: ...} (properties key `data`; required for search, describeProvider, clearTripwire, getPageContext, launchChrome). Tests: test/unit/hosts/mcp-inprocess.spec.ts (6), mcp-boot.spec.ts (23)."
+    },
+    {
+      "id": "typed-error-codes",
+      "name": "Typed StealthSearchError codes with CLI exit statuses",
+      "surface": {
+        "cli": "stderr \"<CODE>: <message>\" + exit status",
+        "api": "SEARCH_ERROR_CODES, exitCodeFor"
+      },
+      "status": "shipped",
+      "receipt": "cd entrypoint/stealth-search && timeout 60 node dist/bin/cli.js search --provider nope --query q --data-dir \"$(mktemp -d)\" --log-dir \"$(mktemp -d)\" --cdp-port 9333; echo exit=$?",
+      "verified_output": "UNKNOWN_PROVIDER: Unknown provider \"nope\". Available: duckduckgo, google, arxiv, npm, github, maven, wikipedia, crates, pypi, mdn, stackoverflow, fetch — Use one of the registered provider ids (see the providers list), then retry.\nexit=70",
+      "notes": "13 codes; see top-level error_codes. Test: test/unit/errors/search-errors.spec.ts (55 tests pass), host-errors.spec.ts (6)."
+    },
+    {
+      "id": "mcp-iserror-channel",
+      "name": "Typed failures reach MCP clients as isError tool results",
+      "surface": {
+        "mcp": "isError + _meta[\"adhd/error\"].code"
+      },
+      "status": "shipped",
+      "receipt": "cd entrypoint/stealth-search && pnpm exec vitest run test/unit/hosts/mcp-error-channel.spec.ts",
+      "verified_output": "Test Files 1 passed (1); Tests 7 passed (7); exit 0",
+      "notes": "ADR-0018. Non-typed throws stay JSON-RPC errors (P3 rejection kept)."
+    },
+    {
+      "id": "observability-spans",
+      "name": "adhd.<op>.start|finish|error telemetry spans on both hosts",
+      "surface": {
+        "cli": "--log-dir",
+        "mcp": "--log-dir"
+      },
+      "status": "shipped",
+      "receipt": "cd entrypoint/stealth-search && pnpm exec vitest run test/unit/hosts/search-tracing-single-error.spec.ts test/unit/hosts/search-tracing-rejected-flag.spec.ts test/unit/hosts/search-tracing-unknown-provider.spec.ts",
+      "verified_output": "single-error 2 passed, rejected-flag 3 passed, unknown-provider 3 passed; each exit 0",
+      "notes": "A failing call writes exactly one adhd.<op>.error plus one upstream adhd.op.error twin (documented in docs/OBSERVABILITY.md)."
+    }
+  ]
+}

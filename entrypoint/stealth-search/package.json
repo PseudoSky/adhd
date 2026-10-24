@@ -1,0 +1,64 @@
+{
+  "name": "@adhd/stealth-search",
+  "version": "0.1.0",
+  "description": "Stealth Chrome search and fetch (CDP DOM walks, no automation flags) as a CLI and an MCP server",
+  "bin": {
+    "stealth-search": "./dist/bin/cli.js",
+    "stealth-search-mcp": "./dist/bin/mcp.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "engines": {
+    "node": ">=22.5"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist",
+    "CHANGELOG.md"
+  ],
+  "keywords": [
+    "chrome",
+    "cdp",
+    "search",
+    "mcp",
+    "cli",
+    "stealth"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PseudoSky/adhd.git",
+    "directory": "entrypoint/stealth-search"
+  },
+  "homepage": "https://github.com/PseudoSky/adhd/tree/main/entrypoint/stealth-search#readme",
+  "bugs": {
+    "url": "https://github.com/PseudoSky/adhd/issues"
+  },
+  "dependencies": {
+    "@adhd/apigen-core-client": "^0.3.4",
+    "@adhd/apigen-engine-naming": "^0.2.5",
+    "@adhd/apigen-engine-runtime": "^0.3.3",
+    "@adhd/apigen-plugin-cli-output": "^0.2.8",
+    "@adhd/apigen-plugin-mcp": "^0.3.3",
+    "@adhd/apigen-plugin-tracing": "^0.2.0",
+    "@adhd/resilience-core-tripwire": "^0.1.0",
+    "@adhd/sox-telemetry": "^0.4.3",
+    "@adhd/stealth-core-browser": "^0.1.0",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "commander": "^14.0.3",
+    "pdfjs-dist": "^4.10.38",
+    "turndown": "^7.2.4"
+  },
+  "devDependencies": {
+    "@types/turndown": "^5.0.6"
+  },
+  "nx": {
+    "targets": {
+      "build-bin": {
+        "executor": "nx:run-commands"
+      }
+    }
+  }
+}

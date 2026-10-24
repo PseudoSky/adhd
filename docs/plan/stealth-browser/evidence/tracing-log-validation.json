@@ -1,0 +1,650 @@
+{
+  "service": "stealth-search",
+  "namespace": "adhd",
+  "agent": "tracing-log-validation validating agent (claude-sonnet-5-5)",
+  "home": "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/6ed1c5fc-cf8b-4543-8ae7-2172feed2026/scratchpad/tlv3/home.uxNiHm",
+  "validated_at": "2026-10-24T16:52:15.575Z",
+  "search_code_tree": "f432792b368f52aec300f9b37085a337400fc5ad660d1ffa78f0e40967ee0952",
+  "commands_run": [
+    "stealth-search listProviders",
+    "stealth-search describeProvider --provider duckduckgo",
+    "stealth-search tripwireStatus --data-dir /private/tmp/claude-502/-Users-nix-dev-ai-scratch/6ed1c5fc-cf8b-4543-8ae7-2172feed2026/scratchpad/tlv3/home.uxNiHm/data",
+    "stealth-search chromeStatus --cdp-port 19999",
+    "stealth-search describeProvider --provider nope",
+    "stealth-search chromeStatus --cdp-port abc",
+    "stealth-search search --help",
+    "stealth-search listProviders --help",
+    "stealth-search describeProvider --help",
+    "stealth-search tripwireStatus --help",
+    "stealth-search clearTripwire --help",
+    "stealth-search chromeStatus --help",
+    "stealth-search launchChrome --help",
+    "stealth-search shutdownChrome --help",
+    "stealth-search listPageTargets --help",
+    "stealth-search checkChromeActivity --help",
+    "stealth-search getPageContext --help",
+    "stealth-search --help",
+    "stealth-search listProviders --log-dir /private/tmp/claude-502/-Users-nix-dev-ai-scratch/6ed1c5fc-cf8b-4543-8ae7-2172feed2026/scratchpad/tlv3/home.uxNiHm/logs",
+    "stealth-search describeProvider --provider nope --log-dir /private/tmp/claude-502/-Users-nix-dev-ai-scratch/6ed1c5fc-cf8b-4543-8ae7-2172feed2026/scratchpad/tlv3/home.uxNiHm/logs",
+    "stealth-search-mcp --transport stdio"
+  ],
+  "mcp_calls": [
+    {
+      "name": "stealth_listProviders",
+      "arguments": {
+        "data": {}
+      },
+      "outcome": {
+        "isError": false,
+        "content": "[{\"type\":\"text\",\"text\":\"{\\\"providers\\\":[{\\\"id\\\":\\\"duckduckgo\\\",\\\"name\\\":\\\"DuckDuckGo\\\",\\\"help\\\":\\\"General web search (via html.duckduckgo.com). Supports site:, intitle:, filetype: operators.\\\",\\\"strategies\\\":[\\\"network\\\",\\\"dom\\\"]},{\\\"id\\\":\\\"google\\\",\\\"name\\\":\\\"Google\\\",\\\"help\\\":\\\"General web search (via google.com). Supports site:, filetype:, intitle:, inurl: operators.\\\",\\\"strategies\\\":[\\\"network\\\",\\\"dom\\\"]},{\\\"id\\\":\\\"arxiv\\\",\\\"name\\\":\\\"arXiv\\\",\\\"help\\\":\\\"Academic papers (via arxiv.org). Supports au:, ti:, cat: operators.\\\",\\\"strategies\\\":[\\\"network\\\",\\\"dom\\\"]},{\\\"id\\\":\\\"npm\\\",\\\"name\\\":\\\"npm\\",
+        "structuredContent": {
+          "providers": [
+            {
+              "id": "duckduckgo",
+              "name": "DuckDuckGo",
+              "help": "General web search (via html.duckduckgo.com). Supports site:, intitle:, filetype: operators.",
+              "strategies": [
+                "network",
+                "dom"
+              ]
+            },
+            {
+              "id": "google",
+              "name": "Google",
+              "help": "General web search (via google.com). Supports site:, filetype:, intitle:, inurl: operators.",
+              "strategies": [
+                "network",
+                "dom"
+              ]
+            },
+            {
+              "id": "arxiv",
+              "name": "arXiv",
+              "help": "Academic papers (via arxiv.org). Supports au:, ti:, cat: operators.",
+              "strategies": [
+                "network",
+                "dom"
+              ]
+            },
+            {
+              "id": "npm",
+              "name": "npm",
+              "help": "npm packages (via registry.npmjs.org API). Direct fetch. Qualifiers: author:, maintainer:, keywords:, scope:, is:unstable, not:unstable, not:insecure, boost-exact:false.",
+              "strategies": [
+                "network",
+                "dom"
+              ]
+            },
+            {
+              "id": "github",
+              "name": "GitHub",
+              "help": "GitHub search \u2014 repos by default. Use qualifier \"type:code\" for code search, \"type:repositories\" to stay explicit. Qualifiers: repo:, org:, user:, language:, license:, is:, path:, symbol:, regex. See docs.github.com/en/search-github (code search).",
+              "strategies": [
+                "network",
+                "network"
+              ]
+            },
+            {
+              "id": "maven",
+              "name": "Maven Central",
+              "help": "Java/Maven packages (via search.maven.org Solr API). Direct fetch. Qualifiers: g: (groupId), a: (artifactId), v: (version), p: (packaging), l: (classifier).",
+              "strategies": [
+                "network"
+              ]
+            },
+            {
+              "id": "wikipedia",
+              "name": "Wikipedia",
+              "help": "Wikipedia articles (via en.wikipedia.org API). Direct fetch. Free text search \u2014 no inline qualifiers.",
+              "strategies": [
+                "network"
+              ]
+            },
+            {
+              "id": "crates",
+              "name": "crates.io",
+              "help": "Rust crates (via crates.io API). Direct fetch. Free text search \u2014 no inline qualifiers.",
+              "strategies": [
+                "network",
+                "dom"
+              ]
+            },
+            {
+              "id": "pypi",
+              "name": "PyPI",
+              "help": "Python packages (via pypi.org search). Free text search \u2014 no inline qualifiers.",
+              "strategies": [
+                "network",
+                "dom"
+              ]
+            },
+            {
+              "id": "mdn",
+              "name": "MDN",
+              "help": "MDN Web Docs (via Google site search). Google qualifiers apply: site:, filetype:, intitle:, inurl:.",
+              "strategies": [
+                "dom",
+                "network"
+              ]
+            },
+            {
+              "id": "stackoverflow",
+              "name": "Stack Overflow",
+              "help": "Stack Overflow (via Google site search). Google qualifiers apply: site:, filetype:, intitle:, inurl:.",
+              "strategies": [
+                "dom",
+                "network"
+              ]
+            },
+            {
+              "id": "fetch",
+              "name": "Fetch",
+              "help": "Fetch any URL and return it as markdown. The query IS the URL (e.g. `fetch https://react.dev`). Cookieless render, no per-site config. Returns markdown in `content`, not `results`.",
+              "strategies": [
+                "fetch"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "stealth_describeProvider",
+      "arguments": {
+        "data": {
+          "input": {
+            "provider": "duckduckgo"
+          }
+        }
+      },
+      "outcome": {
+        "isError": false,
+        "content": "[{\"type\":\"text\",\"text\":\"{\\\"id\\\":\\\"duckduckgo\\\",\\\"name\\\":\\\"DuckDuckGo\\\",\\\"help\\\":\\\"General web search (via html.duckduckgo.com). Supports site:, intitle:, filetype: operators.\\\",\\\"url\\\":\\\"https://html.duckduckgo.com/html?q=demo\\\",\\\"strategies\\\":[\\\"network\\\",\\\"dom\\\"],\\\"qualifierExamples\\\":[\\\"site:example.com    Search within a site\\\",\\\"filetype:pdf        Filter by file type\\\",\\\"intitle:hello       Title must contain\\\"],\\\"bans\\\":[\\\"ddg-captcha\\\",\\\"ddg-block\\\",\\\"cloudflare-challenge\\\",\\\"cloudflare-captcha-widget\\\",\\\"cloudflare-blocked\\\"],\\\"usage\\\":\\\"search({ provider: \\\\\\\"duckduckgo\\\\\\\", query: \\",
+        "structuredContent": {
+          "id": "duckduckgo",
+          "name": "DuckDuckGo",
+          "help": "General web search (via html.duckduckgo.com). Supports site:, intitle:, filetype: operators.",
+          "url": "https://html.duckduckgo.com/html?q=demo",
+          "strategies": [
+            "network",
+            "dom"
+          ],
+          "qualifierExamples": [
+            "site:example.com    Search within a site",
+            "filetype:pdf        Filter by file type",
+            "intitle:hello       Title must contain"
+          ],
+          "bans": [
+            "ddg-captcha",
+            "ddg-block",
+            "cloudflare-challenge",
+            "cloudflare-captcha-widget",
+            "cloudflare-blocked"
+          ],
+          "usage": "search({ provider: \"duckduckgo\", query: \"tree-sitter\", qualifier: \"<optional syntax>\" }) returns results of title, url and snippet"
+        }
+      }
+    },
+    {
+      "name": "stealth_tripwireStatus",
+      "arguments": {
+        "data": {}
+      },
+      "outcome": {
+        "isError": false,
+        "content": "[{\"type\":\"text\",\"text\":\"{}\"}]",
+        "structuredContent": {}
+      }
+    },
+    {
+      "name": "stealth_chromeStatus",
+      "arguments": {
+        "data": {
+          "input": {
+            "port": 19999
+          }
+        }
+      },
+      "outcome": {
+        "isError": false,
+        "content": "[{\"type\":\"text\",\"text\":\"{\\\"running\\\":false,\\\"managed\\\":false}\"}]",
+        "structuredContent": {
+          "running": false,
+          "managed": false
+        }
+      }
+    },
+    {
+      "name": "stealth_describeProvider",
+      "arguments": {
+        "data": {
+          "input": {
+            "provider": "nope"
+          }
+        }
+      },
+      "outcome": {
+        "isError": true,
+        "content": "[{\"type\":\"text\",\"text\":\"invalid_argument: UNKNOWN_PROVIDER: Unknown provider \\\"nope\\\". Available: duckduckgo, google, arxiv, npm, github, maven, wikipedia, crates, pypi, mdn, stackoverflow, fetch \u2014 Use one of the registered provider ids (see the providers list), then retry.\"}]",
+        "structuredContent": null
+      }
+    }
+  ],
+  "op_ids_seen": [
+    "stealth/list-providers",
+    "stealth/describe-provider",
+    "stealth/tripwire-status",
+    "stealth/chrome-status"
+  ],
+  "log_files_detail": [
+    {
+      "path": "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/6ed1c5fc-cf8b-4543-8ae7-2172feed2026/scratchpad/tlv3/home.uxNiHm/.adhd/sox-ecosystem/stealth-search/logs/stealth-search.cli-2026-10-24.jsonl",
+      "bytes": 11190
+    },
+    {
+      "path": "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/6ed1c5fc-cf8b-4543-8ae7-2172feed2026/scratchpad/tlv3/home.uxNiHm/.adhd/sox-ecosystem/stealth-search/logs/stealth-search.live-service-2026-10-24.jsonl",
+      "bytes": 8884
+    },
+    {
+      "path": "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/6ed1c5fc-cf8b-4543-8ae7-2172feed2026/scratchpad/tlv3/home.uxNiHm/logs/stealth-search.cli-2026-10-24.jsonl",
+      "bytes": 4187
+    }
+  ],
+  "log_dir_flag_dir": "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/6ed1c5fc-cf8b-4543-8ae7-2172feed2026/scratchpad/tlv3/home.uxNiHm/logs",
+  "tests_added": 0,
+  "process_spawn_mocked": true,
+  "real_chrome_launched": false,
+  "real_home_sink_records_from_this_run": 0,
+  "limitations": "The plugin error record (adhd.<op>.error) carries the failure message in `error` and no typed error_code; the typed code UNKNOWN_PROVIDER is evidenced by CLI stderr (exit status 70) and over MCP by the isError tool result. The upstream twin event adhd.op.error accompanies each adhd.<op>.error (its adhd.op attribute holds the real op id) and is recorded under no_apigen_events.twin_events.",
+  "checks": [
+    {
+      "name": "cli_pairs",
+      "status": "PASS",
+      "sample_lines": [
+        "{\"ts\":\"2026-10-24T16:52:10.307Z\",\"level\":\"info\",\"event\":\"adhd.stealth/list-providers.start\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\"},\"trace_id\":\"01M5QD7CX8V9MMCHFC8F0Y7XQR\",\"pid\":59285,\"adhd.op\":\"stealth/list-providers\",\"adhd.transport\":\"cli\",\"session_id\":\"0ed280ac-42a4-40ff-a30f-0440582f7fd9\",\"worktree\":\"linked\",\"release.git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\",\"release.artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"span_id\":\"2135b3f6e583c6eb\",\"parent_span_id\":null,\"otel_trace_id\":\"bd3ff0f39acfd78410730e6f9706e63b\"}",
+        "{\"ts\":\"2026-10-24T16:52:10.309Z\",\"level\":\"info\",\"event\":\"adhd.stealth/list-providers.finish\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\"},\"trace_id\":\"01M5QD7CX8V9MMCHFC8F0Y7XQR\",\"pid\":59285,\"adhd.op\":\"stealth/list-providers\",\"adhd.transport\":\"cli\",\"session_id\":\"0ed280ac-42a4-40ff-a30f-0440582f7fd9\",\"worktree\":\"linked\",\"release.git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\",\"release.artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"span_id\":\"2135b3f6e583c6eb\",\"parent_span_id\":null,\"otel_trace_id\":\"bd3ff0f39acfd78410730e6f9706e63b\",\"duration_ms\":2}",
+        "{\"ts\":\"2026-10-24T16:52:10.542Z\",\"level\":\"info\",\"event\":\"adhd.stealth/describe-provider.start\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\"},\"trace_id\":\"01M5QD7D4H4CYZKC5TVBS0S7FE\",\"pid\":59365,\"adhd.op\":\"stealth/describe-provider\",\"adhd.transport\":\"cli\",\"session_id\":\"9b7fca5c-be86-48f6-88de-e15d66609280\",\"worktree\":\"linked\",\"release.git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\",\"release.artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"span_id\":\"d5a26b3ba517eaf3\",\"parent_span_id\":null,\"otel_trace_id\":\"3942ce93b77c70560e0ca700f34a6094\"}",
+        "{\"ts\":\"2026-10-24T16:52:10.544Z\",\"level\":\"info\",\"event\":\"adhd.stealth/describe-provider.finish\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\"},\"trace_id\":\"01M5QD7D4H4CYZKC5TVBS0S7FE\",\"pid\":59365,\"adhd.op\":\"stealth/describe-provider\",\"adhd.transport\":\"cli\",\"session_id\":\"9b7fca5c-be86-48f6-88de-e15d66609280\",\"worktree\":\"linked\",\"release.git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\",\"release.artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"span_id\":\"d5a26b3ba517eaf3\",\"parent_span_id\":null,\"otel_trace_id\":\"3942ce93b77c70560e0ca700f34a6094\",\"duration_ms\":2}",
+        "{\"ts\":\"2026-10-24T16:52:10.778Z\",\"level\":\"info\",\"event\":\"adhd.stealth/tripwire-status.start\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\"},\"trace_id\":\"01M5QD7DBXFXQWZHVV795C7F7C\",\"pid\":59441,\"adhd.op\":\"stealth/tripwire-status\",\"adhd.transport\":\"cli\",\"session_id\":\"35f388b9-746a-4060-97a1-c27a22079ca3\",\"worktree\":\"linked\",\"release.git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\",\"release.artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"span_id\":\"d8a37d2b57bb8ae6\",\"parent_span_id\":null,\"otel_trace_id\":\"1ecca723dfaddf2dc9fb8011d938a39e\"}",
+        "{\"ts\":\"2026-10-24T16:52:10.780Z\",\"level\":\"info\",\"event\":\"adhd.stealth/tripwire-status.finish\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\"},\"trace_id\":\"01M5QD7DBXFXQWZHVV795C7F7C\",\"pid\":59441,\"adhd.op\":\"stealth/tripwire-status\",\"adhd.transport\":\"cli\",\"session_id\":\"35f388b9-746a-4060-97a1-c27a22079ca3\",\"worktree\":\"linked\",\"release.git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\",\"release.artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"span_id\":\"d8a37d2b57bb8ae6\",\"parent_span_id\":null,\"otel_trace_id\":\"1ecca723dfaddf2dc9fb8011d938a39e\",\"duration_ms\":2}",
+        "{\"ts\":\"2026-10-24T16:52:11.017Z\",\"level\":\"info\",\"event\":\"adhd.stealth/chrome-status.start\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\"},\"trace_id\":\"01M5QD7DK7Q78GYK8N9ZADW3Z4\",\"pid\":59517,\"adhd.op\":\"stealth/chrome-status\",\"adhd.transport\":\"cli\",\"session_id\":\"1b1618ab-b603-4606-9f59-d17711c10c90\",\"worktree\":\"linked\",\"release.git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\",\"release.artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"span_id\":\"71a5d58b4ff63807\",\"parent_span_id\":null,\"otel_trace_id\":\"b6809d11ba754a866f6034c7ffec1055\"}",
+        "{\"ts\":\"2026-10-24T16:52:11.023Z\",\"level\":\"info\",\"event\":\"adhd.stealth/chrome-status.finish\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\"},\"trace_id\":\"01M5QD7DK7Q78GYK8N9ZADW3Z4\",\"pid\":59517,\"adhd.op\":\"stealth/chrome-status\",\"adhd.transport\":\"cli\",\"session_id\":\"1b1618ab-b603-4606-9f59-d17711c10c90\",\"worktree\":\"linked\",\"release.git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\",\"release.artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"span_id\":\"71a5d58b4ff63807\",\"parent_span_id\":null,\"otel_trace_id\":\"b6809d11ba754a866f6034c7ffec1055\",\"duration_ms\":6}"
+      ],
+      "log_files": [
+        "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/6ed1c5fc-cf8b-4543-8ae7-2172feed2026/scratchpad/tlv3/home.uxNiHm/.adhd/sox-ecosystem/stealth-search/logs/stealth-search.cli-2026-10-24.jsonl"
+      ]
+    },
+    {
+      "name": "cli_forced_error",
+      "status": "PASS",
+      "sample_lines": [
+        "{\"ts\":\"2026-10-24T16:52:11.274Z\",\"level\":\"info\",\"event\":\"adhd.stealth/describe-provider.start\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\"},\"trace_id\":\"01M5QD7DVD526J1HKNM3GQ6RWZ\",\"pid\":59593,\"adhd.op\":\"stealth/describe-provider\",\"adhd.transport\":\"cli\",\"session_id\":\"0ab61b40-bad2-4f83-acd5-5c96264a7ec2\",\"worktree\":\"linked\",\"release.git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\",\"release.artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"span_id\":\"1cbb0a5952e92c40\",\"parent_span_id\":null,\"otel_trace_id\":\"3844d2ec06a916d8ecc127a42417dd9c\"}",
+        "{\"ts\":\"2026-10-24T16:52:11.276Z\",\"level\":\"error\",\"event\":\"adhd.stealth/describe-provider.error\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\"},\"trace_id\":\"01M5QD7DVD526J1HKNM3GQ6RWZ\",\"pid\":59593,\"adhd.op\":\"stealth/describe-provider\",\"adhd.transport\":\"cli\",\"session_id\":\"0ab61b40-bad2-4f83-acd5-5c96264a7ec2\",\"worktree\":\"linked\",\"release.git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\",\"release.artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"span_id\":\"1cbb0a5952e92c40\",\"parent_span_id\":null,\"otel_trace_id\":\"3844d2ec06a916d8ecc127a42417dd9c\",\"duration_ms\":2,\"error\":\"Unknown provider \\\"nope\\\". Available: duckduckgo, google, arxiv, npm, github, maven, wikipedia, crates, pypi, mdn, stackoverflow, fetch \u2014 Use one of the registered provider ids (see the providers list), then retry.\"}"
+      ],
+      "log_files": [
+        "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/6ed1c5fc-cf8b-4543-8ae7-2172feed2026/scratchpad/tlv3/home.uxNiHm/.adhd/sox-ecosystem/stealth-search/logs/stealth-search.cli-2026-10-24.jsonl"
+      ],
+      "cli_stderr": "UNKNOWN_PROVIDER: Unknown provider \"nope\". Available: duckduckgo, google, arxiv, npm, github, maven, wikipedia, crates, pypi, mdn, stackoverflow, fetch \u2014 Use one of the registered provider ids (see the providers list), then retry.",
+      "cli_exit_code": 70,
+      "note": "the typed code UNKNOWN_PROVIDER is in the CLI stderr and exit status; the span error record carries the message in `error`"
+    },
+    {
+      "name": "mcp_pairs",
+      "status": "PASS",
+      "sample_lines": [
+        "{\"ts\":\"2026-10-24T16:52:14.342Z\",\"level\":\"info\",\"event\":\"adhd.stealth/list-providers.start\",\"service\":\"stealth-search\",\"role\":\"live-service\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:d81309df54d1d96773ea74eca90238aeb1aedfdb097c2331455ad56e2bd7fe80\",\"git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\"},\"trace_id\":\"01M5QD7GVBQ3S5WAZRMRHY12SA\",\"pid\":60003,\"adhd.op\":\"stealth/list-providers\",\"adhd.transport\":\"mcp\",\"session_id\":\"09e17b8f-2d0c-49e1-a185-56382046a851\",\"worktree\":\"linked\",\"release.git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\",\"release.artifact_sha256\":\"sha256:d81309df54d1d96773ea74eca90238aeb1aedfdb097c2331455ad56e2bd7fe80\",\"span_id\":\"d6e8f9b58e4cd107\",\"parent_span_id\":null,\"otel_trace_id\":\"aa1aa5e551214cea2334d7b0a776c7aa\"}",
+        "{\"ts\":\"2026-10-24T16:52:14.343Z\",\"level\":\"info\",\"event\":\"adhd.stealth/list-providers.finish\",\"service\":\"stealth-search\",\"role\":\"live-service\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:d81309df54d1d96773ea74eca90238aeb1aedfdb097c2331455ad56e2bd7fe80\",\"git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\"},\"trace_id\":\"01M5QD7GVBQ3S5WAZRMRHY12SA\",\"pid\":60003,\"adhd.op\":\"stealth/list-providers\",\"adhd.transport\":\"mcp\",\"session_id\":\"09e17b8f-2d0c-49e1-a185-56382046a851\",\"worktree\":\"linked\",\"release.git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\",\"release.artifact_sha256\":\"sha256:d81309df54d1d96773ea74eca90238aeb1aedfdb097c2331455ad56e2bd7fe80\",\"span_id\":\"d6e8f9b58e4cd107\",\"parent_span_id\":null,\"otel_trace_id\":\"aa1aa5e551214cea2334d7b0a776c7aa\",\"duration_ms\":1}",
+        "{\"ts\":\"2026-10-24T16:52:14.346Z\",\"level\":\"info\",\"event\":\"adhd.stealth/describe-provider.start\",\"service\":\"stealth-search\",\"role\":\"live-service\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:d81309df54d1d96773ea74eca90238aeb1aedfdb097c2331455ad56e2bd7fe80\",\"git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\"},\"trace_id\":\"01M5QD7GW9C2MFX5G1NKTJ7AMH\",\"pid\":60003,\"adhd.op\":\"stealth/describe-provider\",\"adhd.transport\":\"mcp\",\"session_id\":\"09e17b8f-2d0c-49e1-a185-56382046a851\",\"worktree\":\"linked\",\"release.git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\",\"release.artifact_sha256\":\"sha256:d81309df54d1d96773ea74eca90238aeb1aedfdb097c2331455ad56e2bd7fe80\",\"span_id\":\"d07428a8f9f2631d\",\"parent_span_id\":null,\"otel_trace_id\":\"2fddcc0ccf085a323480b9a8c1a01c74\"}",
+        "{\"ts\":\"2026-10-24T16:52:14.346Z\",\"level\":\"info\",\"event\":\"adhd.stealth/describe-provider.finish\",\"service\":\"stealth-search\",\"role\":\"live-service\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:d81309df54d1d96773ea74eca90238aeb1aedfdb097c2331455ad56e2bd7fe80\",\"git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\"},\"trace_id\":\"01M5QD7GW9C2MFX5G1NKTJ7AMH\",\"pid\":60003,\"adhd.op\":\"stealth/describe-provider\",\"adhd.transport\":\"mcp\",\"session_id\":\"09e17b8f-2d0c-49e1-a185-56382046a851\",\"worktree\":\"linked\",\"release.git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\",\"release.artifact_sha256\":\"sha256:d81309df54d1d96773ea74eca90238aeb1aedfdb097c2331455ad56e2bd7fe80\",\"span_id\":\"d07428a8f9f2631d\",\"parent_span_id\":null,\"otel_trace_id\":\"2fddcc0ccf085a323480b9a8c1a01c74\",\"duration_ms\":0}",
+        "{\"ts\":\"2026-10-24T16:52:14.349Z\",\"level\":\"info\",\"event\":\"adhd.stealth/tripwire-status.start\",\"service\":\"stealth-search\",\"role\":\"live-service\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:d81309df54d1d96773ea74eca90238aeb1aedfdb097c2331455ad56e2bd7fe80\",\"git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\"},\"trace_id\":\"01M5QD7GWBJY5XDYR07QJ6EDBJ\",\"pid\":60003,\"adhd.op\":\"stealth/tripwire-status\",\"adhd.transport\":\"mcp\",\"session_id\":\"09e17b8f-2d0c-49e1-a185-56382046a851\",\"worktree\":\"linked\",\"release.git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\",\"release.artifact_sha256\":\"sha256:d81309df54d1d96773ea74eca90238aeb1aedfdb097c2331455ad56e2bd7fe80\",\"span_id\":\"e7c79e25a2453708\",\"parent_span_id\":null,\"otel_trace_id\":\"d9adfb38279d64b802050df8aa5b411f\"}",
+        "{\"ts\":\"2026-10-24T16:52:14.349Z\",\"level\":\"info\",\"event\":\"adhd.stealth/tripwire-status.finish\",\"service\":\"stealth-search\",\"role\":\"live-service\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:d81309df54d1d96773ea74eca90238aeb1aedfdb097c2331455ad56e2bd7fe80\",\"git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\"},\"trace_id\":\"01M5QD7GWBJY5XDYR07QJ6EDBJ\",\"pid\":60003,\"adhd.op\":\"stealth/tripwire-status\",\"adhd.transport\":\"mcp\",\"session_id\":\"09e17b8f-2d0c-49e1-a185-56382046a851\",\"worktree\":\"linked\",\"release.git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\",\"release.artifact_sha256\":\"sha256:d81309df54d1d96773ea74eca90238aeb1aedfdb097c2331455ad56e2bd7fe80\",\"span_id\":\"e7c79e25a2453708\",\"parent_span_id\":null,\"otel_trace_id\":\"d9adfb38279d64b802050df8aa5b411f\",\"duration_ms\":0}",
+        "{\"ts\":\"2026-10-24T16:52:14.355Z\",\"level\":\"info\",\"event\":\"adhd.stealth/chrome-status.start\",\"service\":\"stealth-search\",\"role\":\"live-service\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:d81309df54d1d96773ea74eca90238aeb1aedfdb097c2331455ad56e2bd7fe80\",\"git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\"},\"trace_id\":\"01M5QD7GWEZQSAB8BZ6X0W18W2\",\"pid\":60003,\"adhd.op\":\"stealth/chrome-status\",\"adhd.transport\":\"mcp\",\"session_id\":\"09e17b8f-2d0c-49e1-a185-56382046a851\",\"worktree\":\"linked\",\"release.git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\",\"release.artifact_sha256\":\"sha256:d81309df54d1d96773ea74eca90238aeb1aedfdb097c2331455ad56e2bd7fe80\",\"span_id\":\"7b059fa6d1be7a01\",\"parent_span_id\":null,\"otel_trace_id\":\"133f8773ad855adeb075ae1d1e1b6007\"}",
+        "{\"ts\":\"2026-10-24T16:52:14.357Z\",\"level\":\"info\",\"event\":\"adhd.stealth/chrome-status.finish\",\"service\":\"stealth-search\",\"role\":\"live-service\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:d81309df54d1d96773ea74eca90238aeb1aedfdb097c2331455ad56e2bd7fe80\",\"git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\"},\"trace_id\":\"01M5QD7GWEZQSAB8BZ6X0W18W2\",\"pid\":60003,\"adhd.op\":\"stealth/chrome-status\",\"adhd.transport\":\"mcp\",\"session_id\":\"09e17b8f-2d0c-49e1-a185-56382046a851\",\"worktree\":\"linked\",\"release.git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\",\"release.artifact_sha256\":\"sha256:d81309df54d1d96773ea74eca90238aeb1aedfdb097c2331455ad56e2bd7fe80\",\"span_id\":\"7b059fa6d1be7a01\",\"parent_span_id\":null,\"otel_trace_id\":\"133f8773ad855adeb075ae1d1e1b6007\",\"duration_ms\":2}"
+      ],
+      "log_files": [
+        "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/6ed1c5fc-cf8b-4543-8ae7-2172feed2026/scratchpad/tlv3/home.uxNiHm/.adhd/sox-ecosystem/stealth-search/logs/stealth-search.live-service-2026-10-24.jsonl"
+      ]
+    },
+    {
+      "name": "mcp_forced_error",
+      "status": "PASS",
+      "sample_lines": [
+        "{\"ts\":\"2026-10-24T16:52:14.358Z\",\"level\":\"info\",\"event\":\"adhd.stealth/describe-provider.start\",\"service\":\"stealth-search\",\"role\":\"live-service\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:d81309df54d1d96773ea74eca90238aeb1aedfdb097c2331455ad56e2bd7fe80\",\"git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\"},\"trace_id\":\"01M5QD7GWPYMXCPVBD0MHAST9J\",\"pid\":60003,\"adhd.op\":\"stealth/describe-provider\",\"adhd.transport\":\"mcp\",\"session_id\":\"09e17b8f-2d0c-49e1-a185-56382046a851\",\"worktree\":\"linked\",\"release.git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\",\"release.artifact_sha256\":\"sha256:d81309df54d1d96773ea74eca90238aeb1aedfdb097c2331455ad56e2bd7fe80\",\"span_id\":\"0079c95cdb26cf8a\",\"parent_span_id\":null,\"otel_trace_id\":\"b41ed8de0b6298c864d36db734124ab7\"}",
+        "{\"ts\":\"2026-10-24T16:52:14.358Z\",\"level\":\"error\",\"event\":\"adhd.stealth/describe-provider.error\",\"service\":\"stealth-search\",\"role\":\"live-service\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:d81309df54d1d96773ea74eca90238aeb1aedfdb097c2331455ad56e2bd7fe80\",\"git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\"},\"trace_id\":\"01M5QD7GWPYMXCPVBD0MHAST9J\",\"pid\":60003,\"adhd.op\":\"stealth/describe-provider\",\"adhd.transport\":\"mcp\",\"session_id\":\"09e17b8f-2d0c-49e1-a185-56382046a851\",\"worktree\":\"linked\",\"release.git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\",\"release.artifact_sha256\":\"sha256:d81309df54d1d96773ea74eca90238aeb1aedfdb097c2331455ad56e2bd7fe80\",\"span_id\":\"0079c95cdb26cf8a\",\"parent_span_id\":null,\"otel_trace_id\":\"b41ed8de0b6298c864d36db734124ab7\",\"duration_ms\":0,\"error\":\"UNKNOWN_PROVIDER: Unknown provider \\\"nope\\\". Available: duckduckgo, google, arxiv, npm, github, maven, wikipedia, crates, pypi, mdn, stackoverflow, fetch \u2014 Use one of the registered provider ids (see the providers list), then retry.\"}"
+      ],
+      "log_files": [
+        "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/6ed1c5fc-cf8b-4543-8ae7-2172feed2026/scratchpad/tlv3/home.uxNiHm/.adhd/sox-ecosystem/stealth-search/logs/stealth-search.live-service-2026-10-24.jsonl"
+      ],
+      "mcp_result_is_error": true,
+      "mcp_result_content": "[{\"type\":\"text\",\"text\":\"invalid_argument: UNKNOWN_PROVIDER: Unknown provider \\\"nope\\\". Available: duckduckgo, google, arxiv, npm, github, maven, wikipedia, crates, pypi, mdn, stackoverflow, fetch \u2014 Use one of the registered provider ids (see the providers list), then retry.\"}]",
+      "mcp_result_structured": null,
+      "note": "StealthSearchError over MCP is an isError tool result carrying the typed code; no JSON-RPC rejection"
+    },
+    {
+      "name": "transport_attr",
+      "status": "PASS",
+      "sample_lines": [
+        "{\"ts\":\"2026-10-24T16:52:10.309Z\",\"level\":\"info\",\"event\":\"adhd.stealth/list-providers.finish\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\"},\"trace_id\":\"01M5QD7CX8V9MMCHFC8F0Y7XQR\",\"pid\":59285,\"adhd.op\":\"stealth/list-providers\",\"adhd.transport\":\"cli\",\"session_id\":\"0ed280ac-42a4-40ff-a30f-0440582f7fd9\",\"worktree\":\"linked\",\"release.git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\",\"release.artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"span_id\":\"2135b3f6e583c6eb\",\"parent_span_id\":null,\"otel_trace_id\":\"bd3ff0f39acfd78410730e6f9706e63b\",\"duration_ms\":2}",
+        "{\"ts\":\"2026-10-24T16:52:14.343Z\",\"level\":\"info\",\"event\":\"adhd.stealth/list-providers.finish\",\"service\":\"stealth-search\",\"role\":\"live-service\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:d81309df54d1d96773ea74eca90238aeb1aedfdb097c2331455ad56e2bd7fe80\",\"git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\"},\"trace_id\":\"01M5QD7GVBQ3S5WAZRMRHY12SA\",\"pid\":60003,\"adhd.op\":\"stealth/list-providers\",\"adhd.transport\":\"mcp\",\"session_id\":\"09e17b8f-2d0c-49e1-a185-56382046a851\",\"worktree\":\"linked\",\"release.git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\",\"release.artifact_sha256\":\"sha256:d81309df54d1d96773ea74eca90238aeb1aedfdb097c2331455ad56e2bd7fe80\",\"span_id\":\"d6e8f9b58e4cd107\",\"parent_span_id\":null,\"otel_trace_id\":\"aa1aa5e551214cea2334d7b0a776c7aa\",\"duration_ms\":1}"
+      ],
+      "log_files": [
+        "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/6ed1c5fc-cf8b-4543-8ae7-2172feed2026/scratchpad/tlv3/home.uxNiHm/.adhd/sox-ecosystem/stealth-search/logs/stealth-search.cli-2026-10-24.jsonl",
+        "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/6ed1c5fc-cf8b-4543-8ae7-2172feed2026/scratchpad/tlv3/home.uxNiHm/.adhd/sox-ecosystem/stealth-search/logs/stealth-search.live-service-2026-10-24.jsonl"
+      ]
+    },
+    {
+      "name": "role_attr",
+      "status": "PASS",
+      "sample_lines": [
+        "{\"ts\":\"2026-10-24T16:52:10.309Z\",\"level\":\"info\",\"event\":\"adhd.stealth/list-providers.finish\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\"},\"trace_id\":\"01M5QD7CX8V9MMCHFC8F0Y7XQR\",\"pid\":59285,\"adhd.op\":\"stealth/list-providers\",\"adhd.transport\":\"cli\",\"session_id\":\"0ed280ac-42a4-40ff-a30f-0440582f7fd9\",\"worktree\":\"linked\",\"release.git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\",\"release.artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"span_id\":\"2135b3f6e583c6eb\",\"parent_span_id\":null,\"otel_trace_id\":\"bd3ff0f39acfd78410730e6f9706e63b\",\"duration_ms\":2}",
+        "{\"ts\":\"2026-10-24T16:52:14.343Z\",\"level\":\"info\",\"event\":\"adhd.stealth/list-providers.finish\",\"service\":\"stealth-search\",\"role\":\"live-service\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:d81309df54d1d96773ea74eca90238aeb1aedfdb097c2331455ad56e2bd7fe80\",\"git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\"},\"trace_id\":\"01M5QD7GVBQ3S5WAZRMRHY12SA\",\"pid\":60003,\"adhd.op\":\"stealth/list-providers\",\"adhd.transport\":\"mcp\",\"session_id\":\"09e17b8f-2d0c-49e1-a185-56382046a851\",\"worktree\":\"linked\",\"release.git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\",\"release.artifact_sha256\":\"sha256:d81309df54d1d96773ea74eca90238aeb1aedfdb097c2331455ad56e2bd7fe80\",\"span_id\":\"d6e8f9b58e4cd107\",\"parent_span_id\":null,\"otel_trace_id\":\"aa1aa5e551214cea2334d7b0a776c7aa\",\"duration_ms\":1}"
+      ],
+      "log_files": [
+        "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/6ed1c5fc-cf8b-4543-8ae7-2172feed2026/scratchpad/tlv3/home.uxNiHm/.adhd/sox-ecosystem/stealth-search/logs/stealth-search.cli-2026-10-24.jsonl",
+        "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/6ed1c5fc-cf8b-4543-8ae7-2172feed2026/scratchpad/tlv3/home.uxNiHm/.adhd/sox-ecosystem/stealth-search/logs/stealth-search.live-service-2026-10-24.jsonl"
+      ]
+    },
+    {
+      "name": "no_apigen_events",
+      "status": "PASS",
+      "sample_lines": [
+        "{\"ts\":\"2026-10-24T16:52:10.307Z\",\"level\":\"info\",\"event\":\"adhd.stealth/list-providers.start\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\"},\"trace_id\":\"01M5QD7CX8V9MMCHFC8F0Y7XQR\",\"pid\":59285,\"adhd.op\":\"stealth/list-providers\",\"adhd.transport\":\"cli\",\"session_id\":\"0ed280ac-42a4-40ff-a30f-0440582f7fd9\",\"worktree\":\"linked\",\"release.git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\",\"release.artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"span_id\":\"2135b3f6e583c6eb\",\"parent_span_id\":null,\"otel_trace_id\":\"bd3ff0f39acfd78410730e6f9706e63b\"}",
+        "{\"ts\":\"2026-10-24T16:52:10.309Z\",\"level\":\"info\",\"event\":\"adhd.stealth/list-providers.finish\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\"},\"trace_id\":\"01M5QD7CX8V9MMCHFC8F0Y7XQR\",\"pid\":59285,\"adhd.op\":\"stealth/list-providers\",\"adhd.transport\":\"cli\",\"session_id\":\"0ed280ac-42a4-40ff-a30f-0440582f7fd9\",\"worktree\":\"linked\",\"release.git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\",\"release.artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"span_id\":\"2135b3f6e583c6eb\",\"parent_span_id\":null,\"otel_trace_id\":\"bd3ff0f39acfd78410730e6f9706e63b\",\"duration_ms\":2}",
+        "{\"ts\":\"2026-10-24T16:52:14.342Z\",\"level\":\"info\",\"event\":\"adhd.stealth/list-providers.start\",\"service\":\"stealth-search\",\"role\":\"live-service\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:d81309df54d1d96773ea74eca90238aeb1aedfdb097c2331455ad56e2bd7fe80\",\"git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\"},\"trace_id\":\"01M5QD7GVBQ3S5WAZRMRHY12SA\",\"pid\":60003,\"adhd.op\":\"stealth/list-providers\",\"adhd.transport\":\"mcp\",\"session_id\":\"09e17b8f-2d0c-49e1-a185-56382046a851\",\"worktree\":\"linked\",\"release.git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\",\"release.artifact_sha256\":\"sha256:d81309df54d1d96773ea74eca90238aeb1aedfdb097c2331455ad56e2bd7fe80\",\"span_id\":\"d6e8f9b58e4cd107\",\"parent_span_id\":null,\"otel_trace_id\":\"aa1aa5e551214cea2334d7b0a776c7aa\"}",
+        "{\"ts\":\"2026-10-24T16:52:14.343Z\",\"level\":\"info\",\"event\":\"adhd.stealth/list-providers.finish\",\"service\":\"stealth-search\",\"role\":\"live-service\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:d81309df54d1d96773ea74eca90238aeb1aedfdb097c2331455ad56e2bd7fe80\",\"git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\"},\"trace_id\":\"01M5QD7GVBQ3S5WAZRMRHY12SA\",\"pid\":60003,\"adhd.op\":\"stealth/list-providers\",\"adhd.transport\":\"mcp\",\"session_id\":\"09e17b8f-2d0c-49e1-a185-56382046a851\",\"worktree\":\"linked\",\"release.git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\",\"release.artifact_sha256\":\"sha256:d81309df54d1d96773ea74eca90238aeb1aedfdb097c2331455ad56e2bd7fe80\",\"span_id\":\"d6e8f9b58e4cd107\",\"parent_span_id\":null,\"otel_trace_id\":\"aa1aa5e551214cea2334d7b0a776c7aa\",\"duration_ms\":1}"
+      ],
+      "log_files": [
+        "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/6ed1c5fc-cf8b-4543-8ae7-2172feed2026/scratchpad/tlv3/home.uxNiHm/.adhd/sox-ecosystem/stealth-search/logs/stealth-search.cli-2026-10-24.jsonl",
+        "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/6ed1c5fc-cf8b-4543-8ae7-2172feed2026/scratchpad/tlv3/home.uxNiHm/.adhd/sox-ecosystem/stealth-search/logs/stealth-search.live-service-2026-10-24.jsonl"
+      ],
+      "apigen_event_count": 0,
+      "records_scanned": 30,
+      "log_files_scanned": [
+        "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/6ed1c5fc-cf8b-4543-8ae7-2172feed2026/scratchpad/tlv3/home.uxNiHm/.adhd/sox-ecosystem/stealth-search/logs/stealth-search.cli-2026-10-24.jsonl",
+        "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/6ed1c5fc-cf8b-4543-8ae7-2172feed2026/scratchpad/tlv3/home.uxNiHm/.adhd/sox-ecosystem/stealth-search/logs/stealth-search.live-service-2026-10-24.jsonl",
+        "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/6ed1c5fc-cf8b-4543-8ae7-2172feed2026/scratchpad/tlv3/home.uxNiHm/logs/stealth-search.cli-2026-10-24.jsonl"
+      ],
+      "twin_event_count": 4,
+      "twin_events": [
+        "{\"ts\":\"2026-10-24T16:52:11.276Z\",\"level\":\"error\",\"event\":\"adhd.op.error\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\"},\"trace_id\":\"01M5QD7DVD526J1HKNM3GQ6RWZ\",\"pid\":59593,\"adhd.op\":\"stealth/describe-provider\",\"adhd.transport\":\"cli\",\"session_id\":\"0ab61b40-bad2-4f83-acd5-5c96264a7ec2\",\"worktree\":\"linked\",\"release.git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\",\"release.artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"span\":\"adhd.stealth/describe-provider\",\"duration_ms\":31,\"err\":\"Unknown provider \\\"nope\\\". Available: duckduckgo, google, arxiv, npm, github, maven, wikipedia, crates, pypi, mdn, stackoverflow, fetch \u2014 Use one of the registered provider ids (see the providers list), then retry.\"}",
+        "{\"ts\":\"2026-10-24T16:52:11.495Z\",\"level\":\"error\",\"event\":\"adhd.op.error\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\"},\"trace_id\":\"01M5QD7E2NNGZZ3JAA10RJZZVX\",\"pid\":59671,\"adhd.op\":\"stealth/chrome-status\",\"adhd.transport\":\"cli\",\"session_id\":\"fc36d835-9559-48d5-941c-938b6cfe2203\",\"worktree\":\"linked\",\"release.git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\",\"release.artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"span\":\"adhd.stealth/chrome-status\",\"duration_ms\":18,\"err\":\"--cdp-port: expected an integer, got \\\"abc\\\" \u2014 Run the command with --help and pass a valid value for the flag.\"}",
+        "{\"ts\":\"2026-10-24T16:52:14.358Z\",\"level\":\"error\",\"event\":\"adhd.op.error\",\"service\":\"stealth-search\",\"role\":\"live-service\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:d81309df54d1d96773ea74eca90238aeb1aedfdb097c2331455ad56e2bd7fe80\",\"git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\"},\"trace_id\":\"01M5QD7GWPYMXCPVBD0MHAST9J\",\"pid\":60003,\"adhd.op\":\"stealth/describe-provider\",\"adhd.transport\":\"mcp\",\"session_id\":\"09e17b8f-2d0c-49e1-a185-56382046a851\",\"worktree\":\"linked\",\"release.git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\",\"release.artifact_sha256\":\"sha256:d81309df54d1d96773ea74eca90238aeb1aedfdb097c2331455ad56e2bd7fe80\",\"span\":\"adhd.stealth/describe-provider\",\"duration_ms\":0,\"err\":\"UNKNOWN_PROVIDER: Unknown provider \\\"nope\\\". Available: duckduckgo, google, arxiv, npm, github, maven, wikipedia, crates, pypi, mdn, stackoverflow, fetch \u2014 Use one of the registered provider ids (see the providers list), then retry.\"}",
+        "{\"ts\":\"2026-10-24T16:52:14.022Z\",\"level\":\"error\",\"event\":\"adhd.op.error\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\"},\"trace_id\":\"01M5QD7GH6RJ7NE50Y7KK9K718\",\"pid\":59924,\"adhd.op\":\"stealth/describe-provider\",\"adhd.transport\":\"cli\",\"session_id\":\"1ac160d1-27a0-446d-9c96-7a7986706012\",\"worktree\":\"linked\",\"release.git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\",\"release.artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"span\":\"adhd.stealth/describe-provider\",\"duration_ms\":32,\"err\":\"Unknown provider \\\"nope\\\". Available: duckduckgo, google, arxiv, npm, github, maven, wikipedia, crates, pypi, mdn, stackoverflow, fetch \u2014 Use one of the registered provider ids (see the providers list), then retry.\"}"
+      ]
+    },
+    {
+      "name": "sink_dir",
+      "status": "PASS",
+      "sample_lines": [
+        "{\"ts\":\"2026-10-24T16:52:10.307Z\",\"level\":\"info\",\"event\":\"adhd.stealth/list-providers.start\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\"},\"trace_id\":\"01M5QD7CX8V9MMCHFC8F0Y7XQR\",\"pid\":59285,\"adhd.op\":\"stealth/list-providers\",\"adhd.transport\":\"cli\",\"session_id\":\"0ed280ac-42a4-40ff-a30f-0440582f7fd9\",\"worktree\":\"linked\",\"release.git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\",\"release.artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"span_id\":\"2135b3f6e583c6eb\",\"parent_span_id\":null,\"otel_trace_id\":\"bd3ff0f39acfd78410730e6f9706e63b\"}",
+        "{\"ts\":\"2026-10-24T16:52:10.309Z\",\"level\":\"info\",\"event\":\"adhd.stealth/list-providers.finish\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\"},\"trace_id\":\"01M5QD7CX8V9MMCHFC8F0Y7XQR\",\"pid\":59285,\"adhd.op\":\"stealth/list-providers\",\"adhd.transport\":\"cli\",\"session_id\":\"0ed280ac-42a4-40ff-a30f-0440582f7fd9\",\"worktree\":\"linked\",\"release.git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\",\"release.artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"span_id\":\"2135b3f6e583c6eb\",\"parent_span_id\":null,\"otel_trace_id\":\"bd3ff0f39acfd78410730e6f9706e63b\",\"duration_ms\":2}",
+        "{\"ts\":\"2026-10-24T16:52:14.342Z\",\"level\":\"info\",\"event\":\"adhd.stealth/list-providers.start\",\"service\":\"stealth-search\",\"role\":\"live-service\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:d81309df54d1d96773ea74eca90238aeb1aedfdb097c2331455ad56e2bd7fe80\",\"git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\"},\"trace_id\":\"01M5QD7GVBQ3S5WAZRMRHY12SA\",\"pid\":60003,\"adhd.op\":\"stealth/list-providers\",\"adhd.transport\":\"mcp\",\"session_id\":\"09e17b8f-2d0c-49e1-a185-56382046a851\",\"worktree\":\"linked\",\"release.git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\",\"release.artifact_sha256\":\"sha256:d81309df54d1d96773ea74eca90238aeb1aedfdb097c2331455ad56e2bd7fe80\",\"span_id\":\"d6e8f9b58e4cd107\",\"parent_span_id\":null,\"otel_trace_id\":\"aa1aa5e551214cea2334d7b0a776c7aa\"}",
+        "{\"ts\":\"2026-10-24T16:52:14.343Z\",\"level\":\"info\",\"event\":\"adhd.stealth/list-providers.finish\",\"service\":\"stealth-search\",\"role\":\"live-service\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:d81309df54d1d96773ea74eca90238aeb1aedfdb097c2331455ad56e2bd7fe80\",\"git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\"},\"trace_id\":\"01M5QD7GVBQ3S5WAZRMRHY12SA\",\"pid\":60003,\"adhd.op\":\"stealth/list-providers\",\"adhd.transport\":\"mcp\",\"session_id\":\"09e17b8f-2d0c-49e1-a185-56382046a851\",\"worktree\":\"linked\",\"release.git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\",\"release.artifact_sha256\":\"sha256:d81309df54d1d96773ea74eca90238aeb1aedfdb097c2331455ad56e2bd7fe80\",\"span_id\":\"d6e8f9b58e4cd107\",\"parent_span_id\":null,\"otel_trace_id\":\"aa1aa5e551214cea2334d7b0a776c7aa\",\"duration_ms\":1}"
+      ],
+      "log_files": [
+        "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/6ed1c5fc-cf8b-4543-8ae7-2172feed2026/scratchpad/tlv3/home.uxNiHm/.adhd/sox-ecosystem/stealth-search/logs/stealth-search.cli-2026-10-24.jsonl",
+        "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/6ed1c5fc-cf8b-4543-8ae7-2172feed2026/scratchpad/tlv3/home.uxNiHm/.adhd/sox-ecosystem/stealth-search/logs/stealth-search.live-service-2026-10-24.jsonl"
+      ],
+      "sink_dir": "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/6ed1c5fc-cf8b-4543-8ae7-2172feed2026/scratchpad/tlv3/home.uxNiHm/.adhd/sox-ecosystem/stealth-search/logs",
+      "files_non_empty_before_mcp_exit": [
+        {
+          "f": "stealth-search.live-service-2026-10-24.jsonl",
+          "bytes": 8884
+        }
+      ]
+    },
+    {
+      "name": "log_dir_flag",
+      "status": "PASS",
+      "sample_lines": [
+        "{\"ts\":\"2026-10-24T16:52:13.787Z\",\"level\":\"info\",\"event\":\"adhd.stealth/list-providers.start\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\"},\"trace_id\":\"01M5QD7G9Y5R45CD0D8SHCVYPX\",\"pid\":59848,\"adhd.op\":\"stealth/list-providers\",\"adhd.transport\":\"cli\",\"session_id\":\"de7635ca-613b-4957-bc34-d2be7040c0b9\",\"worktree\":\"linked\",\"release.git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\",\"release.artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"span_id\":\"9dcd40ef98f54114\",\"parent_span_id\":null,\"otel_trace_id\":\"9a230d3ee78317cacb24d56d27f95416\"}",
+        "{\"ts\":\"2026-10-24T16:52:13.789Z\",\"level\":\"info\",\"event\":\"adhd.stealth/list-providers.finish\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\"},\"trace_id\":\"01M5QD7G9Y5R45CD0D8SHCVYPX\",\"pid\":59848,\"adhd.op\":\"stealth/list-providers\",\"adhd.transport\":\"cli\",\"session_id\":\"de7635ca-613b-4957-bc34-d2be7040c0b9\",\"worktree\":\"linked\",\"release.git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\",\"release.artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"span_id\":\"9dcd40ef98f54114\",\"parent_span_id\":null,\"otel_trace_id\":\"9a230d3ee78317cacb24d56d27f95416\",\"duration_ms\":2}",
+        "{\"ts\":\"2026-10-24T16:52:14.021Z\",\"level\":\"info\",\"event\":\"adhd.stealth/describe-provider.start\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\"},\"trace_id\":\"01M5QD7GH6RJ7NE50Y7KK9K718\",\"pid\":59924,\"adhd.op\":\"stealth/describe-provider\",\"adhd.transport\":\"cli\",\"session_id\":\"1ac160d1-27a0-446d-9c96-7a7986706012\",\"worktree\":\"linked\",\"release.git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\",\"release.artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"span_id\":\"07a528056864ef23\",\"parent_span_id\":null,\"otel_trace_id\":\"d1655d7df428f09ae3838d8da033156f\"}",
+        "{\"ts\":\"2026-10-24T16:52:14.023Z\",\"level\":\"error\",\"event\":\"adhd.stealth/describe-provider.error\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\"},\"trace_id\":\"01M5QD7GH6RJ7NE50Y7KK9K718\",\"pid\":59924,\"adhd.op\":\"stealth/describe-provider\",\"adhd.transport\":\"cli\",\"session_id\":\"1ac160d1-27a0-446d-9c96-7a7986706012\",\"worktree\":\"linked\",\"release.git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\",\"release.artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"span_id\":\"07a528056864ef23\",\"parent_span_id\":null,\"otel_trace_id\":\"d1655d7df428f09ae3838d8da033156f\",\"duration_ms\":2,\"error\":\"Unknown provider \\\"nope\\\". Available: duckduckgo, google, arxiv, npm, github, maven, wikipedia, crates, pypi, mdn, stackoverflow, fetch \u2014 Use one of the registered provider ids (see the providers list), then retry.\"}"
+      ],
+      "log_files": [
+        "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/6ed1c5fc-cf8b-4543-8ae7-2172feed2026/scratchpad/tlv3/home.uxNiHm/logs/stealth-search.cli-2026-10-24.jsonl"
+      ],
+      "log_dir_flag_dir": "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/6ed1c5fc-cf8b-4543-8ae7-2172feed2026/scratchpad/tlv3/home.uxNiHm/logs"
+    },
+    {
+      "name": "mcp_stdout_jsonrpc_only",
+      "status": "PASS",
+      "sample_lines": [
+        "{\"ts\":\"2026-10-24T16:52:14.342Z\",\"level\":\"info\",\"event\":\"adhd.stealth/list-providers.start\",\"service\":\"stealth-search\",\"role\":\"live-service\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:d81309df54d1d96773ea74eca90238aeb1aedfdb097c2331455ad56e2bd7fe80\",\"git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\"},\"trace_id\":\"01M5QD7GVBQ3S5WAZRMRHY12SA\",\"pid\":60003,\"adhd.op\":\"stealth/list-providers\",\"adhd.transport\":\"mcp\",\"session_id\":\"09e17b8f-2d0c-49e1-a185-56382046a851\",\"worktree\":\"linked\",\"release.git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\",\"release.artifact_sha256\":\"sha256:d81309df54d1d96773ea74eca90238aeb1aedfdb097c2331455ad56e2bd7fe80\",\"span_id\":\"d6e8f9b58e4cd107\",\"parent_span_id\":null,\"otel_trace_id\":\"aa1aa5e551214cea2334d7b0a776c7aa\"}",
+        "{\"ts\":\"2026-10-24T16:52:14.343Z\",\"level\":\"info\",\"event\":\"adhd.stealth/list-providers.finish\",\"service\":\"stealth-search\",\"role\":\"live-service\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:d81309df54d1d96773ea74eca90238aeb1aedfdb097c2331455ad56e2bd7fe80\",\"git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\"},\"trace_id\":\"01M5QD7GVBQ3S5WAZRMRHY12SA\",\"pid\":60003,\"adhd.op\":\"stealth/list-providers\",\"adhd.transport\":\"mcp\",\"session_id\":\"09e17b8f-2d0c-49e1-a185-56382046a851\",\"worktree\":\"linked\",\"release.git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\",\"release.artifact_sha256\":\"sha256:d81309df54d1d96773ea74eca90238aeb1aedfdb097c2331455ad56e2bd7fe80\",\"span_id\":\"d6e8f9b58e4cd107\",\"parent_span_id\":null,\"otel_trace_id\":\"aa1aa5e551214cea2334d7b0a776c7aa\",\"duration_ms\":1}"
+      ],
+      "log_files": [
+        "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/6ed1c5fc-cf8b-4543-8ae7-2172feed2026/scratchpad/tlv3/home.uxNiHm/.adhd/sox-ecosystem/stealth-search/logs/stealth-search.live-service-2026-10-24.jsonl"
+      ],
+      "non_jsonrpc_stdout_lines": 0,
+      "stdout_line_count": 6,
+      "stdout_head": [
+        "{\"result\":{\"tools\":[{\"name\":\"stealth_search\",\"description\":\"Search a provider (duckduckgo, google, github, npm, arxiv and more) or read a URL as markdown with the fetch provider. Returns titles, urls ",
+        "{\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"providers\\\":[{\\\"id\\\":\\\"duckduckgo\\\",\\\"name\\\":\\\"DuckDuckGo\\\",\\\"help\\\":\\\"General web search (via html.duckduckgo.com). Supports site:, intitle:, filetype:",
+        "{\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"id\\\":\\\"duckduckgo\\\",\\\"name\\\":\\\"DuckDuckGo\\\",\\\"help\\\":\\\"General web search (via html.duckduckgo.com). Supports site:, intitle:, filetype: operators.\\\",\\\"",
+        "{\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{}\"}],\"structuredContent\":{}},\"jsonrpc\":\"2.0\",\"id\":4}",
+        "{\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"running\\\":false,\\\"managed\\\":false}\"}],\"structuredContent\":{\"running\":false,\"managed\":false}},\"jsonrpc\":\"2.0\",\"id\":5}",
+        "{\"result\":{\"_meta\":{\"adhd/error\":{\"code\":\"invalid_argument\"}},\"content\":[{\"type\":\"text\",\"text\":\"invalid_argument: UNKNOWN_PROVIDER: Unknown provider \\\"nope\\\". Available: duckduckgo, google, arxiv, npm"
+      ]
+    },
+    {
+      "name": "stdin_eof_shutdown",
+      "status": "PASS",
+      "sample_lines": [
+        "{\"event\":\"stdin_eof\",\"exit_code\":0,\"signal\":null}"
+      ],
+      "log_files": [
+        "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/6ed1c5fc-cf8b-4543-8ae7-2172feed2026/scratchpad/tlv3/home.uxNiHm/.adhd/sox-ecosystem/stealth-search/logs/stealth-search.live-service-2026-10-24.jsonl"
+      ],
+      "exit_code": 0,
+      "signal": null
+    },
+    {
+      "name": "every_command_spanned",
+      "status": "PASS",
+      "sample_lines": [
+        "{\"ts\":\"2026-10-24T16:52:10.307Z\",\"level\":\"info\",\"event\":\"adhd.stealth/list-providers.start\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\"},\"trace_id\":\"01M5QD7CX8V9MMCHFC8F0Y7XQR\",\"pid\":59285,\"adhd.op\":\"stealth/list-providers\",\"adhd.transport\":\"cli\",\"session_id\":\"0ed280ac-42a4-40ff-a30f-0440582f7fd9\",\"worktree\":\"linked\",\"release.git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\",\"release.artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"span_id\":\"2135b3f6e583c6eb\",\"parent_span_id\":null,\"otel_trace_id\":\"bd3ff0f39acfd78410730e6f9706e63b\"}",
+        "{\"ts\":\"2026-10-24T16:52:10.542Z\",\"level\":\"info\",\"event\":\"adhd.stealth/describe-provider.start\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\"},\"trace_id\":\"01M5QD7D4H4CYZKC5TVBS0S7FE\",\"pid\":59365,\"adhd.op\":\"stealth/describe-provider\",\"adhd.transport\":\"cli\",\"session_id\":\"9b7fca5c-be86-48f6-88de-e15d66609280\",\"worktree\":\"linked\",\"release.git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\",\"release.artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"span_id\":\"d5a26b3ba517eaf3\",\"parent_span_id\":null,\"otel_trace_id\":\"3942ce93b77c70560e0ca700f34a6094\"}",
+        "{\"ts\":\"2026-10-24T16:52:10.778Z\",\"level\":\"info\",\"event\":\"adhd.stealth/tripwire-status.start\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\"},\"trace_id\":\"01M5QD7DBXFXQWZHVV795C7F7C\",\"pid\":59441,\"adhd.op\":\"stealth/tripwire-status\",\"adhd.transport\":\"cli\",\"session_id\":\"35f388b9-746a-4060-97a1-c27a22079ca3\",\"worktree\":\"linked\",\"release.git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\",\"release.artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"span_id\":\"d8a37d2b57bb8ae6\",\"parent_span_id\":null,\"otel_trace_id\":\"1ecca723dfaddf2dc9fb8011d938a39e\"}",
+        "{\"ts\":\"2026-10-24T16:52:11.017Z\",\"level\":\"info\",\"event\":\"adhd.stealth/chrome-status.start\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\"},\"trace_id\":\"01M5QD7DK7Q78GYK8N9ZADW3Z4\",\"pid\":59517,\"adhd.op\":\"stealth/chrome-status\",\"adhd.transport\":\"cli\",\"session_id\":\"1b1618ab-b603-4606-9f59-d17711c10c90\",\"worktree\":\"linked\",\"release.git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\",\"release.artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"span_id\":\"71a5d58b4ff63807\",\"parent_span_id\":null,\"otel_trace_id\":\"b6809d11ba754a866f6034c7ffec1055\"}",
+        "{\"ts\":\"2026-10-24T16:52:11.274Z\",\"level\":\"info\",\"event\":\"adhd.stealth/describe-provider.start\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\"},\"trace_id\":\"01M5QD7DVD526J1HKNM3GQ6RWZ\",\"pid\":59593,\"adhd.op\":\"stealth/describe-provider\",\"adhd.transport\":\"cli\",\"session_id\":\"0ab61b40-bad2-4f83-acd5-5c96264a7ec2\",\"worktree\":\"linked\",\"release.git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\",\"release.artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"span_id\":\"1cbb0a5952e92c40\",\"parent_span_id\":null,\"otel_trace_id\":\"3844d2ec06a916d8ecc127a42417dd9c\"}",
+        "{\"ts\":\"2026-10-24T16:52:11.493Z\",\"level\":\"info\",\"event\":\"adhd.stealth/chrome-status.start\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\"},\"trace_id\":\"01M5QD7E2NNGZZ3JAA10RJZZVX\",\"pid\":59671,\"adhd.op\":\"stealth/chrome-status\",\"adhd.transport\":\"cli\",\"session_id\":\"fc36d835-9559-48d5-941c-938b6cfe2203\",\"worktree\":\"linked\",\"release.git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\",\"release.artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"span_id\":\"c8882dcb1a76821a\",\"parent_span_id\":null,\"otel_trace_id\":\"284719f5729f0a81f2edc950f2c6f0e5\"}",
+        "{\"ts\":\"2026-10-24T16:52:14.342Z\",\"level\":\"info\",\"event\":\"adhd.stealth/list-providers.start\",\"service\":\"stealth-search\",\"role\":\"live-service\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:d81309df54d1d96773ea74eca90238aeb1aedfdb097c2331455ad56e2bd7fe80\",\"git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\"},\"trace_id\":\"01M5QD7GVBQ3S5WAZRMRHY12SA\",\"pid\":60003,\"adhd.op\":\"stealth/list-providers\",\"adhd.transport\":\"mcp\",\"session_id\":\"09e17b8f-2d0c-49e1-a185-56382046a851\",\"worktree\":\"linked\",\"release.git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\",\"release.artifact_sha256\":\"sha256:d81309df54d1d96773ea74eca90238aeb1aedfdb097c2331455ad56e2bd7fe80\",\"span_id\":\"d6e8f9b58e4cd107\",\"parent_span_id\":null,\"otel_trace_id\":\"aa1aa5e551214cea2334d7b0a776c7aa\"}",
+        "{\"ts\":\"2026-10-24T16:52:14.346Z\",\"level\":\"info\",\"event\":\"adhd.stealth/describe-provider.start\",\"service\":\"stealth-search\",\"role\":\"live-service\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:d81309df54d1d96773ea74eca90238aeb1aedfdb097c2331455ad56e2bd7fe80\",\"git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\"},\"trace_id\":\"01M5QD7GW9C2MFX5G1NKTJ7AMH\",\"pid\":60003,\"adhd.op\":\"stealth/describe-provider\",\"adhd.transport\":\"mcp\",\"session_id\":\"09e17b8f-2d0c-49e1-a185-56382046a851\",\"worktree\":\"linked\",\"release.git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\",\"release.artifact_sha256\":\"sha256:d81309df54d1d96773ea74eca90238aeb1aedfdb097c2331455ad56e2bd7fe80\",\"span_id\":\"d07428a8f9f2631d\",\"parent_span_id\":null,\"otel_trace_id\":\"2fddcc0ccf085a323480b9a8c1a01c74\"}",
+        "{\"ts\":\"2026-10-24T16:52:14.349Z\",\"level\":\"info\",\"event\":\"adhd.stealth/tripwire-status.start\",\"service\":\"stealth-search\",\"role\":\"live-service\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:d81309df54d1d96773ea74eca90238aeb1aedfdb097c2331455ad56e2bd7fe80\",\"git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\"},\"trace_id\":\"01M5QD7GWBJY5XDYR07QJ6EDBJ\",\"pid\":60003,\"adhd.op\":\"stealth/tripwire-status\",\"adhd.transport\":\"mcp\",\"session_id\":\"09e17b8f-2d0c-49e1-a185-56382046a851\",\"worktree\":\"linked\",\"release.git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\",\"release.artifact_sha256\":\"sha256:d81309df54d1d96773ea74eca90238aeb1aedfdb097c2331455ad56e2bd7fe80\",\"span_id\":\"e7c79e25a2453708\",\"parent_span_id\":null,\"otel_trace_id\":\"d9adfb38279d64b802050df8aa5b411f\"}",
+        "{\"ts\":\"2026-10-24T16:52:14.355Z\",\"level\":\"info\",\"event\":\"adhd.stealth/chrome-status.start\",\"service\":\"stealth-search\",\"role\":\"live-service\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:d81309df54d1d96773ea74eca90238aeb1aedfdb097c2331455ad56e2bd7fe80\",\"git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\"},\"trace_id\":\"01M5QD7GWEZQSAB8BZ6X0W18W2\",\"pid\":60003,\"adhd.op\":\"stealth/chrome-status\",\"adhd.transport\":\"mcp\",\"session_id\":\"09e17b8f-2d0c-49e1-a185-56382046a851\",\"worktree\":\"linked\",\"release.git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\",\"release.artifact_sha256\":\"sha256:d81309df54d1d96773ea74eca90238aeb1aedfdb097c2331455ad56e2bd7fe80\",\"span_id\":\"7b059fa6d1be7a01\",\"parent_span_id\":null,\"otel_trace_id\":\"133f8773ad855adeb075ae1d1e1b6007\"}",
+        "{\"ts\":\"2026-10-24T16:52:14.358Z\",\"level\":\"info\",\"event\":\"adhd.stealth/describe-provider.start\",\"service\":\"stealth-search\",\"role\":\"live-service\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:d81309df54d1d96773ea74eca90238aeb1aedfdb097c2331455ad56e2bd7fe80\",\"git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\"},\"trace_id\":\"01M5QD7GWPYMXCPVBD0MHAST9J\",\"pid\":60003,\"adhd.op\":\"stealth/describe-provider\",\"adhd.transport\":\"mcp\",\"session_id\":\"09e17b8f-2d0c-49e1-a185-56382046a851\",\"worktree\":\"linked\",\"release.git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\",\"release.artifact_sha256\":\"sha256:d81309df54d1d96773ea74eca90238aeb1aedfdb097c2331455ad56e2bd7fe80\",\"span_id\":\"0079c95cdb26cf8a\",\"parent_span_id\":null,\"otel_trace_id\":\"b41ed8de0b6298c864d36db734124ab7\"}"
+      ],
+      "log_files": [
+        "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/6ed1c5fc-cf8b-4543-8ae7-2172feed2026/scratchpad/tlv3/home.uxNiHm/.adhd/sox-ecosystem/stealth-search/logs/stealth-search.cli-2026-10-24.jsonl",
+        "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/6ed1c5fc-cf8b-4543-8ae7-2172feed2026/scratchpad/tlv3/home.uxNiHm/.adhd/sox-ecosystem/stealth-search/logs/stealth-search.live-service-2026-10-24.jsonl"
+      ],
+      "commands": [
+        {
+          "host": "cli",
+          "command": "stealth-search listProviders",
+          "trace_ids": [
+            "01M5QD7CX8V9MMCHFC8F0Y7XQR"
+          ],
+          "events": [
+            "adhd.stealth/list-providers.start",
+            "adhd.stealth/list-providers.finish"
+          ]
+        },
+        {
+          "host": "cli",
+          "command": "stealth-search describeProvider --provider duckduckgo",
+          "trace_ids": [
+            "01M5QD7D4H4CYZKC5TVBS0S7FE"
+          ],
+          "events": [
+            "adhd.stealth/describe-provider.start",
+            "adhd.stealth/describe-provider.finish"
+          ]
+        },
+        {
+          "host": "cli",
+          "command": "stealth-search tripwireStatus --data-dir /private/tmp/claude-502/-Users-nix-dev-ai-scratch/6ed1c5fc-cf8b-4543-8ae7-2172feed2026/scratchpad/tlv3/home.uxNiHm/data",
+          "trace_ids": [
+            "01M5QD7DBXFXQWZHVV795C7F7C"
+          ],
+          "events": [
+            "adhd.stealth/tripwire-status.start",
+            "adhd.stealth/tripwire-status.finish"
+          ]
+        },
+        {
+          "host": "cli",
+          "command": "stealth-search chromeStatus --cdp-port 19999",
+          "trace_ids": [
+            "01M5QD7DK7Q78GYK8N9ZADW3Z4"
+          ],
+          "events": [
+            "adhd.stealth/chrome-status.start",
+            "adhd.stealth/chrome-status.finish"
+          ]
+        },
+        {
+          "host": "cli",
+          "command": "stealth-search describeProvider --provider nope",
+          "trace_ids": [
+            "01M5QD7DVD526J1HKNM3GQ6RWZ"
+          ],
+          "events": [
+            "adhd.stealth/describe-provider.start",
+            "adhd.stealth/describe-provider.error"
+          ]
+        },
+        {
+          "host": "cli",
+          "command": "stealth-search chromeStatus --cdp-port abc",
+          "trace_ids": [
+            "01M5QD7E2NNGZZ3JAA10RJZZVX"
+          ],
+          "events": [
+            "adhd.stealth/chrome-status.start",
+            "adhd.stealth/chrome-status.error"
+          ]
+        },
+        {
+          "host": "mcp",
+          "command": "stealth_listProviders \"listProviders\"",
+          "trace_ids": [
+            "01M5QD7GVBQ3S5WAZRMRHY12SA"
+          ],
+          "events": [
+            "adhd.stealth/list-providers.start",
+            "adhd.stealth/list-providers.finish"
+          ]
+        },
+        {
+          "host": "mcp",
+          "command": "stealth_describeProvider \"describeProvider\"",
+          "trace_ids": [
+            "01M5QD7GW9C2MFX5G1NKTJ7AMH"
+          ],
+          "events": [
+            "adhd.stealth/describe-provider.start",
+            "adhd.stealth/describe-provider.finish"
+          ]
+        },
+        {
+          "host": "mcp",
+          "command": "stealth_tripwireStatus \"tripwireStatus\"",
+          "trace_ids": [
+            "01M5QD7GWBJY5XDYR07QJ6EDBJ"
+          ],
+          "events": [
+            "adhd.stealth/tripwire-status.start",
+            "adhd.stealth/tripwire-status.finish"
+          ]
+        },
+        {
+          "host": "mcp",
+          "command": "stealth_chromeStatus \"chromeStatus\"",
+          "trace_ids": [
+            "01M5QD7GWEZQSAB8BZ6X0W18W2"
+          ],
+          "events": [
+            "adhd.stealth/chrome-status.start",
+            "adhd.stealth/chrome-status.finish"
+          ]
+        },
+        {
+          "host": "mcp",
+          "command": "stealth_describeProvider \"describeProvider-nope\"",
+          "trace_ids": [
+            "01M5QD7GWPYMXCPVBD0MHAST9J"
+          ],
+          "events": [
+            "adhd.stealth/describe-provider.start",
+            "adhd.stealth/describe-provider.error"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "cli_unknown_provider_span",
+      "status": "PASS",
+      "sample_lines": [
+        "{\"ts\":\"2026-10-24T16:52:11.274Z\",\"level\":\"info\",\"event\":\"adhd.stealth/describe-provider.start\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\"},\"trace_id\":\"01M5QD7DVD526J1HKNM3GQ6RWZ\",\"pid\":59593,\"adhd.op\":\"stealth/describe-provider\",\"adhd.transport\":\"cli\",\"session_id\":\"0ab61b40-bad2-4f83-acd5-5c96264a7ec2\",\"worktree\":\"linked\",\"release.git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\",\"release.artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"span_id\":\"1cbb0a5952e92c40\",\"parent_span_id\":null,\"otel_trace_id\":\"3844d2ec06a916d8ecc127a42417dd9c\"}",
+        "{\"ts\":\"2026-10-24T16:52:11.276Z\",\"level\":\"error\",\"event\":\"adhd.stealth/describe-provider.error\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\"},\"trace_id\":\"01M5QD7DVD526J1HKNM3GQ6RWZ\",\"pid\":59593,\"adhd.op\":\"stealth/describe-provider\",\"adhd.transport\":\"cli\",\"session_id\":\"0ab61b40-bad2-4f83-acd5-5c96264a7ec2\",\"worktree\":\"linked\",\"release.git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\",\"release.artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"span_id\":\"1cbb0a5952e92c40\",\"parent_span_id\":null,\"otel_trace_id\":\"3844d2ec06a916d8ecc127a42417dd9c\",\"duration_ms\":2,\"error\":\"Unknown provider \\\"nope\\\". Available: duckduckgo, google, arxiv, npm, github, maven, wikipedia, crates, pypi, mdn, stackoverflow, fetch \u2014 Use one of the registered provider ids (see the providers list), then retry.\"}"
+      ],
+      "log_files": [
+        "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/6ed1c5fc-cf8b-4543-8ae7-2172feed2026/scratchpad/tlv3/home.uxNiHm/.adhd/sox-ecosystem/stealth-search/logs/stealth-search.cli-2026-10-24.jsonl"
+      ],
+      "cli_exit_code": 70,
+      "cli_stderr_code": "UNKNOWN_PROVIDER"
+    },
+    {
+      "name": "mcp_unknown_provider_span",
+      "status": "PASS",
+      "sample_lines": [
+        "{\"ts\":\"2026-10-24T16:52:14.358Z\",\"level\":\"info\",\"event\":\"adhd.stealth/describe-provider.start\",\"service\":\"stealth-search\",\"role\":\"live-service\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:d81309df54d1d96773ea74eca90238aeb1aedfdb097c2331455ad56e2bd7fe80\",\"git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\"},\"trace_id\":\"01M5QD7GWPYMXCPVBD0MHAST9J\",\"pid\":60003,\"adhd.op\":\"stealth/describe-provider\",\"adhd.transport\":\"mcp\",\"session_id\":\"09e17b8f-2d0c-49e1-a185-56382046a851\",\"worktree\":\"linked\",\"release.git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\",\"release.artifact_sha256\":\"sha256:d81309df54d1d96773ea74eca90238aeb1aedfdb097c2331455ad56e2bd7fe80\",\"span_id\":\"0079c95cdb26cf8a\",\"parent_span_id\":null,\"otel_trace_id\":\"b41ed8de0b6298c864d36db734124ab7\"}",
+        "{\"ts\":\"2026-10-24T16:52:14.358Z\",\"level\":\"error\",\"event\":\"adhd.stealth/describe-provider.error\",\"service\":\"stealth-search\",\"role\":\"live-service\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:d81309df54d1d96773ea74eca90238aeb1aedfdb097c2331455ad56e2bd7fe80\",\"git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\"},\"trace_id\":\"01M5QD7GWPYMXCPVBD0MHAST9J\",\"pid\":60003,\"adhd.op\":\"stealth/describe-provider\",\"adhd.transport\":\"mcp\",\"session_id\":\"09e17b8f-2d0c-49e1-a185-56382046a851\",\"worktree\":\"linked\",\"release.git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\",\"release.artifact_sha256\":\"sha256:d81309df54d1d96773ea74eca90238aeb1aedfdb097c2331455ad56e2bd7fe80\",\"span_id\":\"0079c95cdb26cf8a\",\"parent_span_id\":null,\"otel_trace_id\":\"b41ed8de0b6298c864d36db734124ab7\",\"duration_ms\":0,\"error\":\"UNKNOWN_PROVIDER: Unknown provider \\\"nope\\\". Available: duckduckgo, google, arxiv, npm, github, maven, wikipedia, crates, pypi, mdn, stackoverflow, fetch \u2014 Use one of the registered provider ids (see the providers list), then retry.\"}"
+      ],
+      "log_files": [
+        "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/6ed1c5fc-cf8b-4543-8ae7-2172feed2026/scratchpad/tlv3/home.uxNiHm/.adhd/sox-ecosystem/stealth-search/logs/stealth-search.live-service-2026-10-24.jsonl"
+      ],
+      "mcp_is_error": true,
+      "mcp_error_text": "[{\"type\":\"text\",\"text\":\"invalid_argument: UNKNOWN_PROVIDER: Unknown provider \\\"nope\\\". Available: duckduckgo, google, arxiv, npm, github, maven, wikipedia, crates, pypi, mdn, stackoverflow, fetch \u2014 Use one of the registered provider ids (see the providers list), then retry.\"}]"
+    },
+    {
+      "name": "cli_rejected_flag_span",
+      "status": "PASS",
+      "sample_lines": [
+        "{\"ts\":\"2026-10-24T16:52:11.493Z\",\"level\":\"info\",\"event\":\"adhd.stealth/chrome-status.start\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\"},\"trace_id\":\"01M5QD7E2NNGZZ3JAA10RJZZVX\",\"pid\":59671,\"adhd.op\":\"stealth/chrome-status\",\"adhd.transport\":\"cli\",\"session_id\":\"fc36d835-9559-48d5-941c-938b6cfe2203\",\"worktree\":\"linked\",\"release.git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\",\"release.artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"span_id\":\"c8882dcb1a76821a\",\"parent_span_id\":null,\"otel_trace_id\":\"284719f5729f0a81f2edc950f2c6f0e5\"}",
+        "{\"ts\":\"2026-10-24T16:52:11.495Z\",\"level\":\"error\",\"event\":\"adhd.stealth/chrome-status.error\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\"},\"trace_id\":\"01M5QD7E2NNGZZ3JAA10RJZZVX\",\"pid\":59671,\"adhd.op\":\"stealth/chrome-status\",\"adhd.transport\":\"cli\",\"session_id\":\"fc36d835-9559-48d5-941c-938b6cfe2203\",\"worktree\":\"linked\",\"release.git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\",\"release.artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"span_id\":\"c8882dcb1a76821a\",\"parent_span_id\":null,\"otel_trace_id\":\"284719f5729f0a81f2edc950f2c6f0e5\",\"duration_ms\":2,\"error\":\"--cdp-port: expected an integer, got \\\"abc\\\" \u2014 Run the command with --help and pass a valid value for the flag.\"}"
+      ],
+      "log_files": [
+        "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/6ed1c5fc-cf8b-4543-8ae7-2172feed2026/scratchpad/tlv3/home.uxNiHm/.adhd/sox-ecosystem/stealth-search/logs/stealth-search.cli-2026-10-24.jsonl"
+      ],
+      "cli_exit_code": 77,
+      "cli_stderr": "HOST_FLAG_INVALID: --cdp-port: expected an integer, got \"abc\" \u2014 Run the command with --help and pass a valid value for the flag.",
+      "cli_stderr_code": "HOST_FLAG_INVALID"
+    },
+    {
+      "name": "help_is_not_a_dispatch",
+      "status": "PASS",
+      "sample_lines": [
+        "{\"ts\":\"2026-10-24T16:52:11.276Z\",\"level\":\"error\",\"event\":\"adhd.op.error\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\"},\"trace_id\":\"01M5QD7DVD526J1HKNM3GQ6RWZ\",\"pid\":59593,\"adhd.op\":\"stealth/describe-provider\",\"adhd.transport\":\"cli\",\"session_id\":\"0ab61b40-bad2-4f83-acd5-5c96264a7ec2\",\"worktree\":\"linked\",\"release.git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\",\"release.artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"span\":\"adhd.stealth/describe-provider\",\"duration_ms\":31,\"err\":\"Unknown provider \\\"nope\\\". Available: duckduckgo, google, arxiv, npm, github, maven, wikipedia, crates, pypi, mdn, stackoverflow, fetch \u2014 Use one of the registered provider ids (see the providers list), then retry.\"}",
+        "{\"ts\":\"2026-10-24T16:52:11.276Z\",\"level\":\"error\",\"event\":\"adhd.stealth/describe-provider.error\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\"},\"trace_id\":\"01M5QD7DVD526J1HKNM3GQ6RWZ\",\"pid\":59593,\"adhd.op\":\"stealth/describe-provider\",\"adhd.transport\":\"cli\",\"session_id\":\"0ab61b40-bad2-4f83-acd5-5c96264a7ec2\",\"worktree\":\"linked\",\"release.git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\",\"release.artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"span_id\":\"1cbb0a5952e92c40\",\"parent_span_id\":null,\"otel_trace_id\":\"3844d2ec06a916d8ecc127a42417dd9c\",\"duration_ms\":2,\"error\":\"Unknown provider \\\"nope\\\". Available: duckduckgo, google, arxiv, npm, github, maven, wikipedia, crates, pypi, mdn, stackoverflow, fetch \u2014 Use one of the registered provider ids (see the providers list), then retry.\"}",
+        "{\"ts\":\"2026-10-24T16:52:11.493Z\",\"level\":\"info\",\"event\":\"adhd.stealth/chrome-status.start\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\"},\"trace_id\":\"01M5QD7E2NNGZZ3JAA10RJZZVX\",\"pid\":59671,\"adhd.op\":\"stealth/chrome-status\",\"adhd.transport\":\"cli\",\"session_id\":\"fc36d835-9559-48d5-941c-938b6cfe2203\",\"worktree\":\"linked\",\"release.git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\",\"release.artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"span_id\":\"c8882dcb1a76821a\",\"parent_span_id\":null,\"otel_trace_id\":\"284719f5729f0a81f2edc950f2c6f0e5\"}",
+        "{\"ts\":\"2026-10-24T16:52:11.495Z\",\"level\":\"error\",\"event\":\"adhd.op.error\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\"},\"trace_id\":\"01M5QD7E2NNGZZ3JAA10RJZZVX\",\"pid\":59671,\"adhd.op\":\"stealth/chrome-status\",\"adhd.transport\":\"cli\",\"session_id\":\"fc36d835-9559-48d5-941c-938b6cfe2203\",\"worktree\":\"linked\",\"release.git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\",\"release.artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"span\":\"adhd.stealth/chrome-status\",\"duration_ms\":18,\"err\":\"--cdp-port: expected an integer, got \\\"abc\\\" \u2014 Run the command with --help and pass a valid value for the flag.\"}",
+        "{\"ts\":\"2026-10-24T16:52:11.495Z\",\"level\":\"error\",\"event\":\"adhd.stealth/chrome-status.error\",\"service\":\"stealth-search\",\"role\":\"cli\",\"release\":{\"version\":null,\"artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\"},\"trace_id\":\"01M5QD7E2NNGZZ3JAA10RJZZVX\",\"pid\":59671,\"adhd.op\":\"stealth/chrome-status\",\"adhd.transport\":\"cli\",\"session_id\":\"fc36d835-9559-48d5-941c-938b6cfe2203\",\"worktree\":\"linked\",\"release.git_sha\":\"5fbc84a53c1b73adbe0a977af3304964b7355cd4\",\"release.artifact_sha256\":\"sha256:599b9574b46f60cb855f8daf93724bc11664559f55b32a764744274f2f1e9f44\",\"span_id\":\"c8882dcb1a76821a\",\"parent_span_id\":null,\"otel_trace_id\":\"284719f5729f0a81f2edc950f2c6f0e5\",\"duration_ms\":2,\"error\":\"--cdp-port: expected an integer, got \\\"abc\\\" \u2014 Run the command with --help and pass a valid value for the flag.\"}"
+      ],
+      "log_files": [
+        "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/6ed1c5fc-cf8b-4543-8ae7-2172feed2026/scratchpad/tlv3/home.uxNiHm/.adhd/sox-ecosystem/stealth-search/logs/stealth-search.cli-2026-10-24.jsonl"
+      ],
+      "help_invocations": 12,
+      "help_spans": 0,
+      "sink_line_counts_before": {
+        "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/6ed1c5fc-cf8b-4543-8ae7-2172feed2026/scratchpad/tlv3/home.uxNiHm/.adhd/sox-ecosystem/stealth-search/logs/stealth-search.cli-2026-10-24.jsonl": 14
+      },
+      "sink_line_counts_after": {
+        "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/6ed1c5fc-cf8b-4543-8ae7-2172feed2026/scratchpad/tlv3/home.uxNiHm/.adhd/sox-ecosystem/stealth-search/logs/stealth-search.cli-2026-10-24.jsonl": 14
+      }
+    }
+  ]
+}

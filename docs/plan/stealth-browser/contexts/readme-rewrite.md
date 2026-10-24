@@ -1,0 +1,71 @@
+# readme-rewrite — WORK STATE
+
+**Phase:** docs · **Kind:** work · **Depends on:** docs-marketing-run · **Guard:** `python3 docs/plan/stealth-browser/scripts/guard.py readme-rewrite`
+**Executor:** `content-marketer` (sonnet/medium) · **Worktree:** `/Users/nix/dev/node/adhd/.worktrees/stealth-browser` on branch `stealth-browser` (shared by every state, [inv:shared-worktree], [inv:worktree-required], [inv:no-ai-attribution])
+
+---
+
+## Goal
+
+The README is rewritten to be exciting and honest: a sharp tagline, quickstart for library/CLI/MCP, features, surfaces, and receipts that resolve to shipped capabilities.
+
+---
+
+## Semantic Distillation
+
+- **Primitive:** REWRITE `packages/stealth/stealth-core-browser/README.md` and `entrypoint/stealth-search/README.md` (only).
+
+- **Reference Pattern:** each package's `docs/marketing/.catalog/capabilities.json`, `docs/marketing/` (evangelist copy if present) and `package.json` (bin names; the search entrypoint declares `stealth-search` and `stealth-search-mcp`).
+
+- **Delta Spec:** Sections: title, one-line `>` tagline (<= 120 chars), Quickstart, Features, Surfaces (library/CLI/MCP), Receipts (`<!-- receipt:ID -->` markers, >= 5, each resolving to a `shipped` capability). No unverifiable superlatives (undetectable, unblockable, 100%, bypasses all, guaranteed). Import specifiers and bin names must exist. The search README (readme-rewrite.10) names all eleven `stealth_*` tools and the host flags `--cdp-port`, `--transport`, `--listen-port`, `--data-dir`, links docs/ERRORS.md and docs/EXAMPLES.md, and keeps the examples/manifest.json block indexes consistent with the `ts` blocks. Productization (PRODUCT-REVIEW.md P8/P10), **no-overclaim brief:** the README defines "stealth" as exactly two concrete choices (no `--enable-automation`, no `Runtime.evaluate`), never as undetectable; it never uses the words undetectable, bypass, evade or anti-bot; it links `docs/RESPONSIBLE-USE.md`; and it states the stability policy (package is 0.x; only the six verbs and their types are stable, everything else is experimental; there is no legacy subpath). This state is the later writer of README.md after `docs-marketing-run`: the overwrite is intentional, so carry forward the CONFIGURATION/OBSERVABILITY links that the earlier baseline added.
+
+- **Invariants:** Docs/README paths only ([inv:owned-paths-only]); no AI-attribution lines. Also: [inv:shared-worktree] (commit only your own explicit paths, tag every commit `[psm:readme-rewrite]`), [inv:owned-paths-only], [inv:no-main-writes].
+
+- **Validation:** `python3 docs/plan/stealth-browser/scripts/guard.py readme-rewrite` — runs every acceptance criterion below (red until the work is done); `--only readme-rewrite.N` runs one.
+
+---
+
+## Acceptance criteria
+
+Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/guard.py` (`python3 docs/plan/stealth-browser/scripts/guard.py readme-rewrite --only readme-rewrite.N`). None may be deferred. Tests written by this plan cite ticket `8468f7b1` and these ids ([inv:tests-cite]).
+
+- [readme-rewrite.1] Only README.md changed by [psm:readme-rewrite] commits.
+- [readme-rewrite.2] README has a title, a tagline <= 120 chars, Quickstart, Features, Surfaces and Receipts sections and >= 2 fenced code blocks.
+- [readme-rewrite.3] Receipts: >= 5 `<!-- receipt:ID -->` markers and every ID resolves to a `shipped` entry in docs/marketing/.catalog/capabilities.json.
+- [readme-rewrite.4] Factual: no unverifiable superlatives (undetectable, unblockable, 100%, bypasses all, guaranteed); every `@adhd/stealth-core-browser` import specifier in code fences is a real package export (stealth-search's README is checked by readme-rewrite.10).
+- [readme-rewrite.5] Relative links resolve and the install/quickstart commands name only bins declared in package.json.
+- [readme-rewrite.6] (PA8.2, PA8.4) README defines "stealth" as the two concrete choices (no --enable-automation, no Runtime.evaluate) and links docs/RESPONSIBLE-USE.md (the link resolves).
+- [readme-rewrite.7] (PA8.3) README.md contains none of the overclaim words undetectable, bypass, evade, anti-bot.
+- [readme-rewrite.8] (PA10.2, greenfield) README states the stability policy: the package is 0.x, the six verbs and their types are the stable surface, and the root namespaces (cdp, storage, capture, parsers, chromeManager) are experimental until 1.0.
+- [readme-rewrite.9] (user: implement the readme examples and genuine use cases) The README embeds or links EVERY examples/ file (path appears), includes at least six fenced `ts` blocks each of which is a snippet taken verbatim from an examples/ file, and links docs/ERRORS.md and docs/EXAMPLES.md.
+- [readme-rewrite.10] entrypoint/stealth-search/README.md has a title, a tagline <= 120 chars, Quickstart, Features, Surfaces and Receipts sections, >= 2 fenced code blocks, names all eleven stealth_* tools and the host flags --cdp-port, --transport, --listen-port and --data-dir, links docs/ERRORS.md and docs/EXAMPLES.md, every relative link resolves, the only bins it invokes are `stealth-search` and `stealth-search-mcp`, it has >= 5 `<!-- receipt:ID -->` markers resolving to shipped entries of the search catalog, and none of the overclaim words undetectable, bypass, evade, anti-bot.
+
+---
+
+## Reservations
+
+```text
+read_only:  []
+mutates:    ["packages/stealth/stealth-core-browser/README.md", "entrypoint/stealth-search/README.md"]
+```
+
+---
+
+## Contract Promise
+
+Modified: `packages/stealth/stealth-core-browser/README.md` and `entrypoint/stealth-search/README.md`.
+
+---
+
+## Commit points
+
+Every plan-file write is committed (R1). Work-product commits for this state, always by explicit path, always tagged `[psm:readme-rewrite]`:
+
+- [ ] After the rewrite -- commit by explicit path: `docs(stealth-browser): exciting README [psm:readme-rewrite]`
+- [ ] **After the guard passes** (mandatory) — commit the source changes and the `state.json` update together by explicit path.
+
+---
+
+## Notes for executor
+
+- Excitement comes from concrete capability and receipts, not adjectives. Roadmap items must be labelled as such or omitted.

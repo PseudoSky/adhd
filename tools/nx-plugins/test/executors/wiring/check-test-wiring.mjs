@@ -13,33 +13,77 @@
  * Exit code is the only signal (0 = wired, 1 = gap found), per the repo's
  * verification standard — never grep stdout for "passed".
  */
-import { globSync, readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { globSync, readFileSync, mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
 
-const projects = globSync('{packages/*/*,entrypoint/*}/project.json', {
-  ignore: ['**/node_modules/**', '**/.worktrees/**', '**/.claude/**'],
-});
+const HERE = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(HERE, '../../../../..');
 
-const gaps = [];
-for (const projectJson of projects) {
-  const root = dirname(projectJson);
-  const specs = globSync([join(root, 'test/unit/**/*.spec.{ts,tsx}'), join(root, 'test/e2e/**/*.e2e.ts')], {
-    ignore: ['**/node_modules/**', '**/__files__/**'],
+/**
+ * Read the resolved Nx project graph ONCE and return `{ root -> Set(targetName) }`.
+ * Resolved targets include those inferred by Nx plugins (e.g. `test` from a
+ * plugin's createNodes), which a literal read of project.json cannot see.
+ */
+export function readGraphTargets(cwd = REPO_ROOT) {
+  const dir = mkdtempSync(join(tmpdir(), 'test-wiring-graph-'));
+  try {
+    const file = join(dir, 'graph.json');
+    const nxBin = join(cwd, 'node_modules', '.bin', 'nx');
+    const r = spawnSync(nxBin, ['graph', `--file=${file}`], { cwd, encoding: 'utf8' });
+    if (r.status !== 0) throw new Error(`project graph read failed (nx graph) rc=${r.status}: ${r.stderr || r.stdout}`);
+    const nodes = JSON.parse(readFileSync(file, 'utf8')).graph.nodes;
+    const byRoot = new Map();
+    for (const node of Object.values(nodes)) byRoot.set(node.data.root, new Set(Object.keys(node.data.targets ?? {})));
+    return byRoot;
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+/**
+ * Pure core: projects that ship spec files but have no `test` target, literal
+ * (project.json) or inferred (project graph).
+ * @param {string} cwd workspace root
+ * @param {Map<string, Set<string>>} graphTargets root -> resolved target names
+ */
+export function findWiringGaps(cwd, graphTargets) {
+  const projects = globSync('{packages/*/*,entrypoint/*}/project.json', {
+    cwd,
+    exclude: (p) => /node_modules|\.worktrees|\.claude/.test(p),
   });
-  if (specs.length === 0) continue;
-  const targets = JSON.parse(readFileSync(projectJson, 'utf8')).targets ?? {};
-  if (!targets.test) gaps.push({ root, specCount: specs.length });
+  const gaps = [];
+  for (const projectJson of projects) {
+    const root = dirname(projectJson);
+    const specs = globSync([join(root, 'test/unit/**/*.spec.{ts,tsx}'), join(root, 'test/e2e/**/*.e2e.ts')], {
+      cwd,
+      exclude: (p) => /node_modules|__files__/.test(p),
+    });
+    if (specs.length === 0) continue;
+    const literal = JSON.parse(readFileSync(join(cwd, projectJson), 'utf8')).targets ?? {};
+    const resolved = graphTargets.get(root) ?? new Set();
+    if (!literal.test && !resolved.has('test')) gaps.push({ root, specCount: specs.length });
+  }
+  return { gaps, scanned: projects.length };
 }
 
-if (gaps.length > 0) {
-  console.error('✖ projects with test files but NO `test` target (their tests can NEVER run):');
-  for (const { root, specCount } of gaps) console.error(`   ${root}  (${specCount} spec file(s))`);
-  console.error('  Fix: add a `test` target (see packages/agent/agent-store-runtime/project.json for the shape).');
-  process.exit(1);
+function main() {
+  const { gaps, scanned } = findWiringGaps(REPO_ROOT, readGraphTargets(REPO_ROOT));
+  if (gaps.length > 0) {
+    console.error('✖ projects with test files but NO `test` target, literal or inferred (their tests can NEVER run):');
+    for (const { root, specCount } of gaps) console.error(`   ${root}  (${specCount} spec file(s))`);
+    console.error('  Fix: add a `test` target (see docs/standards/testing.md for the shape).');
+    process.exit(1);
+  }
+  return scanned;
 }
 
+const isMain = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+const scannedCount = isMain ? main() : 0;
+
+if (isMain) {
 // The layout rules (check-test-layout.mjs) keep every test where the `test` and `e2e` lanes look for it.
 const layoutCheck = spawnSync(process.execPath, [join(dirname(fileURLToPath(import.meta.url)), 'check-test-layout.mjs')], {
   stdio: 'inherit',
@@ -57,4 +101,5 @@ const laneCheck = spawnSync(process.execPath, [join(dirname(fileURLToPath(import
 });
 if (laneCheck.status !== 0) process.exit(laneCheck.status ?? 1);
 
-console.log(`✓ test wiring OK — every project with spec files (${projects.length} projects scanned) declares a test target.`);
+console.log(`✓ test wiring OK — every project with spec files (${scannedCount} projects scanned) declares a test target.`);
+}

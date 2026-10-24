@@ -1,0 +1,44 @@
+{
+  "runner-port": {
+    "anchor": "/Users/nix/dev/ai/scratch/agent-browser/adhd/",
+    "rule": "Behavior-preserving port: every export kept, >=80% line similarity after .ts->.js normalization, must-contain tokens present",
+    "discovered_via": "manual",
+    "shared_ref": "[ref:runner-port]",
+    "audit_check": "[audit-final.ref-runner-port]"
+  },
+  "backlog-tracing": {
+    "anchor": "entrypoint/backlog/src/tracing.ts:1",
+    "rule": "makeTracingPlugin({serviceName:'adhd'}) configured once in src/tracing.ts, mounted in every usePlugins array, package singleton never imported",
+    "discovered_via": "manual",
+    "shared_ref": "[ref:backlog-tracing]",
+    "audit_check": "[audit-final.ref-backlog-tracing]"
+  },
+  "entrypoint-structure": {
+    "anchor": "entrypoint/dispatch-cli/project.json",
+    "rule": "Top-level files, tags, package metadata and nx targets conform to the common set of dispatch-cli/backlog/apigen-cli",
+    "discovered_via": "manual",
+    "shared_ref": "[ref:entrypoint-structure]",
+    "audit_check": "[audit-final.ref-entrypoint-structure]"
+  },
+  "apigen-host": {
+    "anchor": "entrypoint/backlog/src/server.ts",
+    "rule": "api.ts async verbs projected to MCP and CLI hosts through apigen plugins; hosts mount the shared plugin list",
+    "discovered_via": "manual",
+    "shared_ref": "[ref:apigen-host]",
+    "audit_check": "[audit-final.ref-apigen-host]"
+  },
+  "tripwire-core": {
+    "anchor": "packages/resilience/resilience-core-tripwire/package.json:1",
+    "rule": "The second approved package conforms: zero dependencies, ADR-0003 CJS-only manifest (no module, no exports, no type), no process.env / process.stdin / child_process / console access in src/lib outside node-io.ts (TW31), README, CHANGELOG, docs/ERRORS.md and docs/RECOVERY.md present",
+    "discovered_via": "manual",
+    "shared_ref": "[ref:tripwire-core]",
+    "audit_check": "[audit-final.13]"
+  },
+  "stealth-search-spec": {
+    "anchor": "docs/plan/stealth-browser/SPEC-stealth-search.md:1",
+    "rule": "Architect specification of the split: package names and generators, the stealth-search entrypoint (api, hosts, telemetry, errors, tripwire), the search failsafe inventory seed, the log-validation task, the DAG changes and the release order",
+    "discovered_via": "manual",
+    "shared_ref": "[ref:stealth-search-spec]",
+    "audit_check": "[audit-final.ref-stealth-search-spec]"
+  }
+}

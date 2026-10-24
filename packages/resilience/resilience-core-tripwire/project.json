@@ -1,0 +1,68 @@
+{
+  "name": "resilience-core-tripwire",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/resilience/resilience-core-tripwire/src",
+  "projectType": "library",
+  "release": {
+    "version": {
+      "manifestRootsToUpdate": ["dist/{projectRoot}"],
+      "currentVersionResolver": "git-tag",
+      "fallbackCurrentVersionResolver": "disk"
+    }
+  },
+  "tags": [
+    "domain:resilience",
+    "pkg-kind:core",
+    "pkg-class:foundation",
+    "layer:shared",
+    "platform:node",
+    "access:public",
+    "publish:npm"
+  ],
+  "targets": {
+    "nx-release-publish": {
+      "options": {
+        "packageRoot": "{projectRoot}/dist"
+      },
+      "dependsOn": [
+        "build",
+        "test",
+        "verify-dist-load",
+        "dist-manifest",
+        "publish-hygiene"
+      ]
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint"
+    },
+    "typecheck-spec": {
+      "//": "Type-checks the SPEC corpus (packages/resilience/resilience-core-tripwire/tsconfig.spec.json). Closes lane-reachability rule 6: a tsconfig.spec.json with no compiling target lets the spec corpus carry type errors no gate can see (nx.json production namedInput excludes it). The ratchet fails on any per-file increase over tools/nx-plugins/build/executors/typecheck-spec/resilience-core-tripwire.baseline.json or on include narrowing. Wired into test.dependsOn so nx affected -t test runs it.",
+      "executor": "nx:run-commands",
+      "cache": true,
+      "inputs": [
+        "default",
+        {
+          "externalDependencies": ["typescript"]
+        }
+      ],
+      "options": {
+        "cwd": ".",
+        "command": "node tools/nx-plugins/build/executors/typecheck-spec/ratchet.mjs --tsconfig packages/resilience/resilience-core-tripwire/tsconfig.spec.json --baseline tools/nx-plugins/build/executors/typecheck-spec/resilience-core-tripwire.baseline.json"
+      }
+    },
+    "test": {
+      "dependsOn": ["lint", "^build", "typecheck-spec"]
+    },
+    "e2e": {
+      "executor": "nx:run-commands",
+      "//": "Real-disk lane: runs test/e2e/*.e2e.ts through vitest.e2e.config.ts (the TripwireStorage contract on a real mkdtemp directory). Not in test.dependsOn, so the unit lane stays disk-free; the push and CI gate reaches it through `nx affected -t e2e`.",
+      "cache": true,
+      "inputs": ["default", "^production", { "externalDependencies": ["vitest"] }],
+      "outputs": ["{workspaceRoot}/coverage/packages/resilience/resilience-core-tripwire-e2e"],
+      "options": {
+        "cwd": "{projectRoot}",
+        "command": "vitest run --config vitest.e2e.config.ts"
+      }
+    }
+  }
+}

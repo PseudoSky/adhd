@@ -1,0 +1,267 @@
+{
+  "agent": "audit-fixes-implementer",
+  "author": "pseudosky",
+  "state": "audit-fixes",
+  "resolutions": [
+    {
+      "id": "P1",
+      "status": "fixed",
+      "commit": "011b5ba5f3df4d9ea4fdf12c8f323ea4ca244b00",
+      "evidence": "extractSnippet now reads min(next-card start, 5000) characters: every pass computes the card end from the match list, so a card with no snippet of its own no longer takes the next card's. Test: core test/unit/parsers/snippet-window.spec.ts with adversarial input (an unbounded run, cards without snippets, a matching marker past the next card)."
+    },
+    {
+      "id": "P2",
+      "status": "fixed",
+      "commit": "690f71d46344a546d691c6bc75434003a896c366",
+      "evidence": "Verified against the real warehouse template: it emits span.package-snippet__name, __created and __description and no version element. The dom extra and the network meta now read span.package-snippet__created, so meta.created replaces the never-present meta.version. Tests: pypi-dom.spec.ts over the real-shape fixture and the synthetic engine fixture (c99415887)."
+    },
+    {
+      "id": "P3",
+      "status": "fixed",
+      "commit": "495e462cd3556c48564f60913003ea8b1064f937",
+      "evidence": "A typed StealthCoreBrowserError / StealthSearchError over MCP becomes an isError tool result `<canonical>: <CODE>: <message>` with _meta[adhd/error].code, through the structural McpToolError carrier (host-errors.ts) wrapped around the package fns only for the MCP host. expectMcpToolError now asserts isError, the code-prefixed text and the _meta channel. The single makeTracingPlugin({serviceName:'adhd'}) and the upstream adhd.op.error twin are untouched. Tests: mcp-error-channel.spec.ts (7), mcp-inprocess.spec.ts, use-cases/hosts.spec.ts, search-tracing-unknown-provider.spec.ts."
+    },
+    {
+      "id": "P4",
+      "status": "fixed",
+      "commit": "a52dbfbc59f18df0b8514fd30c9925991209fedf",
+      "evidence": "The fetch resolves once and pins: the direct PDF fetch connects to the validated address through a custom lookup in node:https (pinned.ts), and for the browser tier (Chrome resolves itself) the connected remoteIPAddress of every document response is checked before any content is read. Tests: fetch-ssrf.spec.ts including a mocked flip-flop resolver, fetch-pinned.spec.ts."
+    },
+    {
+      "id": "P5",
+      "status": "fixed",
+      "commit": "437056c5ce2c94e3ec0df665efe8b068193069d5",
+      "evidence": "The baked operations file is written 0644 (BAKED_FILE_MODE) while runtime caches stay 0600; the tarball was verified with pnpm pack (which normalises modes to 0644), so the packed file mode now equals the dist mode and an unreadable baked file is reported as baked-cache-unreadable. Test: build/file-modes.spec.ts."
+    },
+    {
+      "id": "P6",
+      "status": "fixed",
+      "commit": "690f71d46344a546d691c6bc75434003a896c366",
+      "evidence": "The three no-non-null-assertion warnings of pypi-dom.spec.ts are gone: a guarded `dom` const replaces `pypi.dom!`. eslint reports 0 warnings for that file; the file also gained the P2 test."
+    },
+    {
+      "id": "P7",
+      "status": "rejected",
+      "evidence": "AGENTS.md is the root shared document of the main checkout, outside this state's owned paths; line 37 is `--base=origin/main` and is the dispatcher's one-line wording fix to make, not an implementer edit. The state's owner list does not include AGENTS.md and the instruction is to report it only.",
+      "reproduction": "rg -n \"origin/main\" AGENTS.md",
+      "repro": "rg -n \"origin/main\" AGENTS.md"
+    },
+    {
+      "id": "P8",
+      "status": "fixed",
+      "commit": "a52dbfbc59f18df0b8514fd30c9925991209fedf",
+      "evidence": "Redirect hops (requestWillBeSent with redirectResponse) and the connected address of every Document response are re-validated against the forbidden table; a violation stops loading and the content is never read; the direct PDF fetch re-validates and re-resolves each hop and does not follow redirects blindly. Tests: fetch-ssrf.spec.ts (redirect to loopback, private, metadata)."
+    },
+    {
+      "id": "P9",
+      "status": "fixed",
+      "commit": "1ac6c2ae7fa0a78bf575087779be95ab73cc5804",
+      "evidence": "The Chrome endpoint host is validated (strict hostname, IPv4 or bracketed IPv6) and restricted to loopback unless the hosting process opts in (core endpoint.configureEndpointPolicy; search --allow-cdp-hosts or a non-default --cdp-host). The debugger ws host must match the host asked. Tests: surface/endpoint-policy.spec.ts, cdp/targets-hardening.spec.ts; search side in 437056c5c."
+    },
+    {
+      "id": "P10",
+      "status": "fixed",
+      "commit": "1ac6c2ae7fa0a78bf575087779be95ab73cc5804",
+      "evidence": "A CDP frame that is not valid JSON/an object fails every pending command with CDP_BAD_RESPONSE (reason malformed-frame) and closes the socket instead of throwing in the listener. Test: cdp/session-hardening.spec.ts."
+    },
+    {
+      "id": "P11",
+      "status": "fixed",
+      "commit": "1ac6c2ae7fa0a78bf575087779be95ab73cc5804",
+      "evidence": "Every CDP HTTP request has an AbortController deadline (CDP_HTTP_TIMEOUT_MS = 5000) that raises CDP_TIMEOUT. Test: cdp/targets-hardening.spec.ts with fake timers and a never-answering fetch."
+    },
+    {
+      "id": "P12",
+      "status": "fixed",
+      "commit": "1ac6c2ae7fa0a78bf575087779be95ab73cc5804",
+      "evidence": "getChromeInfo and listPageTargets validate the JSON shape; a non-JSON, non-array or malformed entry is a typed CDP_BAD_RESPONSE or is dropped, never a bare SyntaxError/TypeError. Test: cdp/targets-hardening.spec.ts."
+    },
+    {
+      "id": "P13",
+      "status": "fixed",
+      "commit": "1ac6c2ae7fa0a78bf575087779be95ab73cc5804",
+      "evidence": "createPageTarget closes its browser session in a finally and closes the created page before raising TARGET_NOT_FOUND when the poll gives up. Test: cdp/targets-hardening.spec.ts."
+    },
+    {
+      "id": "P14",
+      "status": "fixed",
+      "commit": "2af4bfa14f4fce27aafbcfe1b92b0cabb2cd0867",
+      "evidence": "killChrome tracks the launched pid per port (Map) and drops the record on the child exit event, so a kill of one port never signals another port's Chrome and a recycled pid is never signalled; with no record it takes the profile-verified listener path. The existing \"never shells out to lsof for a tracked launch\" pin is kept. Test: cdp/launch-hardening.spec.ts."
+    },
+    {
+      "id": "P15",
+      "status": "fixed",
+      "commit": "2af4bfa14f4fce27aafbcfe1b92b0cabb2cd0867",
+      "evidence": "Stale launch-lock reclaim is atomic: a lock older than 15 s is renamed away (only one reclaimer wins), the exclusive open is retried, and after 30 s without the lock or a Chrome the launch fails with LAUNCH_LOCK_TIMEOUT: it never proceeds lock-less. Tests: cdp/launch-hardening.spec.ts plus the rewritten lifecycle/launch.spec.ts [fs-038], browser.spec.ts and concurrent-launch.spec.ts reclaim cases."
+    },
+    {
+      "id": "P16",
+      "status": "fixed",
+      "commit": "2af4bfa14f4fce27aafbcfe1b92b0cabb2cd0867",
+      "evidence": "On CHROME_START_TIMEOUT the spawned process group is SIGKILLed and the tracked pid is forgotten. Test: cdp/launch-hardening.spec.ts."
+    },
+    {
+      "id": "P17",
+      "status": "fixed",
+      "commit": "2af4bfa14f4fce27aafbcfe1b92b0cabb2cd0867",
+      "evidence": "CHROME_NOT_FOUND / LAUNCH_FAILED remediation and messages no longer name CHROME_PATH (the library reads no environment); they name the standard install location and the chromePath option of cdp.launchChrome. ERRORS.md rows updated. Tests: cdp-launch-errors.spec.ts asserts CHROME_PATH is absent; browser.spec.ts [fs-075]; lifecycle/errors.spec.ts."
+    },
+    {
+      "id": "P18",
+      "status": "fixed",
+      "commit": "437056c5ce2c94e3ec0df665efe8b068193069d5",
+      "evidence": "--max-siblings help and the SearchHostConfig.maxSiblings doc now say siblings over the threshold are tolerated with a logged warning and launching is never refused. Test: hosts/host-flags.spec.ts."
+    },
+    {
+      "id": "P19",
+      "status": "fixed",
+      "commit": "973634e9a60edfb9f58c14716f2f4fd96299761f",
+      "evidence": "ERRORS.md states one rule: a search or fetch call returns a refused URL as an outcome error carrying FETCH_URL_REFUSED and never throws it. Test: unit/docs/readme-contract.spec.ts (b3d19a714)."
+    },
+    {
+      "id": "P20",
+      "status": "fixed",
+      "commit": "973634e9a60edfb9f58c14716f2f4fd96299761f",
+      "evidence": "The fetch passes the captured main status (mainStatus ?? 200) to checkBans, and the harness checkBans honours checkStatus like the real one. Test: fetch/fetch-status.spec.ts."
+    },
+    {
+      "id": "P21",
+      "status": "fixed",
+      "commit": "973634e9a60edfb9f58c14716f2f4fd96299761f",
+      "evidence": "After challenge handling a main status >= 400 is never success: 429 is rate_limited, every other 4xx/5xx is error with SEARCH_FAILED: HTTP <status>, the body is kept. A Cloudflare 403 wall gets its challenge wait first and, when the cleared page arrives as a fresh 200 Document response, ends as success (harness laterResponses, commit 2b71918ab); a wall that cleared in content but kept a 403 document status is an error. Test: fetch/fetch-status.spec.ts."
+    },
+    {
+      "id": "P22",
+      "status": "fixed",
+      "commit": "2d7c9c81e08ab61e642106cfd553650023ef7df8",
+      "evidence": "The fetch cooldown is keyed per site (cooldownKeyFor: fetch.<host>, hashed when over 64 characters) for both the record and the gate, so one banned host no longer blocks other hosts. Test: use-cases/cooldown-scope-and-solve.spec.ts."
+    },
+    {
+      "id": "P23",
+      "status": "fixed",
+      "commit": "2d7c9c81e08ab61e642106cfd553650023ef7df8",
+      "evidence": "A confirmed solve extends the attempt limit by one (at most 3 times per call), so maxAttempts 1 still re-searches on the cleared page; abort still ends the call. Test: use-cases/cooldown-scope-and-solve.spec.ts."
+    },
+    {
+      "id": "P24",
+      "status": "fixed",
+      "commit": "516058a8c13b4b02b63e0f5694ae352dfb764bf4",
+      "evidence": "The reaper builds its HistoryClient from cfg.profileDir, and getPageContext/checkChromeActivity accept userDataDir and read cookies and history from that profile. Tests: lifecycle/reaper-entry.spec.ts, queries/context.spec.ts, surface/api.spec.ts."
+    },
+    {
+      "id": "P25",
+      "status": "fixed",
+      "commit": "516058a8c13b4b02b63e0f5694ae352dfb764bf4",
+      "evidence": "Cookies are matched by domain in SQL (cookieHostKeys: the host and each dotted parent, never the bare TLD) so notexample.com and example.com.evil.net no longer count, and the 200-row cap cannot hide a match. Test: domains-storage/cookies.spec.ts over real SQLite."
+    },
+    {
+      "id": "P26",
+      "status": "fixed",
+      "commit": "283852cdad31a6951e9ff6d82f5e6bb6a2bdb44b",
+      "evidence": "The store sink creates the database 0600 before the adapter opens it (0700 directory), tightens the db and its -wal/-shm, and fails the open with CAPTURE_SINK_UNAVAILABLE if it cannot. Identity redaction stays the recorder default as a pinned design: capture/redaction.spec.ts 'without a redact option headers are intact (default identity)' asserts it and replay of a logged-in flow needs the cookies; the redact.ts header, the core reference and the search README now state that the stored recording holds credentials unless redactHeaders() is passed and that URL query tokens are never masked. Test: capture/open-store-sink.spec.ts."
+    },
+    {
+      "id": "P27",
+      "status": "fixed",
+      "commit": "011b5ba5f3df4d9ea4fdf12c8f323ea4ca244b00",
+      "evidence": "normalizeUrl decodes page-supplied escapes with safeDecode, which never throws and still decodes the valid ASCII escapes around a truncated multi-byte tail. Test: parsers/snippet-window.spec.ts."
+    },
+    {
+      "id": "P28",
+      "status": "fixed",
+      "commit": "a52dbfbc59f18df0b8514fd30c9925991209fedf",
+      "evidence": "Complete forbidden table: IPv4 0/8, 10/8, 100.64/10, 127/8, 169.254/16, 172.16/12, 192.0.0/24, 192.0.2/24, 192.88.99/24, 192.168/16, 198.18/15, 198.51.100/24, 203.0.113/24, 224/4, 240/4 (incl. broadcast); IPv6 ::, ::1, mapped/compat, NAT64, 6to4, Teredo, documentation, 100::/64, fc00::/7, fe80::/10, fec0::/10, ff00::/8; an unparseable address is refused. Test: fetch/fetch-forbidden-table.spec.ts."
+    },
+    {
+      "id": "P29",
+      "status": "fixed",
+      "commit": "a52dbfbc59f18df0b8514fd30c9925991209fedf",
+      "evidence": "The direct PDF fetch is capped at 32 MiB (content-length precheck and a streamed counter) and 30 s, and aborts on either. Test: fetch/fetch-pinned.spec.ts."
+    },
+    {
+      "id": "P30",
+      "status": "fixed",
+      "commit": "437056c5ce2c94e3ec0df665efe8b068193069d5",
+      "evidence": "sse and streaming-http with a non-loopback --listen-host are refused (HOST_FLAG_INVALID) unless --allow-remote-listen is given, and then a warning is logged; stdio and loopback are untouched. Test: hosts/listen-host-guard.spec.ts."
+    },
+    {
+      "id": "P31",
+      "status": "fixed",
+      "commit": "fdfcd6cab342db2bac0d5ffdc56dbd3356bf243e",
+      "evidence": "runCli now never rejects (a failing failure-path ends in a last-resort typed stderr line, handle release and exit), and bin/cli.ts applies the returned status and handles a rejection like bin/mcp.ts. Tests: hosts/cli-runner.spec.ts, hosts/bins.spec.ts."
+    },
+    {
+      "id": "P32",
+      "status": "fixed",
+      "commit": "87df3d968cd2c3b9960985ed161b1c4ebd9b731b",
+      "evidence": "The unused duplicate src/lib/helpers.ts openDb is removed (storage/helpers.ts is the one, covered by domains-storage/helpers.spec.ts); the unimplemented ProfileClient.getOpenTabs stub is removed with its docs row (the failsafe inventory row fs-170 lists top sites, favicons, autofill, search engines, preferences, extension ids and saved-credential presence, not open tabs; helpers.notYet stays because row 3363 names it); getAutofillData gained { redactValues } for the personal-data values; the ProfileClient docs, which called every method a stub, were corrected. Tests: domains-storage/profile.spec.ts (getOpenTabs absent, redactValues), foundation/helpers.spec.ts. Commit 7671e7ed7 holds the first part."
+    },
+    {
+      "id": "P33",
+      "status": "fixed",
+      "commit": "0161379c7ed77b595bd40b749b20e382ceefb5c2",
+      "evidence": "AGENTS.md names only targets, directories and entry points the package has (no e2e target, no vitest.e2e.config.ts, no bin/). Test: unit/docs/agents-md.spec.ts fails on a named path that does not exist."
+    },
+    {
+      "id": "P34",
+      "status": "fixed",
+      "commit": "2af4bfa14f4fce27aafbcfe1b92b0cabb2cd0867",
+      "evidence": "The manager port is parsed with the IPv6-safe endpoint.portOf. Test (87df3d968): chrome-manager/chrome-manager.spec.ts launches with cdpHost [::1]:9333 and expects port 9333 (the old split(':')[1] parse gave 9222) and a host without a port falls back to 9222. The hideAllWindows catch is kept with an explanatory comment because the failsafe inventory pins it as a feature (failsafe-inventory.json row at line 86: 'a hide failure is logged and rethrown', pinned by chrome-manager.spec and lifecycle/hide-windows.spec)."
+    },
+    {
+      "id": "P35",
+      "status": "fixed",
+      "commit": "11a559839d93fb87afef94dc0a049756087320d1",
+      "evidence": "pdfjs loads through the plain dynamic import first (require(esm) works from Node 22.12 and under vitest) and the Function-built native import is only constructed when that fails with ERR_REQUIRE_ESM or ERR_REQUIRE_ASYNC_MODULE (Node 22.5 to 22.11). Test: fetch/fetch-pdf.spec.ts (branches and a source assertion that new Function sits only inside the lazy function). Built-path proof on the final build: node loads dist/src/lib/fetch/pdf.js and extracts the two-page fixture (2 pages) both normally and with --disallow-code-generation-from-strings (rc 0 both); the vite bundle keeps the native import of pdfjs-dist external."
+    },
+    {
+      "id": "P36",
+      "status": "fixed",
+      "commit": "bcd103964ce36ac3192607bf10e7e3990e13e7c2",
+      "evidence": "shutdownChrome sets ok false when the soft shutdown itself failed (it still never throws), and running reports what is left. Test: surface/verbs.spec.ts [fs-191]."
+    },
+    {
+      "id": "P37",
+      "status": "fixed",
+      "commit": "437056c5ce2c94e3ec0df665efe8b068193069d5",
+      "evidence": "The boot trace file is appended 0600 and chmodded 0600. Test: build/file-modes.spec.ts."
+    },
+    {
+      "id": "P38",
+      "status": "fixed",
+      "commit": "1ac6c2ae7fa0a78bf575087779be95ab73cc5804",
+      "evidence": "An event-subscriber exception is reported through an onHandlerError hook (default console.error) instead of an empty catch. Test: cdp/session-hardening.spec.ts."
+    },
+    {
+      "id": "P39",
+      "status": "fixed",
+      "commit": "84d0cb6e0dab0623f712ec25e45ab02dc1196adc",
+      "evidence": "The tripwire-expired audit line keeps reason ttl-expired and adds tripReason with the original trip reason. Test: audit-expiry.spec.ts."
+    },
+    {
+      "id": "P40",
+      "status": "rejected",
+      "evidence": "The skip is deliberate and documented in the source: dom.ts:215-217 reads \"An anchor without a heading is not a result: there is no reliable title to guess from the collapsed text\", and capture-parsers/dom.spec.ts:168 (skips an anchor with no heading: the whitespace-split title fallback is gone) pins the behaviour. Emitting guessed titles would put wrong data in results; returning no result is the specified contract.",
+      "reproduction": "rg -n \"An anchor without a heading is not a result\" packages/stealth/stealth-core-browser/src/lib/capture/dom.ts",
+      "repro": "rg -n \"An anchor without a heading is not a result\" packages/stealth/stealth-core-browser/src/lib/capture/dom.ts"
+    },
+    {
+      "id": "P41",
+      "status": "fixed",
+      "commit": "b3d19a71420c960ae787f23f613ee040922c2ce1",
+      "evidence": "The package README documents maxResultBytes and omitted (engine providers only; the fetch provider uses content/offset/maxContentSize/nextOffset). Test: unit/docs/readme-contract.spec.ts."
+    },
+    {
+      "id": "P42",
+      "status": "fixed",
+      "commit": "5c71763698006582dc6dd1b91886c549be45e5ce",
+      "evidence": "The server.ts header states that nothing is inlined and schemas keep $ref with definitions; a spec proves every $ref of every composed schema resolves inside the same schema. Test: hosts/package.spec.ts."
+    },
+    {
+      "id": "P43",
+      "status": "fixed",
+      "commit": "926d21f",
+      "evidence": "The agent-browser section of /Users/nix/dev/ai/scratch/INDEX.md (rows 18-43) is replaced by a single retired entry that points at @adhd/stealth-search (CLI stealth-search, MCP stealth-search-mcp, library @adhd/stealth-core-browser); the refactor/docs/RESEARCH.md row notes the retirement. Committed in the scratch repo as 926d21f (explicit blob only, other projects' uncommitted edits left in the working tree, no push). The cited file lies outside this repository, so the commit is not in this repository's history."
+    }
+  ]
+}

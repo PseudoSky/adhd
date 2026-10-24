@@ -1,0 +1,2330 @@
+{
+  "schema_version": 2,
+  "title": "Migrate the agent-search chrome runner to @adhd/stealth-browser (entrypoint)",
+  "dag": "dag.json",
+  "states": {
+    "productization-hold": {
+      "status": "complete",
+      "started_at": "2026-10-12T10:52:26.244Z",
+      "done_at": "2026-10-12T10:52:26.692Z",
+      "start_ref": "424aa022cc47018b525b121b81f1c5061ba4f14f",
+      "end_ref": "641717a97afb3fdcb33894158d02faaa1639208f"
+    },
+    "scaffold": {
+      "status": "complete",
+      "started_at": "2026-10-12T10:53:00.540Z",
+      "done_at": "2026-10-12T11:06:10.448Z",
+      "start_ref": "d6a92d68347fe9b36bd633eeadd2bc999fa82db8",
+      "end_ref": "2a7810a75a3984eee79e4a65237386164824aac9"
+    },
+    "entrypoint-parity": {
+      "status": "complete",
+      "started_at": "2026-10-12T11:06:28.305Z",
+      "done_at": "2026-10-12T11:07:51.737Z",
+      "start_ref": "ec858b3290e786dce0dd9ee535428312f4f6acce",
+      "end_ref": "4816496bd96c8e8c6cb686afbf8ee827d02abd9f"
+    },
+    "deps-install": {
+      "status": "complete",
+      "started_at": "2026-10-12T21:16:07.281Z",
+      "done_at": "2026-10-12T21:25:00.958Z",
+      "start_ref": "eb5f4f01e4f21fd5be2b8d897bec719fafc185e9",
+      "end_ref": "50c5b1bfb4e76016ee608ce6bdd5875fc3132ae7"
+    },
+    "mig-foundation": {
+      "status": "complete",
+      "started_at": "2026-10-12T21:25:08.551Z",
+      "done_at": "2026-10-12T21:26:00.454Z",
+      "start_ref": "32e3fde89282f48b5f9e1f6c1f9070fc5c2d87f0",
+      "end_ref": "d9d3e5dca94e2bc4469b0dc8e16e31997b3e7240"
+    },
+    "mig-cdp": {
+      "status": "complete",
+      "started_at": "2026-10-12T21:26:00.890Z",
+      "done_at": "2026-10-12T21:28:08.356Z",
+      "start_ref": "a3c01e2250b200e57cb6d962fc3d4ba17eb652fb",
+      "end_ref": "b6f382dd28d923426eb99ed8b2cb147a42b92ea4"
+    },
+    "mig-chrome-manager": {
+      "status": "complete",
+      "started_at": "2026-10-12T21:28:08.569Z",
+      "done_at": "2026-10-12T21:29:48.651Z",
+      "start_ref": "ff09ec5651641abac70fb9898374ce0d16e61690",
+      "end_ref": "ecdbcaf12bb457d420a861076c648dcf56865b3a"
+    },
+    "mig-domains-storage": {
+      "status": "complete",
+      "started_at": "2026-10-12T21:28:08.715Z",
+      "done_at": "2026-10-12T21:30:20.274Z",
+      "start_ref": "50be62c9e817379ead6f07f1cb37fbf210636279",
+      "end_ref": "ecdbcaf12bb457d420a861076c648dcf56865b3a"
+    },
+    "mig-capture-parsers": {
+      "status": "complete",
+      "started_at": "2026-10-12T21:26:00.731Z",
+      "done_at": "2026-10-12T21:28:39.184Z",
+      "start_ref": "571723e1f5d3645b5ad0f5a94d4de46aec52c1e6",
+      "end_ref": "2a7e1884509338be7d17455d29f73a43472052d9"
+    },
+    "mig-queries": {
+      "status": "complete",
+      "started_at": "2026-10-12T21:30:20.486Z",
+      "done_at": "2026-10-12T21:31:36.941Z",
+      "start_ref": "a669469a9c777e2bcd95c0d4ee166b2691487cdb",
+      "end_ref": "f60f9ee72a27affa789d18a9280c456d7b9d1f53"
+    },
+    "mig-docs": {
+      "status": "complete",
+      "started_at": "2026-10-12T21:26:01.044Z",
+      "done_at": "2026-10-12T21:27:52.649Z",
+      "start_ref": "d175e7a1f049f80a9ff3c3aead4898bd19c259d5",
+      "end_ref": "80e30ef13e7f59bee88f432525e8a3b1e05c9757"
+    },
+    "surface-api": {
+      "status": "complete",
+      "started_at": "2026-10-13T00:18:26.591Z",
+      "done_at": "2026-10-13T01:18:10.557Z",
+      "start_ref": "88a7f6a41f6c9a7a7f8749578563a63a744a0c0f",
+      "end_ref": "51d26ba6b0ddcff495aa4a3c7a84741cb2d727cb"
+    },
+    "tests-unit-core": {
+      "status": "complete",
+      "started_at": "2026-10-13T00:18:26.746Z",
+      "done_at": "2026-10-13T00:42:01.785Z",
+      "start_ref": "13c0b7612ef5534a5dd0d870f283777dab00bb9e",
+      "end_ref": "70cd00ea6e03830ea20493da3ce87eb76e03e4f3"
+    },
+    "tests-unit-data": {
+      "status": "complete",
+      "started_at": "2026-10-13T00:18:26.902Z",
+      "done_at": "2026-10-13T00:45:47.294Z",
+      "start_ref": "c452d3a644e286005d86ccef3d2c84ad7f657139",
+      "end_ref": "64e5830a3e87ee887faed3519d280f5b4ff2cc80"
+    },
+    "tests-unit-extract": {
+      "status": "complete",
+      "started_at": "2026-10-13T00:18:27.053Z",
+      "done_at": "2026-10-13T00:28:03.845Z",
+      "start_ref": "2ae08b7bd932e0ddbbaf7817300ff0bddf4ae86b",
+      "end_ref": "99b936cf755d0b18b174f6d16848851ee857323f"
+    },
+    "tests-unit-surface": {
+      "status": "complete",
+      "started_at": "2026-10-21T19:19:40.958Z",
+      "done_at": "2026-10-21T19:47:48.644Z",
+      "start_ref": "dba8167ede6e91702daa5cd35be1f5035366abb4",
+      "end_ref": "9830641c9bcb909ab67ba79e0e41efc73a3f5ad7"
+    },
+    "gates-first": {
+      "status": "complete",
+      "started_at": "2026-10-24T11:02:27.502Z",
+      "done_at": "2026-10-24T11:39:40.907Z",
+      "start_ref": "652738d6aaa53b399d9806da3b0733d520e2f022",
+      "end_ref": "fcaa816ac166b2925f59cec64dff4079265ebff6"
+    },
+    "review-prep": {
+      "status": "complete",
+      "started_at": "2026-10-24T13:34:21.040Z",
+      "done_at": "2026-10-24T13:57:04.947Z",
+      "start_ref": "7fe9070be1227bfba0dc4938d0d19b533952b7f6",
+      "end_ref": "8d21b983807fe98bcb0082b88a30492a21822305"
+    },
+    "audit-migration-blind": {
+      "status": "complete",
+      "started_at": "2026-10-24T14:08:21.409Z",
+      "done_at": "2026-10-24T14:49:42.594Z",
+      "start_ref": "0c7cbe282fbc4b93bf1f009218e7bab6c0fb553b",
+      "end_ref": "9410d766bc8b230b0ebaf3fa35a92a3c7fe28327"
+    },
+    "resolve-findings": {
+      "status": "complete",
+      "started_at": "2026-10-24T14:50:34.743Z",
+      "done_at": "2026-10-24T18:02:55.414Z",
+      "start_ref": "372c8d5b51b5a2b1025810fa64e79b1705e8f49f",
+      "end_ref": "a8245098ef6b9222cd7be6e80de0680f18ebaa4c"
+    },
+    "gates-rerun": {
+      "status": "complete",
+      "started_at": "2026-10-24T18:03:31.056Z",
+      "done_at": "2026-10-24T18:22:40.535Z",
+      "start_ref": "35f4287edb8850e312473a78a59c20f5a7addfe1",
+      "end_ref": "68ddca92cafe9728678b79d39e2b6cffd4dab876"
+    },
+    "docs-marketing-run": {
+      "status": "complete",
+      "started_at": "2026-10-24T18:23:54.270Z",
+      "done_at": "2026-10-24T19:19:54.159Z",
+      "start_ref": "4ee78a454793e30be16771de5c03fa6c0c027af1",
+      "end_ref": "7c2f2eae35a7de9e8e4543c1e24b0dd46d0124cd"
+    },
+    "readme-rewrite": {
+      "status": "complete",
+      "started_at": "2026-10-24T19:20:16.960Z",
+      "done_at": "2026-10-24T19:49:23.179Z",
+      "start_ref": "e2d1cdbef7fb6f209b347899d457429697a2804b",
+      "end_ref": "76709a59d418cdb739293de71c79257d2c668189"
+    },
+    "audit-final": {
+      "status": "complete",
+      "started_at": "2026-10-24T19:57:42.824Z",
+      "done_at": "2026-10-24T22:11:23.520Z",
+      "start_ref": "23ffac5cae0b8cf51e37c9661d3ee94ae4909357",
+      "end_ref": "33e826fdabe6938044a529ee638b192aaf38cb47"
+    },
+    "merge-readiness": {
+      "status": "complete",
+      "started_at": "2026-10-24T22:16:39.070Z",
+      "done_at": "2026-10-24T23:22:20.395Z",
+      "start_ref": "bec8e2bd3e52ca85a8a56038af8c8ccfbb83ad72",
+      "end_ref": "56cc3653e350ffa1790c497721adc2c8af39f2bc"
+    },
+    "prod-errors": {
+      "status": "complete",
+      "started_at": "2026-10-21T19:19:40.787Z",
+      "done_at": "2026-10-21T19:41:08.286Z",
+      "start_ref": "6e6d55e5c38d725b34014bdc95c041cd0d7ec662",
+      "end_ref": "ee08311e8ae214f31aa6e0793225cd891ae653eb"
+    },
+    "prod-examples": {
+      "status": "complete",
+      "started_at": "2026-10-22T02:23:06.557Z",
+      "done_at": "2026-10-22T03:00:17.530Z",
+      "start_ref": "90272daa935d7d1af5d69fa7a77719d63047361d",
+      "end_ref": "c98233f6462c07583b06ab4317f357fb8ab77648"
+    },
+    "port-fixes": {
+      "status": "complete",
+      "started_at": "2026-10-13T00:06:33.704Z",
+      "done_at": "2026-10-13T00:18:19.923Z",
+      "start_ref": "0f71e50ef06b3bc5c5e529a137025e123cc58e2d",
+      "end_ref": "097412a5121ec9e82964026b0d97bb686ab64117"
+    },
+    "audit-pre-review": {
+      "status": "complete",
+      "started_at": "2026-10-24T07:35:25.946Z",
+      "done_at": "2026-10-24T08:44:36.747Z",
+      "start_ref": "15f4e6824fe01af8332620edbbbe96b37d47c652",
+      "end_ref": "81c96f1e763feb3ccf90ecf877f75149267fe2b8"
+    },
+    "audit-fixes": {
+      "status": "complete",
+      "started_at": "2026-10-24T08:44:56.357Z",
+      "done_at": "2026-10-24T11:02:04.345Z",
+      "start_ref": "6dffdb3eb63eade98502a6d242aeba4d9f8d6a44",
+      "end_ref": "34d1437ffe47ae10d8aaa2084c7c434c85e12937"
+    },
+    "capture-upgrade": {
+      "status": "complete",
+      "started_at": "2026-10-13T00:47:02.086Z",
+      "done_at": "2026-10-13T01:27:37.412Z",
+      "start_ref": "ff2288f08440685aa0e6e8aac1a697251ea64b37",
+      "end_ref": "e47323299f075211ebb6ba7b4e125fe5be6d61dd"
+    },
+    "chrome-lifecycle": {
+      "status": "complete",
+      "started_at": "2026-10-13T01:29:18.133Z",
+      "done_at": "2026-10-13T08:22:34.160Z",
+      "start_ref": "8af7cff89daf9a09418e18d22ab25605fada2955",
+      "end_ref": "83ab6df7f9e54eca9dd1f6e3820242fcf2844064"
+    },
+    "tests-use-cases": {
+      "status": "complete",
+      "started_at": "2026-10-22T03:00:36.705Z",
+      "done_at": "2026-10-22T22:51:29.002Z",
+      "start_ref": "2f687cfb4587dca1cae4b4924b5e6761c2864b87",
+      "end_ref": "99afe3d1d71d121a4627fbc7769ef9f22cfaf68b"
+    },
+    "cdp-test-harness": {
+      "status": "complete",
+      "started_at": "2026-10-13T00:18:26.441Z",
+      "done_at": "2026-10-13T00:46:56.990Z",
+      "start_ref": "82ea6d2102d50e8659d29f798f025eca592d3501",
+      "end_ref": "852b7aad496ab1de86d6f8c61968d937ee50e034"
+    },
+    "failsafe-inventory": {
+      "status": "complete",
+      "started_at": "2026-10-12T23:58:47.048Z",
+      "done_at": "2026-10-13T00:06:33.473Z",
+      "start_ref": "90be93d4a0ebf2fdf28d406029323566dcd7878b",
+      "end_ref": "4894bdc5a49d6d645294d88bdb675162c05da6e9"
+    },
+    "sp-reaper-load-proof": {
+      "status": "complete",
+      "started_at": "2026-10-13T01:11:42.070Z",
+      "done_at": "2026-10-13T01:25:16.050Z",
+      "start_ref": "7c71eb9e736082e0117568472070444aa4f46006",
+      "end_ref": "962716de219d1f551a4b8f5cb133676cfacedb00"
+    },
+    "sp-link": {
+      "status": "complete",
+      "started_at": "2026-10-13T01:30:30.637Z",
+      "done_at": "2026-10-13T01:39:24.757Z",
+      "start_ref": "692cb289831c887e8b99e3a03676d953fab45e9c",
+      "end_ref": "4344d048eb8ed67d4b2075f5c5519ff1927b9a59"
+    },
+    "sp-reaper-smoke": {
+      "status": "complete",
+      "started_at": "2026-10-22T02:23:06.396Z",
+      "done_at": "2026-10-22T02:50:27.619Z",
+      "start_ref": "52596bffdd58ae8658bdada4a4da177f75ea13dc",
+      "end_ref": "40029d6d334ff7144ef10bf2843e6e5376f9cdc5"
+    },
+    "sp-switch": {
+      "status": "complete",
+      "started_at": "2026-10-23T21:27:00.420Z",
+      "done_at": "2026-10-23T21:39:23.707Z",
+      "start_ref": "6fe52ae6b04d5ae07ec562c0ebc130255bccf745",
+      "end_ref": "f9e408cd936252b4ad81eb0bf77f44473494430f"
+    },
+    "tripwire-scaffold": {
+      "status": "complete",
+      "started_at": "2026-10-13T01:11:41.521Z",
+      "done_at": "2026-10-13T01:29:10.822Z",
+      "start_ref": "ff6e8e9cc2a485ba795c0b49b88f5631143aae1e",
+      "end_ref": "885d5aadde5744efd6391428ab69d9199e5765fa"
+    },
+    "tripwire-core": {
+      "status": "complete",
+      "started_at": "2026-10-13T01:29:18.282Z",
+      "done_at": "2026-10-13T07:29:40.921Z",
+      "start_ref": "d95264fcf7c22c71fa4338eb0150300a8b084d8e",
+      "end_ref": "c74257e451719f01761ce477b6a819636cfc0fdb"
+    },
+    "tripwire-interactive": {
+      "status": "complete",
+      "started_at": "2026-10-13T07:29:46.651Z",
+      "done_at": "2026-10-13T07:49:17.456Z",
+      "start_ref": "6e0dbaf0236c343e1b98bf70e49d5f34216805d7",
+      "end_ref": "c234fcd20af2eb5c4edafbb9687e2ff971bf34f9"
+    },
+    "tripwire-docs": {
+      "status": "complete",
+      "started_at": "2026-10-13T07:49:17.690Z",
+      "done_at": "2026-10-13T08:11:41.853Z",
+      "start_ref": "21ce6489d14ca7ab219c406cc0d8dcd86315748e",
+      "end_ref": "bce6edcffba55d74864cd877932afd35c89e1881"
+    },
+    "tripwire-pack": {
+      "status": "complete",
+      "started_at": "2026-10-13T08:11:42.081Z",
+      "done_at": "2026-10-13T08:21:18.061Z",
+      "start_ref": "2d9bcf550ae143a87163554bcbcb31b6a7fd9419",
+      "end_ref": "1a6d42d7bb94702a1f89431eabdbf70f56b6d22e"
+    },
+    "tripwire-reverse-migrate": {
+      "status": "complete",
+      "started_at": "2026-10-13T08:22:34.515Z",
+      "done_at": "2026-10-21T18:08:49.902Z",
+      "start_ref": "410f70b1f4ccbc54a18f1ac69275f49e3d5dbe1f",
+      "end_ref": "4ba87b2d6c61696e69fad04a60d72c0d2ebc285c"
+    },
+    "tripwire-reverse-relink": {
+      "status": "pending",
+      "started_at": null,
+      "done_at": null,
+      "start_ref": null,
+      "end_ref": null
+    },
+    "split-plan-repair": {
+      "status": "complete",
+      "started_at": "2026-10-13T09:21:05.569Z",
+      "done_at": "2026-10-13T09:40:36.922Z",
+      "start_ref": "5c07337fe460f053a5ab793884e28bc0f79db6a6",
+      "end_ref": "6f2a0c7ee34e8c9680b36c24862bf6bd733fa7ad"
+    },
+    "core-scaffold": {
+      "status": "complete",
+      "started_at": "2026-10-13T09:44:03.445Z",
+      "done_at": "2026-10-21T18:11:57.048Z",
+      "start_ref": "0d66870ddf6edadec16454605a2f26bf3da03470",
+      "end_ref": "15c0986a65a84733567178229ed04874c9959734"
+    },
+    "core-seam": {
+      "status": "complete",
+      "started_at": "2026-10-21T18:12:03.660Z",
+      "done_at": "2026-10-21T19:19:32.854Z",
+      "start_ref": "ad1df1358592de0eabff0ffb31f6ee6448d7b963",
+      "end_ref": "f23d1e9cba0acfdaf2a387e29a529eeeb19be52c"
+    },
+    "search-scaffold": {
+      "status": "complete",
+      "started_at": "2026-10-21T18:12:35.504Z",
+      "done_at": "2026-10-21T18:24:03.068Z",
+      "start_ref": "72b1d368081d0a5f282569c2d0efd679e6c3a490",
+      "end_ref": "255d77590e6bb4bedbc48f501e77e656e15d0fd7"
+    },
+    "search-inventory": {
+      "status": "complete",
+      "started_at": "2026-10-21T19:03:31.346Z",
+      "done_at": "2026-10-21T19:11:20.356Z",
+      "start_ref": "1d6cc59972cb019cb3f8946ca6ad6ee3bda0fd67",
+      "end_ref": "8ee8f6a03ee7bd5703ba4473b9a8c72b3ff59810"
+    },
+    "search-errors": {
+      "status": "complete",
+      "started_at": "2026-10-22T02:23:06.222Z",
+      "done_at": "2026-10-22T02:34:26.485Z",
+      "start_ref": "a6c4eb66679437f2eb779121f3fcbbe901a2f28d",
+      "end_ref": "f48ab75adacf084470b17c724b1a51d8ebbf041c"
+    },
+    "search-port-providers": {
+      "status": "complete",
+      "started_at": "2026-10-22T03:00:35.763Z",
+      "done_at": "2026-10-23T17:33:33.115Z",
+      "start_ref": "b5c4e077c7e76cfe8dd09bf619b3953b1d93b7aa",
+      "end_ref": "d863207fb3be21789950fe0fe53a8c30090db171"
+    },
+    "search-port-fetch": {
+      "status": "complete",
+      "started_at": "2026-10-22T03:00:36.120Z",
+      "done_at": "2026-10-23T17:37:24.172Z",
+      "start_ref": "cb83165b70c14046e043a6526cdf9f65a304e067",
+      "end_ref": "232fdefb3686a9e1201184693d9ad9d96a289262"
+    },
+    "search-port-engine": {
+      "status": "complete",
+      "started_at": "2026-10-23T17:41:20.365Z",
+      "done_at": "2026-10-23T18:10:28.074Z",
+      "start_ref": "a34be83b9f4dbc58140d2a49173c8518e3c6efbb",
+      "end_ref": "9237096eb43e1354c86fd8b9d03f843fc088fc59"
+    },
+    "search-port-guards": {
+      "status": "complete",
+      "started_at": "2026-10-22T03:00:36.466Z",
+      "done_at": "2026-10-23T17:40:57.401Z",
+      "start_ref": "ce035f12c0f6b277a7079cb202aaad5e68f4351a",
+      "end_ref": "c619fcd7539fa06375d1d1a3a857f69482cb8c0f"
+    },
+    "search-verbs": {
+      "status": "complete",
+      "started_at": "2026-10-23T18:10:51.620Z",
+      "done_at": "2026-10-23T19:01:48.052Z",
+      "start_ref": "4e34ad17e89188797ebaaf218758e77a70a640ab",
+      "end_ref": "0b71fbfddba1600406a9824bc18893cddb5f29d7"
+    },
+    "search-tracing": {
+      "status": "complete",
+      "started_at": "2026-10-21T19:03:31.410Z",
+      "done_at": "2026-10-21T19:15:38.010Z",
+      "start_ref": "1d6cc59972cb019cb3f8946ca6ad6ee3bda0fd67",
+      "end_ref": "aa5df30a701d6fc8566886c0e5d93629ddb60e39"
+    },
+    "search-hosts": {
+      "status": "complete",
+      "started_at": "2026-10-23T19:02:04.291Z",
+      "done_at": "2026-10-23T20:58:41.217Z",
+      "start_ref": "912911db2903e6f5cc9ccfad87b817b507339032",
+      "end_ref": "1cc1afba43c34f4f66b993a1cc421e1fbeca12ad"
+    },
+    "search-usecases": {
+      "status": "complete",
+      "started_at": "2026-10-23T20:59:09.772Z",
+      "done_at": "2026-10-23T21:20:50.540Z",
+      "start_ref": "a811a487d03cceebf6f8367964a5441c14c11110",
+      "end_ref": "59c4d3688e1ca367315e1eb1a6fc9cfd36a1b3ac"
+    },
+    "search-examples": {
+      "status": "complete",
+      "started_at": "2026-10-23T20:59:10.103Z",
+      "done_at": "2026-10-23T21:26:40.872Z",
+      "start_ref": "5e12c1604cdcb7a412073124c522f516e0f661e8",
+      "end_ref": "efb0087501c503188eb63dda9350f2a23396e278"
+    },
+    "tracing-log-validation": {
+      "status": "complete",
+      "started_at": "2026-10-24T02:09:40.441Z",
+      "done_at": "2026-10-24T02:35:06.414Z",
+      "start_ref": "6f38faffcb024c7682c6791291df8d50a7084d89",
+      "end_ref": "25eee397d588c6e9f018b607dfe9c48caac89e35"
+    },
+    "search-cutover": {
+      "status": "complete",
+      "started_at": "2026-10-24T02:35:11.987Z",
+      "done_at": "2026-10-24T03:18:06.583Z",
+      "start_ref": "8cebe4403dff4a3f2540fcba1c027d39570f43c4",
+      "end_ref": "487afc7d1afaa417ee65eedcd773e03965f3c7d6"
+    },
+    "consumer-relink": {
+      "status": "pending",
+      "started_at": null,
+      "done_at": null,
+      "start_ref": null,
+      "end_ref": null
+    },
+    "main-merge": {
+      "status": "complete",
+      "started_at": "2026-10-23T22:13:16.326Z",
+      "done_at": "2026-10-23T22:23:58.482Z",
+      "start_ref": "b909ff6d6619bb87de4858cfee1dc5aa5dfe3b3c",
+      "end_ref": "fb48127261e3099e8b1ff3a8523dde7573e8c037"
+    },
+    "conform-tripwire": {
+      "status": "complete",
+      "started_at": "2026-10-23T22:23:58.697Z",
+      "done_at": "2026-10-23T22:42:56.048Z",
+      "start_ref": "71bc6e1abaaea513719ddc3722f8a3c7a9fa1552",
+      "end_ref": "f1486b4db45c667fe363330f0ac328842daa4605"
+    },
+    "conform-core": {
+      "status": "complete",
+      "started_at": "2026-10-23T22:23:58.836Z",
+      "done_at": "2026-10-23T22:49:13.286Z",
+      "start_ref": "2d8569f80733c1b970bd90b468f4b063c77bc43f",
+      "end_ref": "fd279a520360d7a0fc7c4dcc2fdd896f1288ea70"
+    },
+    "conform-search": {
+      "status": "complete",
+      "started_at": "2026-10-23T22:23:58.979Z",
+      "done_at": "2026-10-23T22:56:54.813Z",
+      "start_ref": "da7e0674a069e746b1b93c24bee3c8886a97d9cd",
+      "end_ref": "2f0016a082b0265e4d1f7d7133f2cf7f545276ae"
+    },
+    "fix-tripwire": {
+      "status": "complete",
+      "started_at": "2026-10-23T22:57:26.391Z",
+      "done_at": "2026-10-24T00:16:27.651Z",
+      "start_ref": "ded73131f104eb9e79fdcbd1f16bc17d752c3e4e",
+      "end_ref": "b0bca460d3672be55e510a8f0a6bdd6316022f67"
+    },
+    "fix-core-parsers": {
+      "status": "complete",
+      "started_at": "2026-10-23T22:57:26.530Z",
+      "done_at": "2026-10-23T23:20:13.098Z",
+      "start_ref": "f38fe5f9447663bd4d02eb0be26dc88cb9d50b42",
+      "end_ref": "b3577260298abade0007790790087711edee31d4"
+    },
+    "fix-core-lifecycle": {
+      "status": "complete",
+      "started_at": "2026-10-23T22:57:26.668Z",
+      "done_at": "2026-10-23T23:30:14.053Z",
+      "start_ref": "615cd4d959ccdddb87e730f561c1215dc5704097",
+      "end_ref": "bd69d1db283ca8bb0512b57f700b164dc8e83a9b"
+    },
+    "fix-core-errors": {
+      "status": "complete",
+      "started_at": "2026-10-23T22:57:26.839Z",
+      "done_at": "2026-10-23T23:37:34.507Z",
+      "start_ref": "a6dce780b700ca4734e1bd090d16b7378bc59855",
+      "end_ref": "9ce1e650c26c63c04cd06e2207f12261503f5c54"
+    },
+    "fix-search-fetch": {
+      "status": "complete",
+      "started_at": "2026-10-23T22:57:26.976Z",
+      "done_at": "2026-10-23T23:53:13.276Z",
+      "start_ref": "e08aef70b35de76b534273f808bf597d72053559",
+      "end_ref": "79cf1df028d51cb34590a4db830b8cd1165a7949"
+    },
+    "fix-search-engine": {
+      "status": "complete",
+      "started_at": "2026-10-23T22:57:27.112Z",
+      "done_at": "2026-10-24T00:00:33.695Z",
+      "start_ref": "bcbefe7a24d58ba50aeaa1a6f454c5f5a75cefea",
+      "end_ref": "18bb98872a5f3e8407cc807d9d65a9df4ae54e96"
+    },
+    "fix-search-output": {
+      "status": "complete",
+      "started_at": "2026-10-23T22:57:27.253Z",
+      "done_at": "2026-10-24T00:07:54.449Z",
+      "start_ref": "c95b92b46632440376cd87dd72583c9de58bbc85",
+      "end_ref": "f193d55fb179001597a4f69489f4cde4b7aed10b"
+    },
+    "search-mcp-iserror": {
+      "status": "complete",
+      "started_at": "2026-10-24T00:16:43.565Z",
+      "done_at": "2026-10-24T00:43:50.533Z",
+      "start_ref": "ca63d9e5ff8538b515612640ab79216202843aad",
+      "end_ref": "de35d528611fbf2c6d2dec4b51aff9eb15fe3568"
+    },
+    "fix-search-build": {
+      "status": "complete",
+      "started_at": "2026-10-24T00:43:50.786Z",
+      "done_at": "2026-10-24T01:07:44.693Z",
+      "start_ref": "1d647d0bb4f2d81fbf2c6005028659a54dfe3cb6",
+      "end_ref": "f62af06f62226b3776abb24720e61c33a7cb4c3d"
+    },
+    "search-tracing-fixes": {
+      "status": "complete",
+      "started_at": "2026-10-24T01:07:44.921Z",
+      "done_at": "2026-10-24T02:09:15.185Z",
+      "start_ref": "efad20bcbad8e7df8211bb503ed8649b6e49ddab",
+      "end_ref": "46ef39369e5fa2b58282a74ff90fde02773327dc"
+    },
+    "plan-notes": {
+      "status": "complete",
+      "started_at": "2026-10-24T01:31:23.025Z",
+      "done_at": "2026-10-24T01:54:40.646Z",
+      "start_ref": "b262677497507db569ca96e0f18c7ba47d7010c9",
+      "end_ref": "67046467ac20580e0213d4b58fc0c85ff76f137e"
+    },
+    "release-readiness": {
+      "status": "complete",
+      "started_at": "2026-10-24T03:18:06.809Z",
+      "done_at": "2026-10-24T05:52:34.529Z",
+      "start_ref": "677f2a281bfcfe20e33bbba4918d0996ca3e4fb6",
+      "end_ref": "c0c01e49eddce5a791993b52e1075b61b1191b90"
+    },
+    "release-gate-fixes": {
+      "status": "complete",
+      "started_at": "2026-10-24T04:12:24.860Z",
+      "done_at": "2026-10-24T05:21:25.320Z",
+      "start_ref": "d707776de68abd98d5c16b97a40e9294e6b60df0",
+      "end_ref": "7bb3f6db497290a3cbef5ecad132f5ac8dde592e"
+    }
+  },
+  "transition_log": [
+    {
+      "ts": "2026-10-12T10:52:26.692Z",
+      "from": "productization-hold",
+      "to": "productization-hold",
+      "start_ref": "424aa022cc47018b525b121b81f1c5061ba4f14f",
+      "end_ref": "641717a97afb3fdcb33894158d02faaa1639208f",
+      "audit_exit": 0,
+      "audit_criteria_passed": 3,
+      "audit_criteria_total": 3,
+      "by": "pseudosky",
+      "note": "PRODUCT-REVIEW.md STATUS: folded, guard exit 0 (verified by orchestrator)"
+    },
+    {
+      "ts": "2026-10-12T11:06:10.448Z",
+      "from": "scaffold",
+      "to": "scaffold",
+      "start_ref": "d6a92d68347fe9b36bd633eeadd2bc999fa82db8",
+      "end_ref": "2a7810a75a3984eee79e4a65237386164824aac9",
+      "audit_exit": 0,
+      "audit_criteria_passed": 8,
+      "audit_criteria_total": 8,
+      "by": "pseudosky",
+      "note": "generator run: @adhd/stealth-browser at entrypoint/stealth-browser; commit 2a7810a7; guard 0"
+    },
+    {
+      "ts": "2026-10-12T11:07:51.737Z",
+      "from": "entrypoint-parity",
+      "to": "entrypoint-parity",
+      "start_ref": "ec858b3290e786dce0dd9ee535428312f4f6acce",
+      "end_ref": "4816496bd96c8e8c6cb686afbf8ee827d02abd9f",
+      "audit_exit": 0,
+      "audit_criteria_passed": 7,
+      "audit_criteria_total": 7,
+      "by": "pseudosky",
+      "note": "parity files/targets/metadata/engines added; guard 7/7 PASS, lint exit 0"
+    },
+    {
+      "ts": "2026-10-12T21:25:00.958Z",
+      "from": "deps-install",
+      "to": "deps-install",
+      "start_ref": "eb5f4f01e4f21fd5be2b8d897bec719fafc185e9",
+      "end_ref": "50c5b1bfb4e76016ee608ce6bdd5875fc3132ae7",
+      "audit_exit": 0,
+      "audit_criteria_passed": 7,
+      "audit_criteria_total": 7,
+      "by": "pseudosky",
+      "note": "deps declared, lockfile +34/-0, real node_modules, eslint temp ignore; guard 0 (commit 50c5b1bf)"
+    },
+    {
+      "ts": "2026-10-12T21:26:00.454Z",
+      "from": "mig-foundation",
+      "to": "mig-foundation",
+      "start_ref": "32e3fde89282f48b5f9e1f6c1f9070fc5c2d87f0",
+      "end_ref": "d9d3e5dca94e2bc4469b0dc8e16e31997b3e7240",
+      "audit_exit": 0,
+      "audit_criteria_passed": 4,
+      "audit_criteria_total": 4,
+      "by": "pseudosky",
+      "note": "foundation ported d9d3e5dc; guard 0"
+    },
+    {
+      "ts": "2026-10-12T21:27:38.874Z",
+      "from": "mig-docs",
+      "to": "mig-docs",
+      "start_ref": "d175e7a1f049f80a9ff3c3aead4898bd19c259d5",
+      "end_ref": "f48566196e5736dec8de9077835e23e6b4f6be17",
+      "audit_exit": 0,
+      "audit_criteria_passed": 3,
+      "audit_criteria_total": 3,
+      "by": "pseudosky",
+      "note": "docs ported f4856619; guard 0"
+    },
+    {
+      "ts": "2026-10-12T21:27:52.649Z",
+      "from": "mig-docs",
+      "to": "mig-docs",
+      "start_ref": "d175e7a1f049f80a9ff3c3aead4898bd19c259d5",
+      "end_ref": "80e30ef13e7f59bee88f432525e8a3b1e05c9757",
+      "audit_exit": 0,
+      "audit_criteria_passed": 3,
+      "audit_criteria_total": 3,
+      "by": "pseudosky",
+      "note": "docs ported f4856619; guard 0"
+    },
+    {
+      "ts": "2026-10-12T21:28:08.356Z",
+      "from": "mig-docs",
+      "to": "mig-cdp",
+      "start_ref": "a3c01e2250b200e57cb6d962fc3d4ba17eb652fb",
+      "end_ref": "b6f382dd28d923426eb99ed8b2cb147a42b92ea4",
+      "audit_exit": 0,
+      "audit_criteria_passed": 4,
+      "audit_criteria_total": 4,
+      "by": "pseudosky",
+      "note": "cdp ported 5d651c6f; guard 0"
+    },
+    {
+      "ts": "2026-10-12T21:28:39.184Z",
+      "from": "mig-domains-storage",
+      "to": "mig-capture-parsers",
+      "start_ref": "571723e1f5d3645b5ad0f5a94d4de46aec52c1e6",
+      "end_ref": "2a7e1884509338be7d17455d29f73a43472052d9",
+      "audit_exit": 0,
+      "audit_criteria_passed": 6,
+      "audit_criteria_total": 6,
+      "by": "pseudosky",
+      "note": "capture+parsers e32b80fd; guard 0"
+    },
+    {
+      "ts": "2026-10-12T21:29:48.651Z",
+      "from": "tests-unit-extract",
+      "to": "mig-chrome-manager",
+      "start_ref": "ff09ec5651641abac70fb9898374ce0d16e61690",
+      "end_ref": "ab610c7a4defc528f1a5690b6f6171ca110b666a",
+      "audit_exit": 0,
+      "audit_criteria_passed": 4,
+      "audit_criteria_total": 4,
+      "by": "pseudosky",
+      "note": "chrome-manager landed in ab610c7a (index race swept into domains-storage commit); guard 0"
+    },
+    {
+      "ts": "2026-10-12T21:30:20.274Z",
+      "from": "tests-unit-core",
+      "to": "mig-domains-storage",
+      "start_ref": "50be62c9e817379ead6f07f1cb37fbf210636279",
+      "end_ref": "ecdbcaf12bb457d420a861076c648dcf56865b3a",
+      "audit_exit": 0,
+      "audit_criteria_passed": 4,
+      "audit_criteria_total": 4,
+      "by": "pseudosky",
+      "note": "domains+storage b8234c89; guard 0"
+    },
+    {
+      "ts": "2026-10-12T21:31:36.941Z",
+      "from": "tests-unit-core",
+      "to": "mig-queries",
+      "start_ref": "a669469a9c777e2bcd95c0d4ee166b2691487cdb",
+      "end_ref": "f60f9ee72a27affa789d18a9280c456d7b9d1f53",
+      "audit_exit": 0,
+      "audit_criteria_passed": 4,
+      "audit_criteria_total": 4,
+      "by": "pseudosky",
+      "note": "queries f60f9ee7; guard 0"
+    },
+    {
+      "ts": "2026-10-13T00:06:33.473Z",
+      "from": "failsafe-inventory",
+      "to": "failsafe-inventory",
+      "start_ref": "90be93d4a0ebf2fdf28d406029323566dcd7878b",
+      "end_ref": "4894bdc5a49d6d645294d88bdb675162c05da6e9",
+      "audit_exit": 0,
+      "audit_criteria_passed": 5,
+      "audit_criteria_total": 5,
+      "by": "pseudosky",
+      "note": "inventory 209 rows, guard 0 (commit 4894bdc5)"
+    },
+    {
+      "ts": "2026-10-13T00:18:19.923Z",
+      "from": "port-fixes",
+      "to": "port-fixes",
+      "start_ref": "0f71e50ef06b3bc5c5e529a137025e123cc58e2d",
+      "end_ref": "097412a5121ec9e82964026b0d97bb686ab64117",
+      "audit_exit": 0,
+      "audit_criteria_passed": 12,
+      "audit_criteria_total": 12,
+      "by": "pseudosky",
+      "note": "port-fixes 12/12 guard 0; nx test 389 pass"
+    },
+    {
+      "ts": "2026-10-13T00:28:03.845Z",
+      "from": "tests-unit-extract",
+      "to": "tests-unit-extract",
+      "start_ref": "2ae08b7bd932e0ddbbaf7817300ff0bddf4ae86b",
+      "end_ref": "99b936cf755d0b18b174f6d16848851ee857323f",
+      "audit_exit": 0,
+      "audit_criteria_passed": 6,
+      "audit_criteria_total": 6,
+      "by": "pseudosky",
+      "note": "guard 0; 33 rows pinned; 65 tests"
+    },
+    {
+      "ts": "2026-10-13T00:42:01.785Z",
+      "from": "tests-unit-extract",
+      "to": "tests-unit-core",
+      "start_ref": "13c0b7612ef5534a5dd0d870f283777dab00bb9e",
+      "end_ref": "70cd00ea6e03830ea20493da3ce87eb76e03e4f3",
+      "audit_exit": 0,
+      "audit_criteria_passed": 6,
+      "audit_criteria_total": 6,
+      "by": "pseudosky",
+      "note": "guard 0 verified by orchestrator"
+    },
+    {
+      "ts": "2026-10-13T00:45:47.294Z",
+      "from": "tests-unit-core",
+      "to": "tests-unit-data",
+      "start_ref": "c452d3a644e286005d86ccef3d2c84ad7f657139",
+      "end_ref": "64e5830a3e87ee887faed3519d280f5b4ff2cc80",
+      "audit_exit": 0,
+      "audit_criteria_passed": 6,
+      "audit_criteria_total": 6,
+      "by": "pseudosky",
+      "note": "guard 0 verified by orchestrator"
+    },
+    {
+      "ts": "2026-10-13T00:46:56.990Z",
+      "from": "tests-unit-data",
+      "to": "cdp-test-harness",
+      "start_ref": "82ea6d2102d50e8659d29f798f025eca592d3501",
+      "end_ref": "852b7aad496ab1de86d6f8c61968d937ee50e034",
+      "audit_exit": 0,
+      "audit_criteria_passed": 6,
+      "audit_criteria_total": 6,
+      "by": "pseudosky",
+      "note": "guard 0 verified by orchestrator"
+    },
+    {
+      "ts": "2026-10-13T01:18:10.557Z",
+      "from": "sp-reaper-load-proof",
+      "to": "surface-api",
+      "start_ref": "88a7f6a41f6c9a7a7f8749578563a63a744a0c0f",
+      "end_ref": "51d26ba6b0ddcff495aa4a3c7a84741cb2d727cb",
+      "audit_exit": 0,
+      "audit_criteria_passed": 10,
+      "audit_criteria_total": 10,
+      "by": "pseudosky",
+      "note": "guard 0 after plan amendment 27440178; verified by orchestrator"
+    },
+    {
+      "ts": "2026-10-13T01:25:16.050Z",
+      "from": "sp-link",
+      "to": "sp-reaper-load-proof",
+      "start_ref": "7c71eb9e736082e0117568472070444aa4f46006",
+      "end_ref": "962716de219d1f551a4b8f5cb133676cfacedb00",
+      "audit_exit": 0,
+      "audit_criteria_passed": 3,
+      "audit_criteria_total": 3,
+      "by": "pseudosky",
+      "note": "dist loads via require from out-of-repo cwd; detached spawn form passes against scratch stub; VERDICT entry-path-ok; evidence commit 0a0d7937; re-recorded after stale-write repair"
+    },
+    {
+      "ts": "2026-10-13T01:27:37.412Z",
+      "from": "chrome-lifecycle",
+      "to": "capture-upgrade",
+      "start_ref": "ff2288f08440685aa0e6e8aac1a697251ea64b37",
+      "end_ref": "e47323299f075211ebb6ba7b4e125fe5be6d61dd",
+      "audit_exit": 0,
+      "audit_criteria_passed": 28,
+      "audit_criteria_total": 28,
+      "by": "pseudosky",
+      "note": "re-complete: guard 0; prior completion 56891b54 was overwritten by a concurrent state.json write"
+    },
+    {
+      "ts": "2026-10-13T01:29:10.822Z",
+      "from": "chrome-lifecycle",
+      "to": "tripwire-scaffold",
+      "start_ref": "ff6e8e9cc2a485ba795c0b49b88f5631143aae1e",
+      "end_ref": "885d5aadde5744efd6391428ab69d9199e5765fa",
+      "audit_exit": 0,
+      "audit_criteria_passed": 5,
+      "audit_criteria_total": 5,
+      "by": "pseudosky",
+      "note": "generator-built @adhd/resilience-core-tripwire, resilience group, CJS manifest; commit 885d5aad; guard 5/5"
+    },
+    {
+      "ts": "2026-10-13T01:39:24.757Z",
+      "from": "sp-link",
+      "to": "sp-link",
+      "start_ref": "692cb289831c887e8b99e3a03676d953fab45e9c",
+      "end_ref": "4344d048eb8ed67d4b2075f5c5519ff1927b9a59",
+      "audit_exit": 0,
+      "audit_criteria_passed": 5,
+      "audit_criteria_total": 5,
+      "by": "pseudosky",
+      "note": "dep ~0.6.0 + root override to dev tarball (sha256 61d3ed54..., pnpm pack, 0.6.0); commit 4f7b0b4f; guard per-criterion PASS"
+    },
+    {
+      "ts": "2026-10-13T07:29:40.921Z",
+      "from": "sp-link",
+      "to": "tripwire-core",
+      "start_ref": "d95264fcf7c22c71fa4338eb0150300a8b084d8e",
+      "end_ref": "c74257e451719f01761ce477b6a819636cfc0fdb",
+      "audit_exit": 0,
+      "audit_criteria_passed": 32,
+      "audit_criteria_total": 32,
+      "by": "pseudosky",
+      "note": "guard 0 (32/32) verified by orchestrator; commits 49afcf7f 8e4e3dda c74257e4"
+    },
+    {
+      "ts": "2026-10-13T07:49:17.456Z",
+      "from": "tripwire-interactive",
+      "to": "tripwire-interactive",
+      "start_ref": "6e0dbaf0236c343e1b98bf70e49d5f34216805d7",
+      "end_ref": "c234fcd20af2eb5c4edafbb9687e2ff971bf34f9",
+      "audit_exit": 0,
+      "audit_criteria_passed": 9,
+      "audit_criteria_total": 9,
+      "by": "pseudosky",
+      "note": "guard 0 (9/9) verified by orchestrator; commits 105a7973 11002e85 c234fcd2"
+    },
+    {
+      "ts": "2026-10-13T08:11:41.853Z",
+      "from": "tripwire-docs",
+      "to": "tripwire-docs",
+      "start_ref": "21ce6489d14ca7ab219c406cc0d8dcd86315748e",
+      "end_ref": "bce6edcffba55d74864cd877932afd35c89e1881",
+      "audit_exit": 0,
+      "audit_criteria_passed": 5,
+      "audit_criteria_total": 5,
+      "by": "pseudosky",
+      "note": "guard 0 verified by orchestrator; commits 371c1048 + bce6edcf (tripwire-core-tagged JSDoc)"
+    },
+    {
+      "ts": "2026-10-13T08:21:18.061Z",
+      "from": "tripwire-pack",
+      "to": "tripwire-pack",
+      "start_ref": "2d9bcf550ae143a87163554bcbcb31b6a7fd9419",
+      "end_ref": "1a6d42d7bb94702a1f89431eabdbf70f56b6d22e",
+      "audit_exit": 0,
+      "audit_criteria_passed": 4,
+      "audit_criteria_total": 4,
+      "by": "pseudosky",
+      "note": "guard 0 (4/4) verified by orchestrator; commit 1a6d42d7"
+    },
+    {
+      "ts": "2026-10-13T08:22:34.160Z",
+      "from": "tripwire-reverse-migrate",
+      "to": "chrome-lifecycle",
+      "start_ref": "8af7cff89daf9a09418e18d22ab25605fada2955",
+      "end_ref": "83ab6df7f9e54eca9dd1f6e3820242fcf2844064",
+      "audit_exit": 0,
+      "audit_criteria_passed": 29,
+      "audit_criteria_total": 29,
+      "by": "pseudosky",
+      "note": "guard 0 (29/29) verified by orchestrator; commits 9bbfe724..9f3da49b; plan-repair fa70b1c8 95436fa3"
+    },
+    {
+      "ts": "2026-10-13T09:40:36.922Z",
+      "from": "split-plan-repair",
+      "to": "split-plan-repair",
+      "start_ref": "5c07337fe460f053a5ab793884e28bc0f79db6a6",
+      "end_ref": "6f2a0c7ee34e8c9680b36c24862bf6bd733fa7ad",
+      "audit_exit": 0,
+      "audit_criteria_passed": 7,
+      "audit_criteria_total": 7,
+      "by": "pseudosky",
+      "note": ""
+    },
+    {
+      "ts": "2026-10-21T18:08:49.902Z",
+      "from": "core-scaffold",
+      "to": "tripwire-reverse-migrate",
+      "start_ref": "410f70b1f4ccbc54a18f1ac69275f49e3d5dbe1f",
+      "end_ref": "4ba87b2d6c61696e69fad04a60d72c0d2ebc285c",
+      "audit_exit": 0,
+      "audit_criteria_passed": 6,
+      "audit_criteria_total": 6,
+      "by": "pseudosky",
+      "note": "guard exit 0 (orchestrator-verified); request-builder scoped run-many recorded exit 0 by haiku"
+    },
+    {
+      "ts": "2026-10-21T18:11:57.048Z",
+      "from": "tripwire-reverse-migrate",
+      "to": "core-scaffold",
+      "start_ref": "0d66870ddf6edadec16454605a2f26bf3da03470",
+      "end_ref": "15c0986a65a84733567178229ed04874c9959734",
+      "audit_exit": 0,
+      "audit_criteria_passed": 9,
+      "audit_criteria_total": 9,
+      "by": "pseudosky",
+      "note": "guard repair 614edb74 (rename-aware, commit-scoped); guards exit 0; sweep verified"
+    },
+    {
+      "ts": "2026-10-21T18:24:03.068Z",
+      "from": "search-scaffold",
+      "to": "search-scaffold",
+      "start_ref": "72b1d368081d0a5f282569c2d0efd679e6c3a490",
+      "end_ref": "255d77590e6bb4bedbc48f501e77e656e15d0fd7",
+      "audit_exit": 0,
+      "audit_criteria_passed": 7,
+      "audit_criteria_total": 7,
+      "by": "pseudosky",
+      "note": "guard exit 0; generator-built entrypoint; .5 regex fixed 255d7759"
+    },
+    {
+      "ts": "2026-10-21T19:11:20.356Z",
+      "from": "search-tracing",
+      "to": "search-inventory",
+      "start_ref": "1d6cc59972cb019cb3f8946ca6ad6ee3bda0fd67",
+      "end_ref": "8ee8f6a03ee7bd5703ba4473b9a8c72b3ff59810",
+      "audit_exit": 0,
+      "audit_criteria_passed": 7,
+      "audit_criteria_total": 7,
+      "by": "pseudosky",
+      "note": "guard exit 0 (orchestrator-verified); sonnet; 52 rows, baseline c00edea"
+    },
+    {
+      "ts": "2026-10-21T19:15:38.010Z",
+      "from": "search-inventory",
+      "to": "search-tracing",
+      "start_ref": "1d6cc59972cb019cb3f8946ca6ad6ee3bda0fd67",
+      "end_ref": "aa5df30a701d6fc8566886c0e5d93629ddb60e39",
+      "audit_exit": 0,
+      "audit_criteria_passed": 5,
+      "audit_criteria_total": 5,
+      "by": "pseudosky",
+      "note": "guard exit 0 (orchestrator-verified); sonnet"
+    },
+    {
+      "ts": "2026-10-21T19:19:32.854Z",
+      "from": "search-tracing",
+      "to": "core-seam",
+      "start_ref": "ad1df1358592de0eabff0ffb31f6ee6448d7b963",
+      "end_ref": "f23d1e9cba0acfdaf2a387e29a529eeeb19be52c",
+      "audit_exit": 0,
+      "audit_criteria_passed": 12,
+      "audit_criteria_total": 12,
+      "by": "pseudosky",
+      "note": "guard exit 0, 12/12 (orchestrator-verified); haiku fixture patch 10458bc7 + sonnet impl 01d05754 bcffc8fa 7b4b3f5e 1bb8eb3a aa5df30a(.8, swept into inventory completion commit); core test 97 files/946 tests"
+    },
+    {
+      "ts": "2026-10-21T19:41:08.286Z",
+      "from": "tests-unit-surface",
+      "to": "prod-errors",
+      "start_ref": "6e6d55e5c38d725b34014bdc95c041cd0d7ec662",
+      "end_ref": "ee08311e8ae214f31aa6e0793225cd891ae653eb",
+      "audit_exit": 0,
+      "audit_criteria_passed": 8,
+      "audit_criteria_total": 8,
+      "by": "pseudosky",
+      "note": "guard exit 0 (orchestrator-verified); sonnet; ee08311e"
+    },
+    {
+      "ts": "2026-10-21T19:47:48.644Z",
+      "from": "prod-examples",
+      "to": "tests-unit-surface",
+      "start_ref": "dba8167ede6e91702daa5cd35be1f5035366abb4",
+      "end_ref": "9830641c9bcb909ab67ba79e0e41efc73a3f5ad7",
+      "audit_exit": 0,
+      "audit_criteria_passed": 5,
+      "audit_criteria_total": 5,
+      "by": "pseudosky",
+      "note": "guard exit 0 (orchestrator-verified); sonnet; dfb95d27"
+    },
+    {
+      "ts": "2026-10-22T02:34:26.485Z",
+      "from": "prod-examples",
+      "to": "search-errors",
+      "start_ref": "a6c4eb66679437f2eb779121f3fcbbe901a2f28d",
+      "end_ref": "f48ab75adacf084470b17c724b1a51d8ebbf041c",
+      "audit_exit": 0,
+      "audit_criteria_passed": 7,
+      "audit_criteria_total": 7,
+      "by": "pseudosky",
+      "note": "guard exit 0 (orchestrator-verified); sonnet; 9b29f160"
+    },
+    {
+      "ts": "2026-10-22T02:50:27.619Z",
+      "from": "search-port-providers",
+      "to": "sp-reaper-smoke",
+      "start_ref": "52596bffdd58ae8658bdada4a4da177f75ea13dc",
+      "end_ref": "40029d6d334ff7144ef10bf2843e6e5376f9cdc5",
+      "audit_exit": 0,
+      "audit_criteria_passed": 3,
+      "audit_criteria_total": 3,
+      "by": "pseudosky",
+      "note": "guard exit 0 (orchestrator-verified); sonnet; c1c5fd6c"
+    },
+    {
+      "ts": "2026-10-22T03:00:17.530Z",
+      "from": "search-port-providers",
+      "to": "prod-examples",
+      "start_ref": "90272daa935d7d1af5d69fa7a77719d63047361d",
+      "end_ref": "c98233f6462c07583b06ab4317f357fb8ab77648",
+      "audit_exit": 0,
+      "audit_criteria_passed": 5,
+      "audit_criteria_total": 5,
+      "by": "pseudosky",
+      "note": "guard exit 0 (orchestrator-verified); sonnet; 0a4f18f2"
+    },
+    {
+      "ts": "2026-10-22T22:51:29.002Z",
+      "from": "tests-use-cases",
+      "to": "tests-use-cases",
+      "start_ref": "2f687cfb4587dca1cae4b4924b5e6761c2864b87",
+      "end_ref": "99afe3d1d71d121a4627fbc7769ef9f22cfaf68b",
+      "audit_exit": 0,
+      "audit_criteria_passed": 6,
+      "audit_criteria_total": 6,
+      "by": "pseudosky",
+      "note": "guard exit 0 (orchestrator-verified); sonnet; cdba8a4e 93b96f92"
+    },
+    {
+      "ts": "2026-10-23T17:33:33.115Z",
+      "from": "tests-use-cases",
+      "to": "search-port-providers",
+      "start_ref": "b5c4e077c7e76cfe8dd09bf619b3953b1d93b7aa",
+      "end_ref": "d863207fb3be21789950fe0fe53a8c30090db171",
+      "audit_exit": 0,
+      "audit_criteria_passed": 10,
+      "audit_criteria_total": 10,
+      "by": "pseudosky",
+      "note": "guard exit 0 (orchestrator-verified); sonnet; resumed after outage"
+    },
+    {
+      "ts": "2026-10-23T17:37:24.172Z",
+      "from": "search-port-engine",
+      "to": "search-port-fetch",
+      "start_ref": "cb83165b70c14046e043a6526cdf9f65a304e067",
+      "end_ref": "232fdefb3686a9e1201184693d9ad9d96a289262",
+      "audit_exit": 0,
+      "audit_criteria_passed": 10,
+      "audit_criteria_total": 10,
+      "by": "pseudosky",
+      "note": "guard exit 0 (orchestrator-verified); sonnet; resumed after outage"
+    },
+    {
+      "ts": "2026-10-23T17:40:57.401Z",
+      "from": "search-port-engine",
+      "to": "search-port-guards",
+      "start_ref": "ce035f12c0f6b277a7079cb202aaad5e68f4351a",
+      "end_ref": "c619fcd7539fa06375d1d1a3a857f69482cb8c0f",
+      "audit_exit": 0,
+      "audit_criteria_passed": 11,
+      "audit_criteria_total": 11,
+      "by": "pseudosky",
+      "note": "guard exit 0 (orchestrator-verified); sonnet; resumed after outage"
+    },
+    {
+      "ts": "2026-10-23T18:10:28.074Z",
+      "from": "search-port-engine",
+      "to": "search-port-engine",
+      "start_ref": "a34be83b9f4dbc58140d2a49173c8518e3c6efbb",
+      "end_ref": "9237096eb43e1354c86fd8b9d03f843fc088fc59",
+      "audit_exit": 0,
+      "audit_criteria_passed": 15,
+      "audit_criteria_total": 15,
+      "by": "pseudosky",
+      "note": "guard exit 0 (orchestrator-verified); sonnet; 9237096eb"
+    },
+    {
+      "ts": "2026-10-23T19:01:48.052Z",
+      "from": "search-verbs",
+      "to": "search-verbs",
+      "start_ref": "4e34ad17e89188797ebaaf218758e77a70a640ab",
+      "end_ref": "0b71fbfddba1600406a9824bc18893cddb5f29d7",
+      "audit_exit": 0,
+      "audit_criteria_passed": 16,
+      "audit_criteria_total": 16,
+      "by": "pseudosky",
+      "note": "guard exit 0 (orchestrator-verified); sonnet; 0b71fbfdd"
+    },
+    {
+      "ts": "2026-10-23T20:58:41.217Z",
+      "from": "search-hosts",
+      "to": "search-hosts",
+      "start_ref": "912911db2903e6f5cc9ccfad87b817b507339032",
+      "end_ref": "1cc1afba43c34f4f66b993a1cc421e1fbeca12ad",
+      "audit_exit": 0,
+      "audit_criteria_passed": 23,
+      "audit_criteria_total": 23,
+      "by": "pseudosky",
+      "note": "guard exit 0 (orchestrator-verified) after search-hosts.11 guard amendment; sonnet; 612f29df7"
+    },
+    {
+      "ts": "2026-10-23T21:20:50.540Z",
+      "from": "tracing-log-validation",
+      "to": "search-usecases",
+      "start_ref": "a811a487d03cceebf6f8367964a5441c14c11110",
+      "end_ref": "59c4d3688e1ca367315e1eb1a6fc9cfd36a1b3ac",
+      "audit_exit": 0,
+      "audit_criteria_passed": 8,
+      "audit_criteria_total": 8,
+      "by": "pseudosky",
+      "note": "guard exit 0 (orchestrator-verified); sonnet"
+    },
+    {
+      "ts": "2026-10-23T21:26:40.872Z",
+      "from": "sp-switch",
+      "to": "search-examples",
+      "start_ref": "5e12c1604cdcb7a412073124c522f516e0f661e8",
+      "end_ref": "efb0087501c503188eb63dda9350f2a23396e278",
+      "audit_exit": 0,
+      "audit_criteria_passed": 5,
+      "audit_criteria_total": 5,
+      "by": "pseudosky",
+      "note": "guard exit 0 (orchestrator-verified); sonnet"
+    },
+    {
+      "ts": "2026-10-23T21:39:23.707Z",
+      "from": "sp-switch",
+      "to": "sp-switch",
+      "start_ref": "6fe52ae6b04d5ae07ec562c0ebc130255bccf745",
+      "end_ref": "f9e408cd936252b4ad81eb0bf77f44473494430f",
+      "audit_exit": 0,
+      "audit_criteria_passed": 5,
+      "audit_criteria_total": 5,
+      "by": "pseudosky",
+      "note": "guard exit 0 (orchestrator-verified); sonnet; f9e408cd9"
+    },
+    {
+      "ts": "2026-10-23T22:23:58.482Z",
+      "from": "main-merge",
+      "to": "main-merge",
+      "start_ref": "b909ff6d6619bb87de4858cfee1dc5aa5dfe3b3c",
+      "end_ref": "fb48127261e3099e8b1ff3a8523dde7573e8c037",
+      "audit_exit": 0,
+      "audit_criteria_passed": 5,
+      "audit_criteria_total": 5,
+      "by": "pseudosky",
+      "note": "merge eb6526ed9 of main e21558fc1; guard exit 0 (5/5) verified by orchestrator"
+    },
+    {
+      "ts": "2026-10-23T22:42:56.048Z",
+      "from": "conform-search",
+      "to": "conform-tripwire",
+      "start_ref": "71bc6e1abaaea513719ddc3722f8a3c7a9fa1552",
+      "end_ref": "f1486b4db45c667fe363330f0ac328842daa4605",
+      "audit_exit": 0,
+      "audit_criteria_passed": 9,
+      "audit_criteria_total": 9,
+      "by": "pseudosky",
+      "note": "commit f1486b4db; guard 9/9 exit 0 re-run by orchestrator"
+    },
+    {
+      "ts": "2026-10-23T22:49:13.286Z",
+      "from": "fix-tripwire",
+      "to": "conform-core",
+      "start_ref": "2d8569f80733c1b970bd90b468f4b063c77bc43f",
+      "end_ref": "fd279a520360d7a0fc7c4dcc2fdd896f1288ea70",
+      "audit_exit": 0,
+      "audit_criteria_passed": 9,
+      "audit_criteria_total": 9,
+      "by": "pseudosky",
+      "note": "commit 63c42cfdb; guard 9/9 exit 0 re-run by orchestrator"
+    },
+    {
+      "ts": "2026-10-23T22:56:54.813Z",
+      "from": "fix-tripwire",
+      "to": "conform-search",
+      "start_ref": "da7e0674a069e746b1b93c24bee3c8886a97d9cd",
+      "end_ref": "2f0016a082b0265e4d1f7d7133f2cf7f545276ae",
+      "audit_exit": 0,
+      "audit_criteria_passed": 9,
+      "audit_criteria_total": 9,
+      "by": "pseudosky",
+      "note": "commit acb75b56a; guard 9/9 exit 0 re-run after search_b.py path repair (plan-edit)"
+    },
+    {
+      "ts": "2026-10-23T23:20:13.098Z",
+      "from": "fix-search-output",
+      "to": "fix-core-parsers",
+      "start_ref": "f38fe5f9447663bd4d02eb0be26dc88cb9d50b42",
+      "end_ref": "b3577260298abade0007790790087711edee31d4",
+      "audit_exit": 0,
+      "audit_criteria_passed": 4,
+      "audit_criteria_total": 4,
+      "by": "pseudosky",
+      "note": "commit 551aa0101; guard 4/4 exit 0 re-run by orchestrator"
+    },
+    {
+      "ts": "2026-10-23T23:30:14.053Z",
+      "from": "search-mcp-iserror",
+      "to": "fix-core-lifecycle",
+      "start_ref": "615cd4d959ccdddb87e730f561c1215dc5704097",
+      "end_ref": "bd69d1db283ca8bb0512b57f700b164dc8e83a9b",
+      "audit_exit": 0,
+      "audit_criteria_passed": 4,
+      "audit_criteria_total": 4,
+      "by": "pseudosky",
+      "note": "commit 930342a73; guard 4/4 exit 0 re-run by orchestrator"
+    },
+    {
+      "ts": "2026-10-23T23:37:34.507Z",
+      "from": "search-mcp-iserror",
+      "to": "fix-core-errors",
+      "start_ref": "a6dce780b700ca4734e1bd090d16b7378bc59855",
+      "end_ref": "9ce1e650c26c63c04cd06e2207f12261503f5c54",
+      "audit_exit": 0,
+      "audit_criteria_passed": 5,
+      "audit_criteria_total": 5,
+      "by": "pseudosky",
+      "note": "commit c31513fcc; guard 5/5 exit 0 re-run by orchestrator"
+    },
+    {
+      "ts": "2026-10-23T23:53:13.276Z",
+      "from": "search-mcp-iserror",
+      "to": "fix-search-fetch",
+      "start_ref": "e08aef70b35de76b534273f808bf597d72053559",
+      "end_ref": "79cf1df028d51cb34590a4db830b8cd1165a7949",
+      "audit_exit": 0,
+      "audit_criteria_passed": 5,
+      "audit_criteria_total": 5,
+      "by": "pseudosky",
+      "note": "orchestrator-verified; guard re-run"
+    },
+    {
+      "ts": "2026-10-24T00:00:33.695Z",
+      "from": "search-mcp-iserror",
+      "to": "fix-search-engine",
+      "start_ref": "bcbefe7a24d58ba50aeaa1a6f454c5f5a75cefea",
+      "end_ref": "18bb98872a5f3e8407cc807d9d65a9df4ae54e96",
+      "audit_exit": 0,
+      "audit_criteria_passed": 6,
+      "audit_criteria_total": 6,
+      "by": "pseudosky",
+      "note": "orchestrator-verified; guard re-run"
+    },
+    {
+      "ts": "2026-10-24T00:07:54.449Z",
+      "from": "search-mcp-iserror",
+      "to": "fix-search-output",
+      "start_ref": "c95b92b46632440376cd87dd72583c9de58bbc85",
+      "end_ref": "f193d55fb179001597a4f69489f4cde4b7aed10b",
+      "audit_exit": 0,
+      "audit_criteria_passed": 5,
+      "audit_criteria_total": 5,
+      "by": "pseudosky",
+      "note": "orchestrator-verified; guard re-run"
+    },
+    {
+      "ts": "2026-10-24T00:16:27.651Z",
+      "from": "search-mcp-iserror",
+      "to": "fix-tripwire",
+      "start_ref": "ded73131f104eb9e79fdcbd1f16bc17d752c3e4e",
+      "end_ref": "b0bca460d3672be55e510a8f0a6bdd6316022f67",
+      "audit_exit": 0,
+      "audit_criteria_passed": 6,
+      "audit_criteria_total": 6,
+      "by": "pseudosky",
+      "note": "orchestrator-verified; guard 6/6 exit 0 standalone rerun"
+    },
+    {
+      "ts": "2026-10-24T00:43:50.533Z",
+      "from": "search-mcp-iserror",
+      "to": "search-mcp-iserror",
+      "start_ref": "ca63d9e5ff8538b515612640ab79216202843aad",
+      "end_ref": "de35d528611fbf2c6d2dec4b51aff9eb15fe3568",
+      "audit_exit": 0,
+      "audit_criteria_passed": 7,
+      "audit_criteria_total": 7,
+      "by": "pseudosky",
+      "note": "commit de35d5286; guard 7/7 rc=0"
+    },
+    {
+      "ts": "2026-10-24T01:07:44.693Z",
+      "from": "fix-search-build",
+      "to": "fix-search-build",
+      "start_ref": "1d647d0bb4f2d81fbf2c6005028659a54dfe3cb6",
+      "end_ref": "f62af06f62226b3776abb24720e61c33a7cb4c3d",
+      "audit_exit": 0,
+      "audit_criteria_passed": 5,
+      "audit_criteria_total": 5,
+      "by": "pseudosky",
+      "note": "commit f62af06f6; guard 5/5 rc=0"
+    },
+    {
+      "ts": "2026-10-24T01:54:40.646Z",
+      "from": "plan-notes",
+      "to": "plan-notes",
+      "start_ref": "b262677497507db569ca96e0f18c7ba47d7010c9",
+      "end_ref": "67046467ac20580e0213d4b58fc0c85ff76f137e",
+      "audit_exit": 0,
+      "audit_criteria_passed": 3,
+      "audit_criteria_total": 3,
+      "by": "pseudosky",
+      "note": "commit 67046467a; guard 3/3 rc=0"
+    },
+    {
+      "ts": "2026-10-24T02:09:15.185Z",
+      "from": "plan-notes",
+      "to": "search-tracing-fixes",
+      "start_ref": "efad20bcbad8e7df8211bb503ed8649b6e49ddab",
+      "end_ref": "46ef39369e5fa2b58282a74ff90fde02773327dc",
+      "audit_exit": 0,
+      "audit_criteria_passed": 6,
+      "audit_criteria_total": 6,
+      "by": "pseudosky",
+      "note": "commit aecee72a6 (+eb44935ea); guards search-tracing-fixes/search-tracing/search-hosts/search-mcp-iserror rc=0"
+    },
+    {
+      "ts": "2026-10-24T02:35:06.414Z",
+      "from": "tracing-log-validation",
+      "to": "tracing-log-validation",
+      "start_ref": "6f38faffcb024c7682c6791291df8d50a7084d89",
+      "end_ref": "25eee397d588c6e9f018b607dfe9c48caac89e35",
+      "audit_exit": 0,
+      "audit_criteria_passed": 11,
+      "audit_criteria_total": 11,
+      "by": "pseudosky",
+      "note": "commit 4dbe2a284; guard 11/11 rc=0 after .4 amendment"
+    },
+    {
+      "ts": "2026-10-24T03:18:06.583Z",
+      "from": "search-cutover",
+      "to": "search-cutover",
+      "start_ref": "8cebe4403dff4a3f2540fcba1c027d39570f43c4",
+      "end_ref": "487afc7d1afaa417ee65eedcd773e03965f3c7d6",
+      "audit_exit": 0,
+      "audit_criteria_passed": 10,
+      "audit_criteria_total": 10,
+      "by": "pseudosky",
+      "note": "commits 0fea5952d acc1750c0 ac35a00a1 (scratch ca1f94d84); guard 10/10 rc=0 after .3 grep amendment"
+    },
+    {
+      "ts": "2026-10-24T05:21:25.320Z",
+      "from": "release-gate-fixes",
+      "to": "release-gate-fixes",
+      "start_ref": "d707776de68abd98d5c16b97a40e9294e6b60df0",
+      "end_ref": "7bb3f6db497290a3cbef5ecad132f5ac8dde592e",
+      "audit_exit": 0,
+      "audit_criteria_passed": 8,
+      "audit_criteria_total": 8,
+      "by": "pseudosky",
+      "note": "graph-aware check-test-wiring; release:dry exports ADHD_NX_VERSION_DRY_RUN for whole chain; publish dry-run semantics; decompile-cli fixture path; backlog root cause recorded; guard 8/8"
+    },
+    {
+      "ts": "2026-10-24T05:52:34.529Z",
+      "from": "release-gate-fixes",
+      "to": "release-readiness",
+      "start_ref": "677f2a281bfcfe20e33bbba4918d0996ca3e4fb6",
+      "end_ref": "c0c01e49eddce5a791993b52e1075b61b1191b90",
+      "audit_exit": 0,
+      "audit_criteria_passed": 6,
+      "audit_criteria_total": 6,
+      "by": "pseudosky",
+      "note": "6 gates exit 0 on local-main base, release order + approvals recorded, guard 6/6"
+    },
+    {
+      "ts": "2026-10-24T08:44:36.748Z",
+      "from": "audit-pre-review",
+      "to": "audit-pre-review",
+      "start_ref": "15f4e6824fe01af8332620edbbbe96b37d47c652",
+      "end_ref": "81c96f1e763feb3ccf90ecf877f75149267fe2b8",
+      "audit_exit": 0,
+      "audit_criteria_passed": 521,
+      "audit_criteria_total": 521,
+      "by": "pseudosky",
+      "note": "pre-review audit: 43 findings (0 blocker, 5 major), inventory 209/209 pinned, guard 5/5"
+    },
+    {
+      "ts": "2026-10-24T11:02:04.345Z",
+      "from": "audit-fixes",
+      "to": "audit-fixes",
+      "start_ref": "6dffdb3eb63eade98502a6d242aeba4d9f8d6a44",
+      "end_ref": "34d1437ffe47ae10d8aaa2084c7c434c85e12937",
+      "audit_exit": 0,
+      "audit_criteria_passed": 6,
+      "audit_criteria_total": 6,
+      "by": "pseudosky",
+      "note": "41 fixed, 2 rejected (P7 shared AGENTS.md, P40 deliberate); guard 6/6"
+    },
+    {
+      "ts": "2026-10-24T11:39:40.907Z",
+      "from": "gates-first",
+      "to": "gates-first",
+      "start_ref": "652738d6aaa53b399d9806da3b0733d520e2f022",
+      "end_ref": "fcaa816ac166b2925f59cec64dff4079265ebff6",
+      "audit_exit": 0,
+      "audit_criteria_passed": 12,
+      "audit_criteria_total": 12,
+      "by": "pseudosky",
+      "note": "all 12 gates green: lint/typecheck/build/test/verify-dist-load of core, search, tripwire; module-format proof; pack dry-run recorded"
+    },
+    {
+      "ts": "2026-10-24T13:57:04.947Z",
+      "from": "review-prep",
+      "to": "review-prep",
+      "start_ref": "7fe9070be1227bfba0dc4938d0d19b533952b7f6",
+      "end_ref": "8d21b983807fe98bcb0082b88a30492a21822305",
+      "audit_exit": 0,
+      "audit_criteria_passed": 5,
+      "audit_criteria_total": 5,
+      "by": "pseudosky",
+      "note": "blind-review diff cut; INPUT.sha256 and BRIEF.txt written; guard 5/5"
+    },
+    {
+      "ts": "2026-10-24T14:49:42.594Z",
+      "from": "audit-migration-blind",
+      "to": "audit-migration-blind",
+      "start_ref": "0c7cbe282fbc4b93bf1f009218e7bab6c0fb553b",
+      "end_ref": "9410d766bc8b230b0ebaf3fa35a92a3c7fe28327",
+      "audit_exit": 0,
+      "audit_criteria_passed": 548,
+      "audit_criteria_total": 548,
+      "by": "pseudosky",
+      "note": "one sharded blind review round recorded: 5 slices then 14 chunks; reviewers saw only the diff slice and the word Review"
+    },
+    {
+      "ts": "2026-10-24T18:02:55.414Z",
+      "from": "resolve-findings",
+      "to": "resolve-findings",
+      "start_ref": "372c8d5b51b5a2b1025810fa64e79b1705e8f49f",
+      "end_ref": "a8245098ef6b9222cd7be6e80de0680f18ebaa4c",
+      "audit_exit": 0,
+      "audit_criteria_passed": 4,
+      "audit_criteria_total": 4,
+      "by": "pseudosky",
+      "note": "159 findings resolved by one implementer: 155 fixed, 4 rejected (F55 F66 F82 F99) with evidence; all package gates, sweep of 70 completed states and resolve-findings guard green"
+    },
+    {
+      "ts": "2026-10-24T18:22:40.535Z",
+      "from": "gates-rerun",
+      "to": "gates-rerun",
+      "start_ref": "35f4287edb8850e312473a78a59c20f5a7addfe1",
+      "end_ref": "68ddca92cafe9728678b79d39e2b6cffd4dab876",
+      "audit_exit": 0,
+      "audit_criteria_passed": 7,
+      "audit_criteria_total": 7,
+      "by": "pseudosky",
+      "note": "post-fix gates green: 7/7 gates-rerun criteria, evidence gates-rerun.json all_green at a8581af33"
+    },
+    {
+      "ts": "2026-10-24T19:19:54.159Z",
+      "from": "docs-marketing-run",
+      "to": "docs-marketing-run",
+      "start_ref": "4ee78a454793e30be16771de5c03fa6c0c027af1",
+      "end_ref": "7c2f2eae35a7de9e8e4543c1e24b0dd46d0124cd",
+      "audit_exit": 0,
+      "audit_criteria_passed": 12,
+      "audit_criteria_total": 12,
+      "by": "pseudosky",
+      "note": "doc-steward run for core (0.0.1) and search (0.1.0): catalogs reviewed PASS, 12/12 criteria green"
+    },
+    {
+      "ts": "2026-10-24T19:49:23.179Z",
+      "from": "readme-rewrite",
+      "to": "readme-rewrite",
+      "start_ref": "e2d1cdbef7fb6f209b347899d457429697a2804b",
+      "end_ref": "76709a59d418cdb739293de71c79257d2c668189",
+      "audit_exit": 0,
+      "audit_criteria_passed": 10,
+      "audit_criteria_total": 10,
+      "by": "pseudosky",
+      "note": "both READMEs rewritten, readme-rewrite guard exit 0 (10 criteria)"
+    },
+    {
+      "ts": "2026-10-24T22:11:23.520Z",
+      "from": "audit-final",
+      "to": "audit-final",
+      "start_ref": "23ffac5cae0b8cf51e37c9661d3ee94ae4909357",
+      "end_ref": "33e826fdabe6938044a529ee638b192aaf38cb47",
+      "audit_exit": 0,
+      "audit_criteria_passed": 621,
+      "audit_criteria_total": 621,
+      "by": "pseudosky",
+      "note": "audit_dod.py --phase final: dod.1-8 PASS exit 0; audit-final guard green; 74-state sweep green"
+    },
+    {
+      "ts": "2026-10-24T23:22:20.395Z",
+      "from": "merge-readiness",
+      "to": "merge-readiness",
+      "start_ref": "bec8e2bd3e52ca85a8a56038af8c8ccfbb83ad72",
+      "end_ref": "56cc3653e350ffa1790c497721adc2c8af39f2bc",
+      "audit_exit": 0,
+      "audit_criteria_passed": 621,
+      "audit_criteria_total": 621,
+      "by": "pseudosky",
+      "note": ""
+    }
+  ],
+  "amendment_log": [
+    {
+      "ts": "2026-10-12T23:49:33.292Z",
+      "state": "surface-api",
+      "class": "executor",
+      "type": "state-reset",
+      "reason": "plan-repair amendment 2026-10-12 (dispatch-2026-10-12-ca18): state reset from in_progress/premature completion to pending because its acceptance criteria and dependencies changed (port-fixes first, greenfield API, feature-level unit tests, lifecycle wiring); no executor was running",
+      "files_synced": [
+        "docs/plan/stealth-browser/state.json",
+        "docs/plan/stealth-browser/dag.json",
+        "docs/plan/stealth-browser/scripts/guard.py"
+      ],
+      "by": "pseudosky"
+    },
+    {
+      "ts": "2026-10-12T23:49:33.440Z",
+      "state": "tests-unit-core",
+      "class": "executor",
+      "type": "state-reset",
+      "reason": "plan-repair amendment 2026-10-12 (dispatch-2026-10-12-ca18): state reset from in_progress/premature completion to pending because its acceptance criteria and dependencies changed (port-fixes first, greenfield API, feature-level unit tests, lifecycle wiring); no executor was running",
+      "files_synced": [
+        "docs/plan/stealth-browser/state.json",
+        "docs/plan/stealth-browser/dag.json",
+        "docs/plan/stealth-browser/scripts/guard.py"
+      ],
+      "by": "pseudosky"
+    },
+    {
+      "ts": "2026-10-12T23:49:33.580Z",
+      "state": "tests-unit-data",
+      "class": "executor",
+      "type": "state-reset",
+      "reason": "plan-repair amendment 2026-10-12 (dispatch-2026-10-12-ca18): state reset from in_progress/premature completion to pending because its acceptance criteria and dependencies changed (port-fixes first, greenfield API, feature-level unit tests, lifecycle wiring); no executor was running",
+      "files_synced": [
+        "docs/plan/stealth-browser/state.json",
+        "docs/plan/stealth-browser/dag.json",
+        "docs/plan/stealth-browser/scripts/guard.py"
+      ],
+      "by": "pseudosky"
+    },
+    {
+      "ts": "2026-10-12T23:49:33.724Z",
+      "state": "tests-unit-extract",
+      "class": "executor",
+      "type": "state-reset",
+      "reason": "plan-repair amendment 2026-10-12 (dispatch-2026-10-12-ca18): state reset from in_progress/premature completion to pending because its acceptance criteria and dependencies changed (port-fixes first, greenfield API, feature-level unit tests, lifecycle wiring); no executor was running",
+      "files_synced": [
+        "docs/plan/stealth-browser/state.json",
+        "docs/plan/stealth-browser/dag.json",
+        "docs/plan/stealth-browser/scripts/guard.py"
+      ],
+      "by": "pseudosky"
+    },
+    {
+      "ts": "2026-10-12T23:49:33.868Z",
+      "state": "mig-chrome-manager",
+      "class": "executor",
+      "type": "end-ref-fix",
+      "reason": "plan-repair amendment 2026-10-12: end_ref corrected to ecdbcaf12bb457d420a861076c648dcf56865b3a (the migration commit that completed the state)",
+      "files_synced": [
+        "docs/plan/stealth-browser/state.json"
+      ],
+      "by": "pseudosky"
+    },
+    {
+      "ts": "2026-10-12T23:49:34.015Z",
+      "state": "failsafe-inventory",
+      "class": "executor",
+      "type": "state-added",
+      "reason": "plan-repair amendment 2026-10-12: failsafe-inventory, port-fixes, cdp-test-harness, capture-upgrade, chrome-lifecycle, prod-errors, prod-examples, tests-use-cases, audit-pre-review, audit-fixes and agent-search-relink added or reshaped; capture-upgrade and chrome-lifecycle folded to the final evaluated designs (EVAL-store-adapter.md, EVAL-service-proxy.md); surface-hosts now depends on chrome-lifecycle",
+      "files_synced": [
+        "docs/plan/stealth-browser/dag.json",
+        "docs/plan/stealth-browser/scripts/guard.py",
+        "docs/plan/stealth-browser/scripts/ownership.json"
+      ],
+      "by": "pseudosky"
+    },
+    {
+      "ts": "2026-10-13T01:03:10.307Z",
+      "state": "sp-reaper-load-proof",
+      "class": "executor",
+      "type": "state-added",
+      "reason": "plan-builder amendment 2026-10-12 (dispatch-2026-10-12-ca18, single-pass lifecycle + tripwire package): sp-reaper-load-proof added: proves the detached reaper entry path before chrome-lifecycle is written (hold edge)",
+      "files_synced": [
+        "docs/plan/stealth-browser/dag.json",
+        "docs/plan/stealth-browser/scripts/guard.py",
+        "docs/plan/stealth-browser/scripts/ownership.json",
+        "docs/plan/stealth-browser/scripts/criteria.json",
+        "docs/plan/stealth-browser/scripts/check-guards-red.py",
+        "docs/plan/stealth-browser/contexts/sp-reaper-load-proof.md"
+      ],
+      "by": "plan-builder"
+    },
+    {
+      "ts": "2026-10-13T01:03:10.307Z",
+      "state": "sp-link",
+      "class": "executor",
+      "type": "state-added",
+      "reason": "plan-builder amendment 2026-10-12 (dispatch-2026-10-12-ca18, single-pass lifecycle + tripwire package): sp-link added: declares @adhd/sox-service-proxy ~0.6.0 once, resolves the unreleased 0.6.0 through the dev tarball override",
+      "files_synced": [
+        "docs/plan/stealth-browser/dag.json",
+        "docs/plan/stealth-browser/scripts/guard.py",
+        "docs/plan/stealth-browser/scripts/ownership.json",
+        "docs/plan/stealth-browser/scripts/criteria.json",
+        "docs/plan/stealth-browser/scripts/check-guards-red.py",
+        "docs/plan/stealth-browser/contexts/sp-link.md"
+      ],
+      "by": "plan-builder"
+    },
+    {
+      "ts": "2026-10-13T01:03:10.307Z",
+      "state": "sp-reaper-smoke",
+      "class": "executor",
+      "type": "state-added",
+      "reason": "plan-builder amendment 2026-10-12 (dispatch-2026-10-12-ca18, single-pass lifecycle + tripwire package): sp-reaper-smoke added: CL30 real-process gate for the reaper host on the built dist",
+      "files_synced": [
+        "docs/plan/stealth-browser/dag.json",
+        "docs/plan/stealth-browser/scripts/guard.py",
+        "docs/plan/stealth-browser/scripts/ownership.json",
+        "docs/plan/stealth-browser/scripts/criteria.json",
+        "docs/plan/stealth-browser/scripts/check-guards-red.py",
+        "docs/plan/stealth-browser/contexts/sp-reaper-smoke.md"
+      ],
+      "by": "plan-builder"
+    },
+    {
+      "ts": "2026-10-13T01:03:10.307Z",
+      "state": "sp-switch",
+      "class": "executor",
+      "type": "state-added",
+      "reason": "plan-builder amendment 2026-10-12 (dispatch-2026-10-12-ca18, single-pass lifecycle + tripwire package): sp-switch added: removes the dev-tarball override once 0.6.0 is published (human-gated hb-sp-release)",
+      "files_synced": [
+        "docs/plan/stealth-browser/dag.json",
+        "docs/plan/stealth-browser/scripts/guard.py",
+        "docs/plan/stealth-browser/scripts/ownership.json",
+        "docs/plan/stealth-browser/scripts/criteria.json",
+        "docs/plan/stealth-browser/scripts/check-guards-red.py",
+        "docs/plan/stealth-browser/contexts/sp-switch.md"
+      ],
+      "by": "plan-builder"
+    },
+    {
+      "ts": "2026-10-13T01:03:10.307Z",
+      "state": "tripwire-scaffold",
+      "class": "executor",
+      "type": "state-added",
+      "reason": "plan-builder amendment 2026-10-12 (dispatch-2026-10-12-ca18, single-pass lifecycle + tripwire package): tripwire-scaffold added: second approved package @adhd/resilience-core-tripwire via the generator (new resilience group, D1)",
+      "files_synced": [
+        "docs/plan/stealth-browser/dag.json",
+        "docs/plan/stealth-browser/scripts/guard.py",
+        "docs/plan/stealth-browser/scripts/ownership.json",
+        "docs/plan/stealth-browser/scripts/criteria.json",
+        "docs/plan/stealth-browser/scripts/check-guards-red.py",
+        "docs/plan/stealth-browser/contexts/tripwire-scaffold.md"
+      ],
+      "by": "plan-builder"
+    },
+    {
+      "ts": "2026-10-13T01:03:10.307Z",
+      "state": "tripwire-core",
+      "class": "executor",
+      "type": "state-added",
+      "reason": "plan-builder amendment 2026-10-12 (dispatch-2026-10-12-ca18, single-pass lifecycle + tripwire package): tripwire-core added: unified tripwire core, TW1-TW23 and TW30-TW38",
+      "files_synced": [
+        "docs/plan/stealth-browser/dag.json",
+        "docs/plan/stealth-browser/scripts/guard.py",
+        "docs/plan/stealth-browser/scripts/ownership.json",
+        "docs/plan/stealth-browser/scripts/criteria.json",
+        "docs/plan/stealth-browser/scripts/check-guards-red.py",
+        "docs/plan/stealth-browser/contexts/tripwire-core.md"
+      ],
+      "by": "plan-builder"
+    },
+    {
+      "ts": "2026-10-13T01:03:10.307Z",
+      "state": "tripwire-interactive",
+      "class": "executor",
+      "type": "state-added",
+      "reason": "plan-builder amendment 2026-10-12 (dispatch-2026-10-12-ca18, single-pass lifecycle + tripwire package): tripwire-interactive added: HITL, unlock CLI and rendering with injected IO, scenario suites, closed public surface",
+      "files_synced": [
+        "docs/plan/stealth-browser/dag.json",
+        "docs/plan/stealth-browser/scripts/guard.py",
+        "docs/plan/stealth-browser/scripts/ownership.json",
+        "docs/plan/stealth-browser/scripts/criteria.json",
+        "docs/plan/stealth-browser/scripts/check-guards-red.py",
+        "docs/plan/stealth-browser/contexts/tripwire-interactive.md"
+      ],
+      "by": "plan-builder"
+    },
+    {
+      "ts": "2026-10-13T01:03:10.307Z",
+      "state": "tripwire-docs",
+      "class": "executor",
+      "type": "state-added",
+      "reason": "plan-builder amendment 2026-10-12 (dispatch-2026-10-12-ca18, single-pass lifecycle + tripwire package): tripwire-docs added: README, ERRORS, RECOVERY, CHANGELOG, compiled README examples",
+      "files_synced": [
+        "docs/plan/stealth-browser/dag.json",
+        "docs/plan/stealth-browser/scripts/guard.py",
+        "docs/plan/stealth-browser/scripts/ownership.json",
+        "docs/plan/stealth-browser/scripts/criteria.json",
+        "docs/plan/stealth-browser/scripts/check-guards-red.py",
+        "docs/plan/stealth-browser/contexts/tripwire-docs.md"
+      ],
+      "by": "plan-builder"
+    },
+    {
+      "ts": "2026-10-13T01:03:10.307Z",
+      "state": "tripwire-pack",
+      "class": "executor",
+      "type": "state-added",
+      "reason": "plan-builder amendment 2026-10-12 (dispatch-2026-10-12-ca18, single-pass lifecycle + tripwire package): tripwire-pack added: package gates, consumer tarball outside .worktrees, ESM/CJS smoke",
+      "files_synced": [
+        "docs/plan/stealth-browser/dag.json",
+        "docs/plan/stealth-browser/scripts/guard.py",
+        "docs/plan/stealth-browser/scripts/ownership.json",
+        "docs/plan/stealth-browser/scripts/criteria.json",
+        "docs/plan/stealth-browser/scripts/check-guards-red.py",
+        "docs/plan/stealth-browser/contexts/tripwire-pack.md"
+      ],
+      "by": "plan-builder"
+    },
+    {
+      "ts": "2026-10-13T01:03:10.307Z",
+      "state": "tripwire-reverse-migrate",
+      "class": "executor",
+      "type": "state-added",
+      "reason": "plan-builder amendment 2026-10-12 (dispatch-2026-10-12-ca18, single-pass lifecycle + tripwire package): tripwire-reverse-migrate added: consumers 1 and 2 adopt the package in reverse-apis (own worktree)",
+      "files_synced": [
+        "docs/plan/stealth-browser/dag.json",
+        "docs/plan/stealth-browser/scripts/guard.py",
+        "docs/plan/stealth-browser/scripts/ownership.json",
+        "docs/plan/stealth-browser/scripts/criteria.json",
+        "docs/plan/stealth-browser/scripts/check-guards-red.py",
+        "docs/plan/stealth-browser/contexts/tripwire-reverse-migrate.md"
+      ],
+      "by": "plan-builder"
+    },
+    {
+      "ts": "2026-10-13T01:03:10.307Z",
+      "state": "tripwire-reverse-relink",
+      "class": "executor",
+      "type": "state-added",
+      "reason": "plan-builder amendment 2026-10-12 (dispatch-2026-10-12-ca18, single-pass lifecycle + tripwire package): tripwire-reverse-relink added: post-release relink and ff merge in reverse-apis",
+      "files_synced": [
+        "docs/plan/stealth-browser/dag.json",
+        "docs/plan/stealth-browser/scripts/guard.py",
+        "docs/plan/stealth-browser/scripts/ownership.json",
+        "docs/plan/stealth-browser/scripts/criteria.json",
+        "docs/plan/stealth-browser/scripts/check-guards-red.py",
+        "docs/plan/stealth-browser/contexts/tripwire-reverse-relink.md"
+      ],
+      "by": "plan-builder"
+    },
+    {
+      "ts": "2026-10-13T01:03:10.307Z",
+      "state": "chrome-lifecycle",
+      "class": "executor",
+      "type": "state-changed",
+      "reason": "plan-builder amendment 2026-10-12 (dispatch-2026-10-12-ca18): depends_on += sp-reaper-load-proof; CL1-CL29 single-pass lifecycle over service-proxy 0.6.0; browser.ts extract-only ownership",
+      "files_synced": [
+        "docs/plan/stealth-browser/dag.json",
+        "docs/plan/stealth-browser/scripts/guard.py",
+        "docs/plan/stealth-browser/scripts/ownership.json",
+        "docs/plan/stealth-browser/scripts/criteria.json",
+        "docs/plan/stealth-browser/scripts/check-guards-red.py",
+        "docs/plan/stealth-browser/contexts/chrome-lifecycle.md"
+      ],
+      "by": "plan-builder"
+    },
+    {
+      "ts": "2026-10-13T01:03:10.307Z",
+      "state": "surface-hosts",
+      "class": "executor",
+      "type": "state-changed",
+      "reason": "plan-builder amendment 2026-10-12 (dispatch-2026-10-12-ca18): depends_on += sp-link",
+      "files_synced": [
+        "docs/plan/stealth-browser/dag.json",
+        "docs/plan/stealth-browser/scripts/guard.py",
+        "docs/plan/stealth-browser/scripts/ownership.json",
+        "docs/plan/stealth-browser/scripts/criteria.json",
+        "docs/plan/stealth-browser/scripts/check-guards-red.py",
+        "docs/plan/stealth-browser/contexts/surface-hosts.md"
+      ],
+      "by": "plan-builder"
+    },
+    {
+      "ts": "2026-10-13T01:03:10.307Z",
+      "state": "agent-search-cutover",
+      "class": "executor",
+      "type": "state-changed",
+      "reason": "plan-builder amendment 2026-10-12 (dispatch-2026-10-12-ca18): depends_on += tripwire-pack; criteria .10-.13 (tripwire adoption folded in)",
+      "files_synced": [
+        "docs/plan/stealth-browser/dag.json",
+        "docs/plan/stealth-browser/scripts/guard.py",
+        "docs/plan/stealth-browser/scripts/ownership.json",
+        "docs/plan/stealth-browser/scripts/criteria.json",
+        "docs/plan/stealth-browser/scripts/check-guards-red.py",
+        "docs/plan/stealth-browser/contexts/agent-search-cutover.md"
+      ],
+      "by": "plan-builder"
+    },
+    {
+      "ts": "2026-10-13T01:03:10.307Z",
+      "state": "gates-first",
+      "class": "executor",
+      "type": "state-changed",
+      "reason": "plan-builder amendment 2026-10-12 (dispatch-2026-10-12-ca18): depends_on += sp-switch, sp-reaper-smoke, tripwire-pack; criteria .11-.12",
+      "files_synced": [
+        "docs/plan/stealth-browser/dag.json",
+        "docs/plan/stealth-browser/scripts/guard.py",
+        "docs/plan/stealth-browser/scripts/ownership.json",
+        "docs/plan/stealth-browser/scripts/criteria.json",
+        "docs/plan/stealth-browser/scripts/check-guards-red.py",
+        "docs/plan/stealth-browser/contexts/gates-first.md"
+      ],
+      "by": "plan-builder"
+    },
+    {
+      "ts": "2026-10-13T01:03:10.307Z",
+      "state": "gates-rerun",
+      "class": "executor",
+      "type": "state-changed",
+      "reason": "plan-builder amendment 2026-10-12 (dispatch-2026-10-12-ca18): depends_on += tripwire-pack; criterion .7",
+      "files_synced": [
+        "docs/plan/stealth-browser/dag.json",
+        "docs/plan/stealth-browser/scripts/guard.py",
+        "docs/plan/stealth-browser/scripts/ownership.json",
+        "docs/plan/stealth-browser/scripts/criteria.json",
+        "docs/plan/stealth-browser/scripts/check-guards-red.py",
+        "docs/plan/stealth-browser/contexts/gates-rerun.md"
+      ],
+      "by": "plan-builder"
+    },
+    {
+      "ts": "2026-10-13T01:03:10.307Z",
+      "state": "merge-readiness",
+      "class": "executor",
+      "type": "state-changed",
+      "reason": "plan-builder amendment 2026-10-12 (dispatch-2026-10-12-ca18): depends_on += tripwire-reverse-migrate; criteria .5-.6 (both packages in the release decision)",
+      "files_synced": [
+        "docs/plan/stealth-browser/dag.json",
+        "docs/plan/stealth-browser/scripts/guard.py",
+        "docs/plan/stealth-browser/scripts/ownership.json",
+        "docs/plan/stealth-browser/scripts/criteria.json",
+        "docs/plan/stealth-browser/scripts/check-guards-red.py",
+        "docs/plan/stealth-browser/contexts/merge-readiness.md"
+      ],
+      "by": "plan-builder"
+    },
+    {
+      "ts": "2026-10-13T01:03:10.307Z",
+      "state": "resolve-findings",
+      "class": "executor",
+      "type": "state-changed",
+      "reason": "plan-builder amendment 2026-10-12 (dispatch-2026-10-12-ca18): owns the tripwire package directory",
+      "files_synced": [
+        "docs/plan/stealth-browser/dag.json",
+        "docs/plan/stealth-browser/scripts/guard.py",
+        "docs/plan/stealth-browser/scripts/ownership.json",
+        "docs/plan/stealth-browser/scripts/criteria.json",
+        "docs/plan/stealth-browser/scripts/check-guards-red.py",
+        "docs/plan/stealth-browser/contexts/resolve-findings.md"
+      ],
+      "by": "plan-builder"
+    },
+    {
+      "ts": "2026-10-13T01:03:10.307Z",
+      "state": "audit-fixes",
+      "class": "executor",
+      "type": "state-changed",
+      "reason": "plan-builder amendment 2026-10-12 (dispatch-2026-10-12-ca18): owns the tripwire package directory",
+      "files_synced": [
+        "docs/plan/stealth-browser/dag.json",
+        "docs/plan/stealth-browser/scripts/guard.py",
+        "docs/plan/stealth-browser/scripts/ownership.json",
+        "docs/plan/stealth-browser/scripts/criteria.json",
+        "docs/plan/stealth-browser/scripts/check-guards-red.py",
+        "docs/plan/stealth-browser/contexts/audit-fixes.md"
+      ],
+      "by": "plan-builder"
+    },
+    {
+      "ts": "2026-10-13T01:03:10.307Z",
+      "state": "port-fixes",
+      "class": "executor",
+      "type": "state-changed",
+      "reason": "plan-builder amendment 2026-10-12 (dispatch-2026-10-12-ca18): port-fixes.12 loses the proxy dependency (moved to sp-link); port-fixes.5 accepts the connection-based lifecycle spec",
+      "files_synced": [
+        "docs/plan/stealth-browser/dag.json",
+        "docs/plan/stealth-browser/scripts/guard.py",
+        "docs/plan/stealth-browser/scripts/ownership.json",
+        "docs/plan/stealth-browser/scripts/criteria.json",
+        "docs/plan/stealth-browser/scripts/check-guards-red.py",
+        "docs/plan/stealth-browser/contexts/port-fixes.md"
+      ],
+      "by": "plan-builder"
+    },
+    {
+      "ts": "2026-10-13T01:03:10.307Z",
+      "state": "prod-errors",
+      "class": "executor",
+      "type": "state-changed",
+      "reason": "plan-builder amendment 2026-10-12 (dispatch-2026-10-12-ca18): 32 codes (6 lifecycle codes); lifecycle namespace member list",
+      "files_synced": [
+        "docs/plan/stealth-browser/dag.json",
+        "docs/plan/stealth-browser/scripts/guard.py",
+        "docs/plan/stealth-browser/scripts/ownership.json",
+        "docs/plan/stealth-browser/scripts/criteria.json",
+        "docs/plan/stealth-browser/scripts/check-guards-red.py",
+        "docs/plan/stealth-browser/contexts/prod-errors.md"
+      ],
+      "by": "plan-builder"
+    },
+    {
+      "ts": "2026-10-13T01:03:10.307Z",
+      "state": "scaffold",
+      "class": "executor",
+      "type": "state-changed",
+      "reason": "plan-builder amendment 2026-10-12 (dispatch-2026-10-12-ca18): scaffold.5 accepts the second approved project.json",
+      "files_synced": [
+        "docs/plan/stealth-browser/dag.json",
+        "docs/plan/stealth-browser/scripts/guard.py",
+        "docs/plan/stealth-browser/scripts/ownership.json",
+        "docs/plan/stealth-browser/scripts/criteria.json",
+        "docs/plan/stealth-browser/scripts/check-guards-red.py",
+        "docs/plan/stealth-browser/contexts/scaffold.md"
+      ],
+      "by": "plan-builder"
+    },
+    {
+      "ts": "2026-10-13T01:03:10.307Z",
+      "state": "review-prep",
+      "class": "executor",
+      "type": "state-changed",
+      "reason": "plan-builder amendment 2026-10-12 (dispatch-2026-10-12-ca18): diff includes the tripwire package",
+      "files_synced": [
+        "docs/plan/stealth-browser/dag.json",
+        "docs/plan/stealth-browser/scripts/guard.py",
+        "docs/plan/stealth-browser/scripts/ownership.json",
+        "docs/plan/stealth-browser/scripts/criteria.json",
+        "docs/plan/stealth-browser/scripts/check-guards-red.py",
+        "docs/plan/stealth-browser/contexts/review-prep.md"
+      ],
+      "by": "plan-builder"
+    },
+    {
+      "ts": "2026-10-13T01:03:10.307Z",
+      "state": "docs-marketing-run",
+      "class": "executor",
+      "type": "state-changed",
+      "reason": "plan-builder amendment 2026-10-12 (dispatch-2026-10-12-ca18): criterion .11 (tripwire docs surface)",
+      "files_synced": [
+        "docs/plan/stealth-browser/dag.json",
+        "docs/plan/stealth-browser/scripts/guard.py",
+        "docs/plan/stealth-browser/scripts/ownership.json",
+        "docs/plan/stealth-browser/scripts/criteria.json",
+        "docs/plan/stealth-browser/scripts/check-guards-red.py",
+        "docs/plan/stealth-browser/contexts/docs-marketing-run.md"
+      ],
+      "by": "plan-builder"
+    },
+    {
+      "ts": "2026-10-13T01:03:10.307Z",
+      "state": "audit-final",
+      "class": "executor",
+      "type": "state-changed",
+      "reason": "plan-builder amendment 2026-10-12 (dispatch-2026-10-12-ca18): criteria .1 (two packages) and .13 ([ref:tripwire-core])",
+      "files_synced": [
+        "docs/plan/stealth-browser/dag.json",
+        "docs/plan/stealth-browser/scripts/guard.py",
+        "docs/plan/stealth-browser/scripts/ownership.json",
+        "docs/plan/stealth-browser/scripts/criteria.json",
+        "docs/plan/stealth-browser/scripts/check-guards-red.py",
+        "docs/plan/stealth-browser/contexts/audit-final.md"
+      ],
+      "by": "plan-builder"
+    },
+    {
+      "ts": "2026-10-13T01:03:10.307Z",
+      "state": "agent-search-relink",
+      "class": "executor",
+      "type": "state-changed",
+      "reason": "plan-builder amendment 2026-10-12 (dispatch-2026-10-12-ca18): criterion .5 (tripwire registry range)",
+      "files_synced": [
+        "docs/plan/stealth-browser/dag.json",
+        "docs/plan/stealth-browser/scripts/guard.py",
+        "docs/plan/stealth-browser/scripts/ownership.json",
+        "docs/plan/stealth-browser/scripts/criteria.json",
+        "docs/plan/stealth-browser/scripts/check-guards-red.py",
+        "docs/plan/stealth-browser/contexts/agent-search-relink.md"
+      ],
+      "by": "plan-builder"
+    },
+    {
+      "ts": "2026-10-13T09:28:21.454Z",
+      "state": "surface-hosts",
+      "class": "executor",
+      "type": "retire-state",
+      "reason": "split amendment: zero implementation commits ([psm:surface-hosts] count 0); manager-seam work moves to core-seam, host work to search-hosts",
+      "files_synced": [
+        "docs/plan/stealth-browser/contexts/surface-hosts.md"
+      ],
+      "by": "pseudosky"
+    },
+    {
+      "ts": "2026-10-13T09:28:21.607Z",
+      "state": "tracing-plugin",
+      "class": "executor",
+      "type": "retire-state",
+      "reason": "split amendment: superseded by search-tracing (tracing and telemetry now live in the stealth-search entrypoint)",
+      "files_synced": [
+        "docs/plan/stealth-browser/contexts/tracing-plugin.md"
+      ],
+      "by": "pseudosky"
+    },
+    {
+      "ts": "2026-10-13T09:28:21.758Z",
+      "state": "tracing-namespace-proof",
+      "class": "executor",
+      "type": "retire-state",
+      "reason": "split amendment: superseded by tracing-log-validation (a single validating agent reads the written logs; no tests)",
+      "files_synced": [
+        "docs/plan/stealth-browser/contexts/tracing-namespace-proof.md"
+      ],
+      "by": "pseudosky"
+    },
+    {
+      "ts": "2026-10-13T09:28:21.911Z",
+      "state": "agent-search-cutover",
+      "class": "executor",
+      "type": "retire-state",
+      "reason": "split amendment: superseded by search-cutover (three-package tarball proof, search ported onto the entrypoint)",
+      "files_synced": [
+        "docs/plan/stealth-browser/contexts/agent-search-cutover.md"
+      ],
+      "by": "pseudosky"
+    },
+    {
+      "ts": "2026-10-13T09:28:22.062Z",
+      "state": "agent-search-relink",
+      "class": "executor",
+      "type": "retire-state",
+      "reason": "split amendment: superseded by consumer-relink (agent definitions, opencode config, sox-ecosystem refs)",
+      "files_synced": [
+        "docs/plan/stealth-browser/contexts/agent-search-relink.md"
+      ],
+      "by": "pseudosky"
+    },
+    {
+      "ts": "2026-10-13T09:40:04.491Z",
+      "state": "tripwire-reverse-migrate",
+      "class": "executor",
+      "type": "rescope-criterion",
+      "reason": "split amendment: criterion 4 judged on request-builder test/lint/build plus regression-free against the recorded d959c6a baseline; unrelated workspace-wide red (lint of 14 projects, wingman-bridge tests, tinder e2e) filed as backlog fd3be45b; state not completed by the amendment",
+      "files_synced": [
+        "docs/plan/stealth-browser/contexts/tripwire-reverse-migrate.md"
+      ],
+      "by": "pseudosky"
+    },
+    {
+      "ts": "2026-10-13T09:40:04.652Z",
+      "state": "split-plan-repair",
+      "class": "executor",
+      "type": "plan-edit",
+      "reason": "split amendment: trimmed read_only contexts, README/SCOPE/APPROVAL-split/APPROVALS rewritten for three packages, audit-fixes.4/.5 cover both packages, gates-first.11 not folded",
+      "files_synced": [
+        "docs/plan/stealth-browser/README.md",
+        "docs/plan/stealth-browser/SCOPE.md",
+        "docs/plan/stealth-browser/APPROVAL-split.md",
+        "docs/plan/stealth-browser/APPROVALS.md",
+        "docs/plan/stealth-browser/scripts/guard.py"
+      ],
+      "by": "pseudosky"
+    },
+    {
+      "ts": "2026-10-21T18:49:54.165Z",
+      "state": "core-seam",
+      "class": "executor",
+      "type": "rescope-criterion",
+      "reason": "delta fold-in 591e1a7/c00edea: criteria core-seam.7-12 added (sharedProfile, embedded-json, lsof LISTEN, decideRetry empty, reaper profile thread, fixture-only spec guard); core-seam.4/.6 text matches guards; reservation +10 paths incl. 4 specs",
+      "files_synced": [
+        "contexts/core-seam.md",
+        "scripts/criteria.json",
+        "scripts/ownership.json",
+        "dag.json",
+        "scripts/guards/search_c.py"
+      ],
+      "by": "pseudosky"
+    },
+    {
+      "ts": "2026-10-21T18:49:54.325Z",
+      "state": "prod-errors",
+      "class": "executor",
+      "type": "rescope-criterion",
+      "reason": "prod-errors.9 added (api.launchChrome typed LifecycleError); src/api.ts added to mutates; prod-errors.3 text matches guard",
+      "files_synced": [
+        "contexts/prod-errors.md",
+        "scripts/criteria.json",
+        "scripts/ownership.json",
+        "dag.json"
+      ],
+      "by": "pseudosky"
+    },
+    {
+      "ts": "2026-10-21T18:49:54.477Z",
+      "state": "search-inventory",
+      "class": "executor",
+      "type": "rescope-criterion",
+      "reason": "search-inventory.7: inventory owns the delta symbols of 591e1a7 and c00edea",
+      "files_synced": [
+        "contexts/search-inventory.md",
+        "scripts/criteria.json"
+      ],
+      "by": "pseudosky"
+    },
+    {
+      "ts": "2026-10-21T18:49:54.631Z",
+      "state": "search-errors",
+      "class": "executor",
+      "type": "rescope-criterion",
+      "reason": "search-errors.7: SEARCH_FAILED strategy-unsupported and HITL_ABORTED exit 2 rows",
+      "files_synced": [
+        "contexts/search-errors.md",
+        "scripts/criteria.json"
+      ],
+      "by": "pseudosky"
+    },
+    {
+      "ts": "2026-10-21T18:49:54.783Z",
+      "state": "search-port-providers",
+      "class": "executor",
+      "type": "rescope-criterion",
+      "reason": "providers.9 rewritten (no github-code provider name), providers.3 text, providers.10 added (emptyRequiresLogin, fallbackNetwork, sharedProfile, fallbackView)",
+      "files_synced": [
+        "contexts/search-port-providers.md",
+        "scripts/criteria.json"
+      ],
+      "by": "pseudosky"
+    },
+    {
+      "ts": "2026-10-21T18:49:54.934Z",
+      "state": "search-port-engine",
+      "class": "executor",
+      "type": "rescope-criterion",
+      "reason": "engine.9 reworded (no fall back to dom once), engine.11-15 added (login wall, 429/503, timeoutMs, fallbackView, noCaptureOutcome)",
+      "files_synced": [
+        "contexts/search-port-engine.md",
+        "scripts/criteria.json"
+      ],
+      "by": "pseudosky"
+    },
+    {
+      "ts": "2026-10-21T18:49:55.114Z",
+      "state": "search-port-guards",
+      "class": "executor",
+      "type": "rescope-criterion",
+      "reason": "guards.11 added (login_required trips without a lock)",
+      "files_synced": [
+        "contexts/search-port-guards.md",
+        "scripts/criteria.json"
+      ],
+      "by": "pseudosky"
+    },
+    {
+      "ts": "2026-10-21T18:49:55.301Z",
+      "state": "search-verbs",
+      "class": "executor",
+      "type": "rescope-criterion",
+      "reason": "verbs.4 carved out, verbs.13-16 added (login wall, timeoutMs, strategy-unsupported, no retry of empty)",
+      "files_synced": [
+        "contexts/search-verbs.md",
+        "scripts/criteria.json"
+      ],
+      "by": "pseudosky"
+    },
+    {
+      "ts": "2026-10-21T18:49:55.493Z",
+      "state": "search-hosts",
+      "class": "executor",
+      "type": "rescope-criterion",
+      "reason": "hosts.22 (HITL closed stdin exit 2) and hosts.23 (commander ^14.0.3) added",
+      "files_synced": [
+        "contexts/search-hosts.md",
+        "scripts/criteria.json"
+      ],
+      "by": "pseudosky"
+    },
+    {
+      "ts": "2026-10-21T18:49:55.659Z",
+      "state": "chrome-lifecycle",
+      "class": "executor",
+      "type": "plan-edit",
+      "reason": "CL11 compares assertion lines instead of bytes so the fixture-only edits of core-seam do not reopen a completed state",
+      "files_synced": [
+        "contexts/chrome-lifecycle.md",
+        "scripts/guard.py"
+      ],
+      "by": "pseudosky"
+    },
+    {
+      "ts": "2026-10-21T18:49:55.824Z",
+      "state": "core-scaffold",
+      "class": "executor",
+      "type": "plan-edit",
+      "reason": "core-scaffold.2 criterion text rewritten to match guard behaviour",
+      "files_synced": [
+        "contexts/core-scaffold.md",
+        "scripts/guards/core.py"
+      ],
+      "by": "pseudosky"
+    },
+    {
+      "ts": "2026-10-21T18:49:55.983Z",
+      "state": "tripwire-reverse-migrate",
+      "class": "executor",
+      "type": "plan-edit",
+      "reason": "tripwire-reverse-migrate.1 criterion text rewritten to match guard behaviour",
+      "files_synced": [
+        "contexts/tripwire-reverse-migrate.md",
+        "scripts/guard.py"
+      ],
+      "by": "pseudosky"
+    },
+    {
+      "ts": "2026-10-21T18:56:09.552Z",
+      "state": "search-errors",
+      "class": "executor",
+      "type": "plan-edit",
+      "reason": "guard errors.3 requires the state's own work products to exist (it was green on the scaffold skeleton, failing the red-before-work proof)",
+      "files_synced": [
+        "scripts/guards/search_a.py"
+      ],
+      "by": "pseudosky"
+    },
+    {
+      "ts": "2026-10-21T18:56:09.728Z",
+      "state": "search-verbs",
+      "class": "executor",
+      "type": "plan-edit",
+      "reason": "guard verbs.7 requires the state's own work products to exist (it was green on the scaffold skeleton, failing the red-before-work proof)",
+      "files_synced": [
+        "scripts/guards/search_a.py"
+      ],
+      "by": "pseudosky"
+    },
+    {
+      "ts": "2026-10-21T18:56:09.886Z",
+      "state": "search-hosts",
+      "class": "executor",
+      "type": "plan-edit",
+      "reason": "guard hosts.2+.11 requires the state's own work products to exist (it was green on the scaffold skeleton, failing the red-before-work proof)",
+      "files_synced": [
+        "scripts/guards/search_b.py"
+      ],
+      "by": "pseudosky"
+    },
+    {
+      "ts": "2026-10-23T22:08:13.228Z",
+      "state": "tracing-log-validation",
+      "class": "executor",
+      "type": "plan-edit",
+      "reason": "first run failed (UNKNOWN_PROVIDER unreachable, rejected flag without span, duplicate op id `op`); reset in_progress to pending because the state now depends on search-tracing-fixes, which cmdStart resume would not enforce; criteria .10 and .11 added",
+      "files_synced": [
+        "dag.json",
+        "contexts/tracing-log-validation.md",
+        "scripts/criteria.json"
+      ],
+      "by": "pseudosky"
+    }
+  ],
+  "authored_with": {
+    "plugin": "workflow",
+    "version": "0.8.35",
+    "hash": "0b6bc1f3d70e"
+  },
+  "current_state": "tripwire-reverse-relink",
+  "dod_provenance": {
+    "confirmed_at": "2026-10-12T23:49:38.410Z",
+    "by": "pseudosky",
+    "note": "plan-repair 2026-10-12: DoD regenerated from the amended DEMO (use-case unit suites, cutover, feature inventory)",
+    "dod_ids": [
+      "dod.1",
+      "dod.2",
+      "dod.3",
+      "dod.4",
+      "dod.5",
+      "dod.6",
+      "dod.7",
+      "dod.8",
+      "dod.9"
+    ]
+  },
+  "claimed_by": "dispatcher",
+  "claimed_at": "2026-10-24T22:16:38.935Z"
+}

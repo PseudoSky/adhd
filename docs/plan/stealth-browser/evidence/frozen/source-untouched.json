@@ -1,0 +1,12 @@
+{
+  "purpose": "Frozen record for the one-shot 'source tree untouched' criterion (mig-foundation.3 ... mig-docs.3). The scratch repo's agent-browser/adhd tree is ambient state that other authorised agents edit; the plan itself must never touch it before the search-cutover.",
+  "scratch_repo": "/Users/nix/dev/ai/scratch",
+  "baseline_tree": "d7d06e10d9af79369c38c13086af268b6afe729f",
+  "pre_cutover_tree": "9057bf58f3a0700394ec974c80ef31cc742f2c73",
+  "cutover_commit": "ca1f94d8449ae5211f6c8c1e1d9cc88408d73feb",
+  "ambient_commits_between_baseline_and_cutover": [
+    {"sha": "591e1a78a8a01a94a88a088b7d4cd2dd3aa45ce1", "subject": "fix(agent-browser): github code search via embedded JSON; HITL login wall; capture raw network status and honour the request timeout", "plan_tagged": false},
+    {"sha": "c00edea2a1795abb5a887d3b74541646309aa52e", "subject": "fix(agent-browser): do not retry a zero-result page; retry only transport failures", "plan_tagged": false}
+  ],
+  "note": "pre_cutover_tree differs from baseline_tree only by the two untagged agent-browser fix commits above (4 files: capture/bans.ts, cdp-connection/src/targets.ts, docs/capture.md, parsers.ts)."
+}

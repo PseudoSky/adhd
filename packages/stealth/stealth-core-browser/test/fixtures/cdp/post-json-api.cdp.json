@@ -1,0 +1,95 @@
+{
+  "meta": {
+    "name": "post-json-api",
+    "origin": "synthetic-protocol-conformant",
+    "chromeVersion": "126.0.6478.0"
+  },
+  "steps": [
+    {
+      "when": {
+        "method": "Page.enable"
+      }
+    },
+    {
+      "when": {
+        "method": "Network.enable"
+      }
+    },
+    {
+      "when": {
+        "method": "Page.navigate",
+        "params": {
+          "url": "https://site.test/api/search"
+        }
+      },
+      "reply": {
+        "result": {
+          "frameId": "F1",
+          "loaderId": "L1"
+        }
+      },
+      "emit": [
+        {
+          "method": "Network.requestWillBeSent",
+          "params": {
+            "requestId": "R1",
+            "loaderId": "L1",
+            "documentURL": "https://site.test/api/search",
+            "request": {
+              "url": "https://site.test/api/search",
+              "method": "POST",
+              "headers": {
+                "content-type": "application/json"
+              },
+              "postData": "{\"q\":\"cats\"}",
+              "hasPostData": true
+            },
+            "timestamp": 100.0,
+            "wallTime": 1700000000.0,
+            "initiator": {
+              "type": "other"
+            },
+            "type": "Fetch"
+          }
+        },
+        {
+          "method": "Network.responseReceived",
+          "params": {
+            "requestId": "R1",
+            "loaderId": "L1",
+            "timestamp": 100.1,
+            "type": "Fetch",
+            "response": {
+              "url": "https://site.test/api/search",
+              "status": 200,
+              "statusText": "OK",
+              "headers": {
+                "content-type": "application/json"
+              },
+              "mimeType": "application/json"
+            }
+          }
+        },
+        {
+          "method": "Network.loadingFinished",
+          "params": {
+            "requestId": "R1",
+            "timestamp": 100.2,
+            "encodedDataLength": 80
+          }
+        }
+      ]
+    },
+    {
+      "when": {
+        "method": "Network.getResponseBody"
+      },
+      "reply": {
+        "result": {
+          "body": "{\"results\":[1,2,3]}",
+          "base64Encoded": false
+        }
+      }
+    }
+  ]
+}

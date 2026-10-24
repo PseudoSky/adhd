@@ -1,0 +1,17 @@
+{
+  "probe": "U-PDF",
+  "risk": "O4",
+  "state": "search-port-fetch",
+  "route": "dynamic-import",
+  "route_note": "tsc (module commonjs) rewrites a literal `import('pdfjs-dist/legacy/build/pdf.mjs')` to `Promise.resolve().then(() => require(s))`, confirmed in a build-bin emit. require(esm) is only unflagged from Node 22.12 while engines is >=22.5, so pdf.ts builds the call with `new Function('specifier','return import(specifier)')`, which the compiler cannot rewrite and which stays a native ESM import. No .mjs helper and no project.json edit were needed. Under vitest (vm context, no import callback) the loader falls back to the plain dynamic import.",
+  "built_load": true,
+  "built_module": "entrypoint/stealth-search/dist/src/lib/fetch/pdf.js",
+  "built_with": "node node_modules/typescript/bin/tsc -p entrypoint/stealth-search/tsconfig.build-bin.json --outDir entrypoint/stealth-search/dist --rootDir entrypoint/stealth-search --baseUrl entrypoint/stealth-search --composite false --noEmitOnError (the build-bin command); loaded with plain node from cwd /tmp, no tsx",
+  "fixture_pdf": "entrypoint/stealth-search/src/test/unit/fetch/fixtures/two-page.pdf",
+  "known_sentence": "the stealth runner survived the audit",
+  "extracted_text": "Quarterly report: the stealth runner survived the audit.\n\nAppendix: the second page holds a separate sentence.",
+  "pages": 2,
+  "node": "v24.11.1",
+  "pdfjs_dist": "4.10.38",
+  "note_nx": "`nx run stealth-search:build-bin` failed at that moment inside the tripwire package build (packages/resilience/resilience-core-tripwire/src/lib/errors.ts:201 TS4111, another state's file); the identical tsc command of the build-bin target succeeded."
+}

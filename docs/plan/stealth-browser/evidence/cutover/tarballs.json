@@ -1,0 +1,70 @@
+{
+  "order": [
+    "tripwire",
+    "core",
+    "search"
+  ],
+  "pnpm_version": "8.15.9",
+  "packages": {
+    "tripwire": {
+      "package": "@adhd/resilience-core-tripwire",
+      "version": "0.1.0",
+      "tarball": "/Users/nix/.cache/adhd-dev-tarballs/cutover-tripwire-0.1.0.tgz",
+      "sha256": "a681d6df1d839a6b76ae41735740c4668ee7441851c09dfc8f95ccdf77fff7b0",
+      "packed_from_head": "0fea5952d23874f0af1b0c3168b7f66520d9c203",
+      "packed_from_tree": "f246c3baa803eebd01b431c761d85e289d0a0af7",
+      "pack_cmd": "cd packages/resilience/resilience-core-tripwire && pnpm pack --pack-destination /Users/nix/.cache/adhd-dev-tarballs && mv /Users/nix/.cache/adhd-dev-tarballs/adhd-resilience-core-tripwire-0.1.0.tgz /Users/nix/.cache/adhd-dev-tarballs/cutover-tripwire-0.1.0.tgz",
+      "built_by": "NX_SKIP_NX_CACHE=true nx run resilience-core-tripwire:build",
+      "members_checked": [
+        "package/dist/index.js",
+        "package/package.json"
+      ],
+      "member_count": 22
+    },
+    "core": {
+      "package": "@adhd/stealth-core-browser",
+      "version": "0.1.0",
+      "tarball": "/Users/nix/.cache/adhd-dev-tarballs/cutover-core-0.1.0.tgz",
+      "sha256": "c5649caf3ad3e5613f45d6112118c87fface21b4f30ddfccd45c463e7035f93a",
+      "packed_from_head": "0fea5952d23874f0af1b0c3168b7f66520d9c203",
+      "packed_from_tree": "89756db24f5ddd9d79fede8c6da2c8223aab4ede",
+      "pack_cmd": "cd packages/stealth/stealth-core-browser && pnpm pack --pack-destination /Users/nix/.cache/adhd-dev-tarballs && mv /Users/nix/.cache/adhd-dev-tarballs/adhd-stealth-core-browser-0.1.0.tgz /Users/nix/.cache/adhd-dev-tarballs/cutover-core-0.1.0.tgz",
+      "built_by": "NX_SKIP_NX_CACHE=true nx run stealth-core-browser:build",
+      "members_checked": [
+        "package/dist/index.js",
+        "package/package.json"
+      ],
+      "member_count": 66
+    },
+    "search": {
+      "package": "@adhd/stealth-search",
+      "version": "0.1.0",
+      "tarball": "/Users/nix/.cache/adhd-dev-tarballs/cutover-search-0.1.0.tgz",
+      "sha256": "3c16af41485020bd8772976ed549887eee6cdea1aad8612bcccc4128c9ee3dfb",
+      "packed_from_head": "0fea5952d23874f0af1b0c3168b7f66520d9c203",
+      "packed_from_tree": "0a58b34e810d91de25d191fcbc57930e45b12e84",
+      "pack_cmd": "cd entrypoint/stealth-search && pnpm pack --pack-destination /Users/nix/.cache/adhd-dev-tarballs && mv /Users/nix/.cache/adhd-dev-tarballs/adhd-stealth-search-0.1.0.tgz /Users/nix/.cache/adhd-dev-tarballs/cutover-search-0.1.0.tgz",
+      "built_by": "NX_SKIP_NX_CACHE=true nx run stealth-search:build then stealth-search:build-bin",
+      "members_checked": [
+        "package/dist/bin/cli.js",
+        "package/dist/index.js",
+        "package/dist/bin/mcp.js",
+        "package/package.json"
+      ],
+      "member_count": 116
+    }
+  },
+  "supplementary": {
+    "apigen-engine-runtime": {
+      "package": "@adhd/apigen-engine-runtime",
+      "version": "0.3.5",
+      "tarball": "/Users/nix/.cache/adhd-dev-tarballs/cutover-apigen-engine-runtime-0.3.5.tgz",
+      "sha256": "8616868d382007ae30a1c60a52d91e031bcff680cce8beb3d6da455bd60b0203",
+      "packed_from_head": "0fea5952d23874f0af1b0c3168b7f66520d9c203",
+      "packed_from_tree": "525f8672aedf4754004e60af8a0effdebcc6c0f4",
+      "pack_cmd": "cd packages/apigen/apigen-engine-runtime && pnpm pack --pack-destination /Users/nix/.cache/adhd-dev-tarballs && mv /Users/nix/.cache/adhd-dev-tarballs/adhd-apigen-engine-runtime-0.3.5.tgz /Users/nix/.cache/adhd-dev-tarballs/cutover-apigen-engine-runtime-0.3.5.tgz",
+      "built_by": "NX_SKIP_NX_CACHE=true nx run apigen-engine-runtime:build",
+      "why": "the unreleased stealth-search imports buildApigenPackage from @adhd/apigen-engine-runtime; the published 0.3.5 on the registry lacks it (installed consumer failed with HOST_BOOT_FAILED: buildApigenPackage is not a function), so the worktree build is installed in its place until it is released"
+    }
+  }
+}

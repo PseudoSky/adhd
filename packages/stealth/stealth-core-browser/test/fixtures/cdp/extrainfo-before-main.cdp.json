@@ -1,0 +1,104 @@
+{
+  "meta": {
+    "name": "extrainfo-before-main",
+    "origin": "synthetic-protocol-conformant",
+    "chromeVersion": "126.0.6478.0"
+  },
+  "steps": [
+    {
+      "when": {
+        "method": "Page.enable"
+      }
+    },
+    {
+      "when": {
+        "method": "Network.enable"
+      }
+    },
+    {
+      "when": {
+        "method": "Page.navigate",
+        "params": {
+          "url": "https://site.test/home"
+        }
+      },
+      "reply": {
+        "result": {
+          "frameId": "F1",
+          "loaderId": "L1"
+        }
+      },
+      "emit": [
+        {
+          "method": "Network.requestWillBeSent",
+          "params": {
+            "requestId": "R1",
+            "loaderId": "L1",
+            "documentURL": "https://site.test/home",
+            "request": {
+              "url": "https://site.test/home",
+              "method": "GET",
+              "headers": {
+                "Accept": "*/*"
+              }
+            },
+            "timestamp": 100.0,
+            "wallTime": 1700000000.0,
+            "initiator": {
+              "type": "other"
+            },
+            "type": "Document"
+          }
+        },
+        {
+          "method": "Network.responseReceivedExtraInfo",
+          "params": {
+            "requestId": "R1",
+            "blockedCookies": [],
+            "headers": {
+              "set-cookie": "a=1"
+            },
+            "statusCode": 200
+          }
+        },
+        {
+          "method": "Network.responseReceived",
+          "params": {
+            "requestId": "R1",
+            "loaderId": "L1",
+            "timestamp": 100.1,
+            "type": "Document",
+            "response": {
+              "url": "https://site.test/home",
+              "status": 200,
+              "statusText": "OK",
+              "headers": {
+                "content-type": "text/html"
+              },
+              "mimeType": "text/html"
+            }
+          }
+        },
+        {
+          "method": "Network.loadingFinished",
+          "params": {
+            "requestId": "R1",
+            "timestamp": 100.2,
+            "encodedDataLength": 1024
+          }
+        }
+      ]
+    },
+    {
+      "when": {
+        "method": "Network.getResponseBody"
+      },
+      "reply": {
+        "result": {
+          "body": "<html>x</html>",
+          "base64Encoded": false
+        }
+      }
+    }
+  ]
+}

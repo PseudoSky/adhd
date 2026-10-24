@@ -1,0 +1,40 @@
+{
+  "name": "@adhd/stealth-core-browser",
+  "version": "0.1.0",
+  "description": "Stealth Chrome runner core: CDP DOM-walk browser automation without automation flags, as a library",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "engines": {
+    "node": ">=22.5"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist",
+    "CHANGELOG.md"
+  ],
+  "keywords": [
+    "chrome",
+    "cdp",
+    "browser",
+    "stealth"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PseudoSky/adhd.git",
+    "directory": "packages/stealth/stealth-core-browser"
+  },
+  "homepage": "https://github.com/PseudoSky/adhd/tree/main/packages/stealth/stealth-core-browser#readme",
+  "bugs": {
+    "url": "https://github.com/PseudoSky/adhd/issues"
+  },
+  "dependencies": {
+    "@adhd/sox-service-proxy": "~0.6.0",
+    "@adhd/sox-store-adapter": "^0.13.3",
+    "@xmldom/xmldom": "^0.9.10",
+    "node-html-parser": "^8.0.4",
+    "xpath": "^0.0.34"
+  }
+}

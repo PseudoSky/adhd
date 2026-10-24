@@ -1,0 +1,5 @@
+{
+  "//": "typecheck-spec ratchet baseline for packages/resilience/resilience-core-tripwire/tsconfig.spec.json. Per-file error counts; the gate fails on any INCREASE (or a new file with errors). Empty because the package was scaffolded clean; this number may only go DOWN. Regenerate with ratchet.mjs --write-baseline.",
+  "total": 0,
+  "files": {}
+}

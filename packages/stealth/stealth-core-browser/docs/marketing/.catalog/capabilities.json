@@ -1,0 +1,368 @@
+{
+  "scope": "packages/stealth/stealth-core-browser",
+  "package": "@adhd/stealth-core-browser",
+  "last_verified_sha": "2b8320c8e0be7cf5569ecd57bf9da76bae430d4b",
+  "last_verified_at": "2026-10-24T14:23:54-04:00",
+  "runner": "pnpm exec vitest run <spec paths> (vitest 4.1.9, from the scope dir; in-process fake CDP, no Chrome, no port 9222)",
+  "capabilities": [
+    {
+      "id": "chromeStatus",
+      "name": "chromeStatus",
+      "status": "shipped",
+      "kind": "verb",
+      "summary": "Reports whether Chrome answers on the CDP endpoint: {running, version?, protocol?, managed}. Throws CDP_UNREACHABLE (wrapped) on unexpected failure.",
+      "entry": "chromeStatus (named export of the package root)",
+      "receipt": "pnpm exec vitest run test/unit/surface/verbs.spec.ts test/unit/surface/api.spec.ts",
+      "verified_output": "exit 0; Test Files 2 passed (2); Tests 24 passed (24)",
+      "verified": true,
+      "source": "src/api.ts:162-180"
+    },
+    {
+      "id": "launchChrome",
+      "name": "launchChrome",
+      "status": "shipped",
+      "kind": "verb",
+      "summary": "Starts (or attaches to) the dedicated Chrome on port/userDataDir via the managed lifecycle; idempotent when a Chrome that carries the same --user-data-dir already answers; refuses a foreign-profile Chrome with LAUNCH_FAILED. Exposes only port and userDataDir (chromePath/extraArgs are deliberately not verb inputs).",
+      "entry": "launchChrome (named export of the package root)",
+      "receipt": "pnpm exec vitest run test/unit/surface/verbs.spec.ts test/unit/cdp/browser.spec.ts test/unit/cdp/launch-hardening.spec.ts test/unit/errors/api-launch-errors.spec.ts",
+      "verified_output": "exit 0; Test Files 4 passed (4); Tests 64 passed (64)",
+      "verified": true,
+      "source": "src/api.ts:184-200"
+    },
+    {
+      "id": "shutdownChrome",
+      "name": "shutdownChrome",
+      "status": "shipped",
+      "kind": "verb",
+      "summary": "Soft shutdown of a managed Chrome: defers to other sessions and open pages; never throws on a failed shutdown, returns {ok, running}.",
+      "entry": "shutdownChrome (named export of the package root)",
+      "receipt": "pnpm exec vitest run test/unit/surface/verbs.spec.ts test/unit/cdp/shutdown.spec.ts test/unit/lifecycle/shutdown-modes.spec.ts",
+      "verified_output": "exit 0; Test Files 3 passed (3); Tests 29 passed (29)",
+      "verified": true,
+      "source": "src/api.ts:204-218"
+    },
+    {
+      "id": "listPageTargets",
+      "name": "listPageTargets",
+      "status": "shipped",
+      "kind": "verb",
+      "summary": "Lists open page targets of the controlled Chrome as {targets:[{id,type,url,webSocketDebuggerUrl?}]}.",
+      "entry": "listPageTargets (named export of the package root)",
+      "receipt": "pnpm exec vitest run test/unit/surface/verbs.spec.ts test/unit/cdp/targets.spec.ts test/unit/use-cases/list-my-open-tabs.spec.ts",
+      "verified_output": "exit 0; Test Files 3 passed (3); Tests 72 passed (72)",
+      "verified": true,
+      "source": "src/api.ts:220-229"
+    },
+    {
+      "id": "checkChromeActivity",
+      "name": "checkChromeActivity",
+      "status": "shipped",
+      "kind": "verb",
+      "summary": "Reports active page count, page target ids, the most recent history visit (ISO time) and whether Chrome was used within withinMinutes (default 2); reads History from userDataDir.",
+      "entry": "checkChromeActivity (named export of the package root)",
+      "receipt": "pnpm exec vitest run test/unit/queries/activity.spec.ts test/unit/surface/verbs.spec.ts",
+      "verified_output": "exit 0; Test Files 2 passed (2); Tests 18 passed (18)",
+      "verified": true,
+      "source": "src/api.ts:231-244; src/lib/queries/activity.ts"
+    },
+    {
+      "id": "getPageContext",
+      "name": "getPageContext",
+      "status": "shipped",
+      "kind": "verb",
+      "summary": "Returns {found, context} for one targetId: page context combining target info with cookies and history from userDataDir; found=false when the target no longer exists.",
+      "entry": "getPageContext (named export of the package root)",
+      "receipt": "pnpm exec vitest run test/unit/queries/context.spec.ts test/unit/surface/verbs.spec.ts",
+      "verified_output": "exit 0; Test Files 2 passed (2); Tests 18 passed (18)",
+      "verified": true,
+      "source": "src/api.ts:246-; src/lib/queries/context.ts"
+    },
+    {
+      "id": "cdp",
+      "name": "cdp",
+      "status": "shipped",
+      "kind": "namespace",
+      "summary": "CDP layer: CdpSession (WebSocket JSON-RPC), CdpClient domain facade, browser launch/ensure/kill with profile-identity checks, page-target create/close/list, awaitPageSettled, resource watermark monitor, IdleShutdown, isolated page targets. 27 runtime members. Launch and kill use lsof/fuser/ps probes (POSIX).",
+      "entry": "cdp (namespace of the package root)",
+      "receipt": "pnpm exec vitest run test/unit/cdp test/unit/use-cases/drive-chrome-over-raw-cdp.spec.ts",
+      "verified_output": "exit 0; Test Files 10 passed (10); Tests 228 passed (228)",
+      "verified": true,
+      "source": "src/index.ts:11; src/lib/cdp/index.ts"
+    },
+    {
+      "id": "storage",
+      "name": "storage",
+      "status": "shipped",
+      "kind": "namespace",
+      "summary": "Read-only readers over Chrome SQLite stores opened immutable (mode=ro&immutable=1): HistoryClient, CookieClient, BookmarkClient, ProfileClient, plus openDb and toUnixTimeSql. 6 runtime members.",
+      "entry": "storage (namespace of the package root)",
+      "receipt": "pnpm exec vitest run test/unit/domains-storage test/unit/use-cases/audit-my-browsing-history.spec.ts test/unit/use-cases/find-a-saved-bookmark-and-top-site.spec.ts",
+      "verified_output": "exit 0; Test Files 17 passed (17); Tests 173 passed (173)",
+      "verified": true,
+      "source": "src/index.ts:12; src/lib/storage/index.ts:1-5; src/lib/storage/helpers.ts:6-15"
+    },
+    {
+      "id": "capture",
+      "name": "capture",
+      "status": "shipped",
+      "kind": "namespace",
+      "summary": "Network and DOM capture without Runtime.evaluate: captureNetworkResponse, captureAllNetworkResponses, walkDomTree, ban detection (checkBans) and retry policy (decideRetry). 5 runtime members.",
+      "entry": "capture (namespace of the package root)",
+      "receipt": "pnpm exec vitest run test/unit/capture test/unit/capture-parsers/dom.spec.ts test/unit/capture-parsers/network.spec.ts test/unit/capture-parsers/bans.spec.ts test/unit/use-cases/capture-a-page-load-and-spot-a-block.spec.ts",
+      "verified_output": "exit 0; Test Files 35 passed (35); Tests 246 passed (246)",
+      "verified": true,
+      "source": "src/index.ts:13; src/lib/capture/index.ts:1-5"
+    },
+    {
+      "id": "parsers",
+      "name": "parsers",
+      "status": "shipped",
+      "kind": "namespace",
+      "summary": "Server-side extraction: extractResultsFromJson, extractResultsFromEmbeddedJson (generic, shipped) and extractWithXpath, extractStructural, extractResultsFromHtml (Google SERP oriented). PROVISIONAL: the Google SERP parsers are verified against synthetic fixtures only; only the generic extractors are claimed as shipped. 5 runtime members.",
+      "entry": "parsers (namespace of the package root)",
+      "receipt": "pnpm exec vitest run test/unit/parsers test/unit/capture-parsers/parsers.spec.ts test/unit/seam/embedded-json-fields.spec.ts test/unit/use-cases/scrape-a-results-page.spec.ts",
+      "verified_output": "exit 0; Test Files 5 passed (5); Tests 52 passed (52)",
+      "verified": true,
+      "source": "src/index.ts:14; src/lib/parsers.ts:29,113,138,211,264"
+    },
+    {
+      "id": "chromeManager",
+      "name": "chromeManager",
+      "status": "shipped",
+      "kind": "namespace",
+      "summary": "ChromeManager class (auto-start, activity-bumped idle timer, reaper-host safety shutdown, launch circuit breaker, degraded mode) plus REAP_IF_IDLE_TIMEOUT_MS and RECONNECT_MIN_INTERVAL_MS and ChromeManagerOptions defaults. 4 runtime members.",
+      "entry": "chromeManager (namespace of the package root)",
+      "receipt": "pnpm exec vitest run test/unit/chrome-manager test/unit/seam/managers.spec.ts",
+      "verified_output": "exit 0; Test Files 3 passed (3); Tests 47 passed (47)",
+      "verified": true,
+      "source": "src/index.ts:15; src/lib/chrome-manager.ts:58-134"
+    },
+    {
+      "id": "recording",
+      "name": "recording",
+      "status": "shipped",
+      "kind": "namespace",
+      "summary": "Network recording: NetworkRecorder, MemoryRecordingSink, StoreRecordingSink/openStoreRecordingSink (sox-store-adapter backed), header redaction (DEFAULT_REDACTED_HEADERS), CaptureError. 18 runtime members.",
+      "entry": "recording (namespace of the package root)",
+      "receipt": "pnpm exec vitest run test/unit/capture/memory-sink.spec.ts test/unit/capture/store-sink.spec.ts test/unit/capture/open-store-sink.spec.ts test/unit/capture/redaction.spec.ts test/unit/use-cases/record-a-session-without-leaking-credentials.spec.ts",
+      "verified_output": "exit 0; Test Files 5 passed (5); Tests 37 passed (37)",
+      "verified": true,
+      "source": "src/index.ts:17; src/lib/recording/index.ts"
+    },
+    {
+      "id": "lifecycle",
+      "name": "lifecycle",
+      "status": "shipped",
+      "kind": "namespace",
+      "summary": "Manager seam and reaper: reap policy (decideReap), reaper host and link, launch breaker, ownership records, private per-port state dir, exit hooks, isolated pages (openIsolatedPage/withIsolatedPage), LifecycleError codes. 42 runtime members.",
+      "entry": "lifecycle (namespace of the package root)",
+      "receipt": "pnpm exec vitest run test/unit/lifecycle test/unit/use-cases/two-agents-start-chrome-at-once.spec.ts test/unit/use-cases/recover-a-crashed-chrome.spec.ts test/unit/use-cases/open-an-isolated-page-and-clean-up.spec.ts",
+      "verified_output": "exit 0; Test Files 36 passed (36); Tests 288 passed (288)",
+      "verified": true,
+      "source": "src/index.ts:16; src/lib/lifecycle/index.ts:10-24"
+    },
+    {
+      "id": "endpoint",
+      "name": "endpoint",
+      "status": "shipped",
+      "kind": "namespace",
+      "summary": "Endpoint policy: loopback-only by default; host syntax validation; configureEndpointPolicy({allowHosts}) opt-in by the hosting process; assertSameEndpoint refuses a redirected debugger URL. 8 runtime members.",
+      "entry": "endpoint (namespace of the package root)",
+      "receipt": "pnpm exec vitest run test/unit/surface/endpoint-policy.spec.ts test/unit/use-cases/vet-a-chrome-endpoint-before-connecting.spec.ts",
+      "verified_output": "exit 0; Test Files 2 passed (2); Tests 39 passed (39)",
+      "verified": true,
+      "source": "src/index.ts:18; src/lib/endpoint.ts"
+    },
+    {
+      "id": "StealthCoreBrowserError",
+      "name": "StealthCoreBrowserError",
+      "status": "shipped",
+      "kind": "error",
+      "summary": "Single typed error with stable code (32 ERROR_CODES in docs order: environment, library, capture, lifecycle), remediation text, cause and detail; CaptureError and LifecycleError extend it; exitCodeFor maps a code to a process exit status.",
+      "entry": "StealthCoreBrowserError, ERROR_CODES, exitCodeFor (named exports of the package root)",
+      "receipt": "pnpm exec vitest run test/unit/errors test/unit/surface/public-api.spec.ts test/unit/docs/agents-md.spec.ts",
+      "verified_output": "exit 0; Test Files 10 passed (10); Tests 132 passed (132)",
+      "verified": true,
+      "source": "src/errors.ts:20,154,175"
+    }
+  ],
+  "defaults": {
+    "endpoint": {
+      "DEFAULT_HOST": {
+        "value": "127.0.0.1",
+        "source": "src/lib/endpoint.ts:22"
+      },
+      "DEFAULT_PORT": {
+        "value": 9222,
+        "source": "src/lib/endpoint.ts:24"
+      },
+      "hostPolicy": {
+        "value": "loopback only (localhost, 127.0.0.0/8, ::1); others only via endpoint.configureEndpointPolicy({allowHosts}) by the hosting process",
+        "source": "src/lib/endpoint.ts:42-60"
+      },
+      "portRange": {
+        "value": "integer 1..65535",
+        "source": "src/lib/endpoint.ts:77-82"
+      }
+    },
+    "cdp": {
+      "DEFAULT_CDP_PORT": {
+        "value": 9222,
+        "source": "src/lib/cdp/browser.ts:27"
+      },
+      "DEFAULT_PROFILE_NAME": {
+        "value": "Chrome-CDP",
+        "source": "src/lib/cdp/browser.ts:29"
+      },
+      "defaultProfileDir": {
+        "value": "<googleSupportDir()>/Chrome-CDP (directory is created with mkdir -p on launch)",
+        "source": "src/lib/cdp/browser.ts:79-83"
+      },
+      "CDP_HTTP_TIMEOUT_MS": {
+        "value": 5000,
+        "source": "src/lib/cdp/targets.ts:15"
+      }
+    },
+    "profileDirByPlatform": {
+      "darwin": "~/Library/Application Support/Google/Chrome-CDP",
+      "win32": "%LOCALAPPDATA%\\Google\\Chrome-CDP (fallback ~/AppData/Local/Google)",
+      "other": "$XDG_CONFIG_HOME/google/Chrome-CDP (fallback ~/.config/google/Chrome-CDP)",
+      "source": "src/lib/helpers.ts:42-61 (googleSupportDir, chromeProfileDir)"
+    },
+    "everydayChromeProfile": {
+      "darwin_win32": "<googleSupportDir()>/Chrome",
+      "linux": "$XDG_CONFIG_HOME/google-chrome (fallback ~/.config/google-chrome)",
+      "source": "src/lib/helpers.ts:63-68 (defaultChromeDir)"
+    },
+    "stateDir": {
+      "pattern": "<os.tmpdir()>/stealth-browser-<uid>-<port>",
+      "mode": "0700, owned by uid; unsafe/uncreatable dir yields degraded mode, not a throw",
+      "uidFallback": "0 when process.getuid is unavailable",
+      "source": "src/lib/lifecycle/state-dir.ts:31-35, 37-45"
+    },
+    "chromeManagerOptions": {
+      "cdpHost": {
+        "value": "127.0.0.1:9222",
+        "source": "src/lib/chrome-manager.ts:163"
+      },
+      "idleTimeoutMs": {
+        "value": 120000,
+        "source": "src/lib/chrome-manager.ts:165"
+      },
+      "keepAlive": {
+        "value": false,
+        "source": "src/lib/chrome-manager.ts:166"
+      },
+      "checkHistory": {
+        "value": true,
+        "source": "src/lib/chrome-manager.ts:169"
+      },
+      "shutdownGraceMs": {
+        "value": 30000,
+        "source": "src/lib/chrome-manager.ts:170"
+      },
+      "orphanWindowMs": {
+        "value": 30000,
+        "source": "src/lib/chrome-manager.ts:171"
+      },
+      "reaperScope": {
+        "value": "port-occupant",
+        "other": "launched-only",
+        "source": "src/lib/chrome-manager.ts:172"
+      },
+      "logger": {
+        "value": "console.error with [chrome-manager] prefix",
+        "source": "src/lib/chrome-manager.ts:110,175"
+      },
+      "REAP_IF_IDLE_TIMEOUT_MS": {
+        "value": 3000,
+        "source": "src/lib/chrome-manager.ts:113"
+      },
+      "RECONNECT_MIN_INTERVAL_MS": {
+        "value": 2000,
+        "source": "src/lib/chrome-manager.ts:115"
+      },
+      "userDataDir": {
+        "value": "unset -> dedicated CDP profile",
+        "source": "src/lib/chrome-manager.ts:167"
+      },
+      "stateDir": {
+        "value": "unset -> pattern above",
+        "source": "src/lib/chrome-manager.ts:173"
+      }
+    },
+    "launchBreaker": {
+      "LAUNCH_FAILURE_THRESHOLD": {
+        "value": 3,
+        "source": "src/lib/lifecycle/launch-breaker.ts:23"
+      },
+      "LAUNCH_WINDOW_MS": {
+        "value": 60000,
+        "source": "src/lib/lifecycle/launch-breaker.ts:24"
+      },
+      "LAUNCH_COOLDOWN_MS": {
+        "value": 30000,
+        "source": "src/lib/lifecycle/launch-breaker.ts:25"
+      }
+    },
+    "reaper": {
+      "REAPER_TICK_MS": {
+        "value": 5000,
+        "source": "src/lib/lifecycle/reaper-entry.ts:71"
+      },
+      "LINK_GIVE_UP_MS": {
+        "value": 2000,
+        "source": "src/lib/lifecycle/reaper-link.ts:71"
+      }
+    },
+    "verbDefaults": {
+      "checkChromeActivity.withinMinutes": {
+        "value": 2,
+        "source": "src/api.ts:50-51"
+      },
+      "launchChrome.port": {
+        "value": 9222,
+        "source": "src/api.ts:36-38"
+      },
+      "userDataDir": {
+        "value": "dedicated CDP profile",
+        "source": "src/api.ts:38,47,56"
+      }
+    },
+    "storageReaders": {
+      "layout": "<profileDir>/Default/{History,Cookies,Bookmarks}; profileDir defaults to chromeProfileDir() (the dedicated CDP profile, never the everyday profile)",
+      "openMode": "mode=ro&immutable=1 (no locks, ignores WAL: rows not yet checkpointed are invisible)",
+      "source": "src/lib/storage/cookies.ts:47-48; bookmarks.ts:20-21; history.ts:42-43; helpers.ts:6-15"
+    },
+    "platform": {
+      "chromeBinary": {
+        "darwin": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+        "linux": "first of `which google-chrome`, `which chromium`, `which chromium-browser`; '' when none",
+        "win32": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+        "other": "''",
+        "source": "src/lib/cdp/browser.ts:66-77"
+      },
+      "processProbe": {
+        "value": "lsof -ti tcp:<port> -sTCP:LISTEN, fallback fuser <port>/tcp, ps -o command=/pgid=: POSIX only; no Windows implementation (probe answers empty/null on failure)",
+        "source": "src/lib/cdp/browser.ts:102-119"
+      },
+      "killPath": {
+        "value": "process.kill(-pid) process group then pid, SIGTERM: POSIX semantics; no taskkill path",
+        "source": "src/lib/cdp/browser.ts:418-438"
+      },
+      "userDataPaths": {
+        "value": "all three OS branches exist in googleSupportDir/defaultChromeDir",
+        "source": "src/lib/helpers.ts:44-68"
+      },
+      "posixAssumption": {
+        "value": "checkChromeActivity derives meta.profileDir with history.path.replace('/Default/History','') - a forward-slash assumption that would not strip on Windows",
+        "source": "src/lib/queries/activity.ts:35"
+      },
+      "stateDirTmp": {
+        "value": "os.tmpdir()-based; uid via process.getuid (0 on Windows)",
+        "source": "src/lib/lifecycle/state-dir.ts:32"
+      },
+      "verifiedPlatform": "No spec runs on a real non-macOS host; specs inject platform where needed and never start Chrome (AGENTS.md). Cross-platform claims are code-path existence only."
+    }
+  }
+}

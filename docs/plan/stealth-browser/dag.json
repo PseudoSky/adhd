@@ -1,0 +1,1480 @@
+{
+  "schema_version": 2,
+  "title": "Migrate the agent-search chrome runner to @adhd/stealth-browser (entrypoint)",
+  "plan_kind": "brownfield",
+  "phases": [
+    "productization",
+    "scaffold",
+    "migrate",
+    "surface",
+    "verify",
+    "review",
+    "remediate",
+    "docs",
+    "release",
+    "handoff"
+  ],
+  "terminal": "done",
+  "nodes": {
+    "productization-hold": {
+      "kind": "review",
+      "phase": "productization",
+      "depends_on": [],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py productization-hold",
+      "artifacts": [
+        "docs/plan/stealth-browser/PRODUCT-REVIEW.md"
+      ],
+      "context": "contexts/productization-hold.md",
+      "notes": "executor=product tier=sonnet/medium"
+    },
+    "scaffold": {
+      "kind": "work",
+      "phase": "scaffold",
+      "depends_on": [
+        "productization-hold"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py scaffold",
+      "artifacts": [
+        "entrypoint/stealth-browser/",
+        "tsconfig.base.json",
+        "docs/plan/stealth-browser/evidence/"
+      ],
+      "context": "contexts/scaffold.md",
+      "notes": "executor=platform-engineer tier=sonnet/medium"
+    },
+    "entrypoint-parity": {
+      "kind": "work",
+      "phase": "scaffold",
+      "depends_on": [
+        "scaffold"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py entrypoint-parity",
+      "artifacts": [
+        "entrypoint/stealth-browser/*",
+        "docs/plan/stealth-browser/evidence/"
+      ],
+      "context": "contexts/entrypoint-parity.md",
+      "notes": "executor=platform-engineer tier=sonnet/medium"
+    },
+    "deps-install": {
+      "kind": "work",
+      "phase": "scaffold",
+      "depends_on": [
+        "entrypoint-parity"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py deps-install",
+      "artifacts": [
+        "entrypoint/stealth-browser/package.json",
+        "pnpm-lock.yaml",
+        "entrypoint/stealth-browser/eslint.config.mjs",
+        "docs/plan/stealth-browser/APPROVALS.md"
+      ],
+      "context": "contexts/deps-install.md",
+      "notes": "executor=platform-engineer tier=sonnet/medium"
+    },
+    "mig-foundation": {
+      "kind": "work",
+      "phase": "migrate",
+      "depends_on": [
+        "deps-install"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py mig-foundation",
+      "artifacts": [
+        "entrypoint/stealth-browser/src/lib/types.ts",
+        "entrypoint/stealth-browser/src/lib/session.ts",
+        "entrypoint/stealth-browser/src/lib/helpers.ts"
+      ],
+      "context": "contexts/mig-foundation.md",
+      "notes": "executor=refactoring-specialist tier=sonnet/medium"
+    },
+    "mig-cdp": {
+      "kind": "work",
+      "phase": "migrate",
+      "depends_on": [
+        "mig-foundation"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py mig-cdp",
+      "artifacts": [
+        "entrypoint/stealth-browser/src/lib/cdp/"
+      ],
+      "context": "contexts/mig-cdp.md",
+      "notes": "executor=refactoring-specialist tier=sonnet/medium"
+    },
+    "mig-chrome-manager": {
+      "kind": "work",
+      "phase": "migrate",
+      "depends_on": [
+        "mig-cdp"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py mig-chrome-manager",
+      "artifacts": [
+        "entrypoint/stealth-browser/src/lib/chrome-manager.ts"
+      ],
+      "context": "contexts/mig-chrome-manager.md",
+      "notes": "executor=refactoring-specialist tier=sonnet/medium"
+    },
+    "mig-domains-storage": {
+      "kind": "work",
+      "phase": "migrate",
+      "depends_on": [
+        "mig-cdp"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py mig-domains-storage",
+      "artifacts": [
+        "entrypoint/stealth-browser/src/lib/domains/",
+        "entrypoint/stealth-browser/src/lib/storage/"
+      ],
+      "context": "contexts/mig-domains-storage.md",
+      "notes": "executor=refactoring-specialist tier=sonnet/medium"
+    },
+    "mig-capture-parsers": {
+      "kind": "work",
+      "phase": "migrate",
+      "depends_on": [
+        "mig-foundation"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py mig-capture-parsers",
+      "artifacts": [
+        "entrypoint/stealth-browser/src/lib/capture/",
+        "entrypoint/stealth-browser/src/lib/parsers.ts",
+        "entrypoint/stealth-browser/eslint.config.mjs"
+      ],
+      "context": "contexts/mig-capture-parsers.md",
+      "notes": "executor=refactoring-specialist tier=sonnet/medium"
+    },
+    "mig-queries": {
+      "kind": "work",
+      "phase": "migrate",
+      "depends_on": [
+        "mig-domains-storage"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py mig-queries",
+      "artifacts": [
+        "entrypoint/stealth-browser/src/lib/queries/"
+      ],
+      "context": "contexts/mig-queries.md",
+      "notes": "executor=refactoring-specialist tier=sonnet/medium"
+    },
+    "mig-docs": {
+      "kind": "work",
+      "phase": "migrate",
+      "depends_on": [
+        "mig-foundation"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py mig-docs",
+      "artifacts": [
+        "entrypoint/stealth-browser/docs/reference/"
+      ],
+      "context": "contexts/mig-docs.md",
+      "notes": "executor=refactoring-specialist tier=sonnet/low"
+    },
+    "surface-api": {
+      "kind": "work",
+      "phase": "surface",
+      "depends_on": [
+        "mig-chrome-manager",
+        "mig-queries",
+        "mig-capture-parsers",
+        "port-fixes"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py surface-api",
+      "artifacts": [
+        "entrypoint/stealth-browser/src/api.ts",
+        "entrypoint/stealth-browser/src/index.ts",
+        "docs/plan/stealth-browser/evidence/product-claims.json"
+      ],
+      "context": "contexts/surface-api.md",
+      "notes": "executor=typescript-pro tier=sonnet/high"
+    },
+    "tests-unit-core": {
+      "kind": "work",
+      "phase": "verify",
+      "depends_on": [
+        "mig-chrome-manager",
+        "port-fixes"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py tests-unit-core",
+      "artifacts": [
+        "entrypoint/stealth-browser/src/test/unit/foundation/",
+        "entrypoint/stealth-browser/src/test/unit/cdp/",
+        "entrypoint/stealth-browser/src/test/unit/chrome-manager/"
+      ],
+      "context": "contexts/tests-unit-core.md",
+      "notes": "executor=test-automator tier=sonnet/medium"
+    },
+    "tests-unit-data": {
+      "kind": "work",
+      "phase": "verify",
+      "depends_on": [
+        "mig-queries",
+        "port-fixes"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py tests-unit-data",
+      "artifacts": [
+        "entrypoint/stealth-browser/src/test/unit/domains-storage/",
+        "entrypoint/stealth-browser/src/test/unit/queries/"
+      ],
+      "context": "contexts/tests-unit-data.md",
+      "notes": "executor=test-automator tier=sonnet/medium"
+    },
+    "tests-unit-extract": {
+      "kind": "work",
+      "phase": "verify",
+      "depends_on": [
+        "mig-capture-parsers",
+        "port-fixes"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py tests-unit-extract",
+      "artifacts": [
+        "entrypoint/stealth-browser/src/test/unit/capture-parsers/"
+      ],
+      "context": "contexts/tests-unit-extract.md",
+      "notes": "executor=test-automator tier=sonnet/medium"
+    },
+    "tests-unit-surface": {
+      "kind": "work",
+      "phase": "verify",
+      "depends_on": [
+        "surface-api",
+        "core-seam"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py tests-unit-surface",
+      "artifacts": [
+        "packages/stealth/stealth-core-browser/src/test/unit/surface/"
+      ],
+      "context": "contexts/tests-unit-surface.md",
+      "notes": "executor=test-automator tier=sonnet/medium"
+    },
+    "gates-first": {
+      "kind": "work",
+      "phase": "review",
+      "depends_on": [
+        "tests-unit-core",
+        "tests-unit-data",
+        "tests-unit-extract",
+        "tests-unit-surface",
+        "tests-use-cases",
+        "search-usecases",
+        "search-examples",
+        "tracing-log-validation",
+        "search-cutover",
+        "mig-docs",
+        "audit-fixes",
+        "sp-switch",
+        "sp-reaper-smoke",
+        "tripwire-pack"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py gates-first",
+      "artifacts": [
+        "docs/plan/stealth-browser/evidence/"
+      ],
+      "context": "contexts/gates-first.md",
+      "notes": "executor=qa tier=sonnet/medium; also gates the tripwire package (gates-first.11) and the release hygiene of the manifests (gates-first.12)"
+    },
+    "review-prep": {
+      "kind": "work",
+      "phase": "review",
+      "depends_on": [
+        "gates-first"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py review-prep",
+      "artifacts": [
+        "docs/plan/stealth-browser/review/migration.diff",
+        "docs/plan/stealth-browser/review/INPUT.sha256",
+        "docs/plan/stealth-browser/review/BRIEF.txt"
+      ],
+      "context": "contexts/review-prep.md",
+      "notes": "executor=qa tier=sonnet/low"
+    },
+    "audit-migration-blind": {
+      "kind": "audit",
+      "phase": "review",
+      "depends_on": [
+        "review-prep"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py audit-migration-blind",
+      "artifacts": [
+        "docs/plan/stealth-browser/review/FINDINGS.json"
+      ],
+      "context": "contexts/audit-migration-blind.md",
+      "notes": "executor=code-reviewer tier=sonnet/high"
+    },
+    "resolve-findings": {
+      "kind": "work",
+      "phase": "remediate",
+      "depends_on": [
+        "audit-migration-blind"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py resolve-findings",
+      "artifacts": [
+        "packages/stealth/stealth-core-browser/",
+        "entrypoint/stealth-search/",
+        "docs/plan/stealth-browser/review/RESOLUTION.json",
+        "packages/resilience/resilience-core-tripwire/"
+      ],
+      "context": "contexts/resolve-findings.md",
+      "notes": "executor=typescript-pro tier=sonnet/high"
+    },
+    "gates-rerun": {
+      "kind": "work",
+      "phase": "remediate",
+      "depends_on": [
+        "resolve-findings",
+        "tripwire-pack"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py gates-rerun",
+      "artifacts": [
+        "docs/plan/stealth-browser/evidence/"
+      ],
+      "context": "contexts/gates-rerun.md",
+      "notes": "executor=qa tier=sonnet/medium; also gates the tripwire package (gates-rerun.7)"
+    },
+    "docs-marketing-run": {
+      "kind": "work",
+      "phase": "docs",
+      "depends_on": [
+        "gates-rerun"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py docs-marketing-run",
+      "artifacts": [
+        "packages/stealth/stealth-core-browser/docs/",
+        "packages/stealth/stealth-core-browser/AGENTS.md",
+        "packages/stealth/stealth-core-browser/llms.txt",
+        "packages/stealth/stealth-core-browser/CHANGELOG.md",
+        "packages/stealth/stealth-core-browser/README.md",
+        "entrypoint/stealth-search/docs/",
+        "entrypoint/stealth-search/AGENTS.md",
+        "entrypoint/stealth-search/llms.txt",
+        "entrypoint/stealth-search/CHANGELOG.md",
+        "entrypoint/stealth-search/README.md"
+      ],
+      "context": "contexts/docs-marketing-run.md",
+      "notes": "executor=doc-steward tier=sonnet/medium"
+    },
+    "readme-rewrite": {
+      "kind": "work",
+      "phase": "docs",
+      "depends_on": [
+        "docs-marketing-run"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py readme-rewrite",
+      "artifacts": [
+        "packages/stealth/stealth-core-browser/README.md",
+        "entrypoint/stealth-search/README.md"
+      ],
+      "context": "contexts/readme-rewrite.md",
+      "notes": "executor=content-marketer tier=sonnet/medium"
+    },
+    "audit-final": {
+      "kind": "audit",
+      "phase": "release",
+      "depends_on": [
+        "readme-rewrite"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py audit-final",
+      "artifacts": [
+        "docs/plan/stealth-browser/final-review.md"
+      ],
+      "context": "contexts/audit-final.md",
+      "notes": "executor=script (audit_dod.py via guard.py audit-final; no reviewer agent) tier=none"
+    },
+    "merge-readiness": {
+      "kind": "work",
+      "phase": "release",
+      "depends_on": [
+        "audit-final",
+        "tripwire-reverse-migrate"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py merge-readiness",
+      "artifacts": [
+        "docs/plan/stealth-browser/RELEASE-DECISION.md"
+      ],
+      "context": "contexts/merge-readiness.md",
+      "notes": "executor=dispatcher tier=human/dispatcher; the release decision covers both packages (@adhd/stealth-browser and @adhd/resilience-core-tripwire) and waits for tripwire-reverse-migrate"
+    },
+    "prod-errors": {
+      "kind": "work",
+      "phase": "surface",
+      "depends_on": [
+        "core-seam",
+        "tests-unit-core",
+        "tests-unit-data",
+        "tests-unit-extract",
+        "capture-upgrade",
+        "chrome-lifecycle",
+        "surface-api"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py prod-errors",
+      "artifacts": [
+        "packages/stealth/stealth-core-browser/src/errors.ts",
+        "packages/stealth/stealth-core-browser/src/lib/",
+        "packages/stealth/stealth-core-browser/src/index.ts",
+        "packages/stealth/stealth-core-browser/docs/ERRORS.md",
+        "packages/stealth/stealth-core-browser/src/test/unit/errors/",
+        "packages/stealth/stealth-core-browser/src/api.ts"
+      ],
+      "context": "contexts/prod-errors.md",
+      "notes": "executor=typescript-pro tier=sonnet/high; 100% typed errors (user decision): every lib throw site raises a StealthBrowserError code"
+    },
+    "prod-examples": {
+      "kind": "work",
+      "phase": "surface",
+      "depends_on": [
+        "core-seam",
+        "prod-errors"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py prod-examples",
+      "artifacts": [
+        "packages/stealth/stealth-core-browser/examples/",
+        "packages/stealth/stealth-core-browser/src/test/unit/examples/",
+        "packages/stealth/stealth-core-browser/tsconfig.spec.json"
+      ],
+      "context": "contexts/prod-examples.md",
+      "notes": "executor=typescript-pro tier=sonnet/medium; a runnable example per verb and per namespace tied to real use cases (user decision)"
+    },
+    "port-fixes": {
+      "kind": "work",
+      "phase": "migrate",
+      "depends_on": [
+        "failsafe-inventory",
+        "mig-capture-parsers",
+        "mig-chrome-manager",
+        "mig-queries"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py port-fixes",
+      "artifacts": [
+        "entrypoint/stealth-browser/src/lib/",
+        "entrypoint/stealth-browser/vite.config.ts",
+        "entrypoint/stealth-browser/tsconfig.spec.json",
+        "entrypoint/stealth-browser/src/types/",
+        "entrypoint/stealth-browser/src/test/unit/chrome-manager/chrome-lifecycle.spec.ts",
+        "entrypoint/stealth-browser/src/test/unit/domains-storage/",
+        "entrypoint/stealth-browser/package.json",
+        "pnpm-lock.yaml"
+      ],
+      "context": "contexts/port-fixes.md",
+      "notes": "executor=typescript-pro tier=sonnet/high; also installs @adhd/sox-store-adapter and @adhd/sox-service-proxy as dependencies and externalizes them in vite.config.ts (port-fixes.12)"
+    },
+    "audit-pre-review": {
+      "kind": "audit",
+      "phase": "verify",
+      "depends_on": [
+        "tests-unit-core",
+        "tests-unit-data",
+        "tests-unit-extract",
+        "tests-unit-surface",
+        "mig-docs",
+        "tests-use-cases",
+        "search-hosts",
+        "search-usecases",
+        "search-examples",
+        "tracing-log-validation",
+        "search-cutover",
+        "release-readiness"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py audit-pre-review",
+      "artifacts": [
+        "docs/plan/stealth-browser/review/PRE-REVIEW.json",
+        "docs/plan/stealth-browser/review/PRE-REVIEW.md"
+      ],
+      "context": "contexts/audit-pre-review.md",
+      "notes": "executor=code-reviewer tier=sonnet/high; non-blind static audit, findings recorded with the audit_dod.py --phase pre-review output"
+    },
+    "audit-fixes": {
+      "kind": "work",
+      "phase": "review",
+      "depends_on": [
+        "audit-pre-review"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py audit-fixes",
+      "artifacts": [
+        "packages/stealth/stealth-core-browser/",
+        "entrypoint/stealth-search/",
+        "docs/plan/stealth-browser/review/PRE-REVIEW-RESOLUTION.json",
+        "/Users/nix/dev/ai/scratch/agent-browser/adhd/",
+        "/Users/nix/dev/ai/scratch/agent-browser/cdp-query-client.ts",
+        "/Users/nix/dev/ai/scratch/agent-browser/cdp-search.ts",
+        "/Users/nix/dev/ai/scratch/agent-browser/chrome-lifecycle-test.ts",
+        "/Users/nix/dev/ai/scratch/agent-browser/network-capture.ts",
+        "/Users/nix/dev/ai/scratch/agent-browser/search-challenge.ts",
+        "/Users/nix/dev/ai/scratch/agent-browser/search-dom.ts",
+        "/Users/nix/dev/ai/scratch/agent-browser/search-fetch.ts",
+        "/Users/nix/dev/ai/scratch/agent-browser/search-guard-test.ts",
+        "/Users/nix/dev/ai/scratch/agent-browser/search-mcp-source.ts",
+        "/Users/nix/dev/ai/scratch/agent-browser/search-network.ts",
+        "/Users/nix/dev/ai/scratch/agent-browser/search-tripwire.ts",
+        "/Users/nix/dev/ai/scratch/agent-browser/search/queries/activity.ts",
+        "/Users/nix/dev/ai/scratch/agent-browser/search/queries/context.ts",
+        "/Users/nix/dev/ai/scratch/agent-browser/search/queries/last-search.ts",
+        "/Users/nix/dev/ai/scratch/agent-browser/package.json",
+        "/Users/nix/dev/ai/scratch/agent-browser/AGENTS.md",
+        "/Users/nix/dev/ai/scratch/agent-browser/SEARCH.md",
+        "/Users/nix/dev/ai/scratch/agent-browser/FEATURES.md",
+        "/Users/nix/dev/ai/scratch/agent-browser/FETCH.md",
+        "/Users/nix/dev/ai/scratch/agent-browser/docs/",
+        "packages/resilience/resilience-core-tripwire/",
+        "/Users/nix/dev/ai/scratch/INDEX.md",
+        "docs/plan/stealth-browser/evidence/tracing-log-validation.json",
+        "docs/plan/stealth-browser/evidence/tracing-log-validation.md"
+      ],
+      "context": "contexts/audit-fixes.md",
+      "notes": "executor=typescript-pro tier=sonnet/high; ONE implementer resolves every pre-review finding"
+    },
+    "capture-upgrade": {
+      "kind": "work",
+      "phase": "migrate",
+      "depends_on": [
+        "cdp-test-harness",
+        "port-fixes",
+        "tests-unit-extract"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py capture-upgrade",
+      "artifacts": [
+        "entrypoint/stealth-browser/src/lib/recording/",
+        "entrypoint/stealth-browser/src/lib/capture/network.ts",
+        "entrypoint/stealth-browser/src/lib/capture/index.ts",
+        "entrypoint/stealth-browser/src/test/unit/capture/",
+        "entrypoint/stealth-browser/src/test/unit/capture-parsers/network.spec.ts"
+      ],
+      "context": "contexts/capture-upgrade.md",
+      "notes": "executor=typescript-pro tier=sonnet/high; one capture pipeline (NetworkRecorder) with the optional store-adapter sink (design B'' of EVAL-store-adapter.md), CU1-CU28; spec SPEC-capture-and-lifecycle.md section 5; dependencies and vite externals are installed by port-fixes (port-fixes.12)"
+    },
+    "chrome-lifecycle": {
+      "kind": "work",
+      "phase": "migrate",
+      "depends_on": [
+        "cdp-test-harness",
+        "port-fixes",
+        "tests-unit-core",
+        "sp-reaper-load-proof"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py chrome-lifecycle",
+      "artifacts": [
+        "entrypoint/stealth-browser/src/lib/lifecycle/",
+        "entrypoint/stealth-browser/src/lib/chrome-manager.ts",
+        "entrypoint/stealth-browser/src/lib/cdp/targets.ts",
+        "entrypoint/stealth-browser/src/test/unit/lifecycle/",
+        "entrypoint/stealth-browser/src/test/unit/chrome-manager/",
+        "entrypoint/stealth-browser/src/test/unit/cdp/targets.spec.ts",
+        "docs/plan/stealth-browser/evidence/lifecycle-definitions.md",
+        "entrypoint/stealth-browser/src/lib/cdp/browser.ts",
+        "entrypoint/stealth-browser/src/lib/runtime-deps.ts"
+      ],
+      "context": "contexts/chrome-lifecycle.md",
+      "notes": "executor=typescript-pro tier=sonnet/high; single-pass design (single-pass-lifecycle-spec): connection-based presence over @adhd/sox-service-proxy 0.6.0 (dialBackend connection per client, reaper host with a connection map, pure decideReap, createCircuitBreaker + FileBreakerStore, ownership record with isSameProcess), one ReaperLink port, lifecycle/sp.ts the only importer of the package (precondition: sp-link complete), degraded mode D1, killProcessGroup extract-only export in cdp/browser.ts; CL1-CL29 (CL30 is sp-reaper-smoke.1); every pre-existing feature F1-F26 pinned (75 inventory rows); surface-hosts waits for this state to wire installProcessExitHooks"
+    },
+    "tests-use-cases": {
+      "kind": "work",
+      "phase": "verify",
+      "depends_on": [
+        "prod-examples",
+        "capture-upgrade",
+        "chrome-lifecycle"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py tests-use-cases",
+      "artifacts": [
+        "packages/stealth/stealth-core-browser/src/test/use-cases/",
+        "packages/stealth/stealth-core-browser/src/test/support/profile-fixtures.ts",
+        "packages/stealth/stealth-core-browser/src/test/support/page-fixtures.ts"
+      ],
+      "context": "contexts/tests-use-cases.md",
+      "notes": "executor=test-automator tier=sonnet/high; use-case unit suites replace the e2e lane (user decision)"
+    },
+    "cdp-test-harness": {
+      "kind": "work",
+      "phase": "migrate",
+      "depends_on": [
+        "port-fixes"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py cdp-test-harness",
+      "artifacts": [
+        "entrypoint/stealth-browser/src/test/support/",
+        "entrypoint/stealth-browser/src/test/fixtures/cdp/",
+        "entrypoint/stealth-browser/src/test/unit/support/"
+      ],
+      "context": "contexts/cdp-test-harness.md",
+      "notes": "executor=test-automator tier=sonnet/medium; in-memory CDP/fs/proc harness, prerequisite of capture-upgrade and chrome-lifecycle (spec section 4)"
+    },
+    "failsafe-inventory": {
+      "kind": "work",
+      "phase": "migrate",
+      "depends_on": [
+        "mig-chrome-manager",
+        "mig-queries",
+        "mig-capture-parsers"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py failsafe-inventory",
+      "artifacts": [
+        "docs/plan/stealth-browser/evidence/failsafe-inventory.json"
+      ],
+      "context": "contexts/failsafe-inventory.md",
+      "notes": "executor=refactoring-specialist tier=sonnet/high; builds the failsafe/functionality inventory FIRST ([inv:no-functionality-removed]); no package source is touched"
+    },
+    "sp-reaper-load-proof": {
+      "kind": "work",
+      "phase": "migrate",
+      "depends_on": [
+        "port-fixes"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py sp-reaper-load-proof",
+      "artifacts": [
+        "docs/plan/stealth-browser/smoke/reaper-load-proof.md"
+      ],
+      "context": "contexts/sp-reaper-load-proof.md",
+      "notes": "executor=typescript-pro tier=sonnet/medium; proves the riskiest assumption of the single-pass lifecycle before chrome-lifecycle is written: the built dist/index.js loads in a fresh CJS process from an unrelated cwd and the exact detached-reaper spawn form works against a stub lifecycle.runChromeReaper (scratch only, package source untouched); VERDICT entry-path-ok pins the form used by reaper-link.ts, needs-bin forces a bin entry owned by surface-hosts before chrome-lifecycle"
+    },
+    "sp-link": {
+      "kind": "work",
+      "phase": "migrate",
+      "depends_on": [
+        "port-fixes"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py sp-link",
+      "artifacts": [
+        "entrypoint/stealth-browser/package.json",
+        "package.json",
+        "pnpm-lock.yaml",
+        "docs/plan/stealth-browser/smoke/sp-link.md"
+      ],
+      "context": "contexts/sp-link.md",
+      "notes": "executor=devops-engineer tier=sonnet/medium; declares the final dependency @adhd/sox-service-proxy ~0.6.0 in the stealth-browser manifest and resolves the unreleased 0.6.0 through a root pnpm.overrides entry pointing at the dev tarball built by the sox-ecosystem sp-lifecycle worktree (pnpm pack, never npm pack); needs that tarball (human-gated upstream build); hard dependency of chrome-lifecycle step lifecycle/sp.ts (in-state precondition), surface-hosts, sp-reaper-smoke and tripwire-pack (serializes pnpm-lock.yaml)"
+    },
+    "sp-reaper-smoke": {
+      "kind": "work",
+      "phase": "verify",
+      "depends_on": [
+        "prod-errors",
+        "sp-link"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py sp-reaper-smoke",
+      "artifacts": [
+        "docs/plan/stealth-browser/smoke/reaper-smoke.mjs",
+        "docs/plan/stealth-browser/smoke/reaper-smoke.md",
+        "docs/plan/stealth-browser/smoke/reaper-smoke.json"
+      ],
+      "context": "contexts/sp-reaper-smoke.md",
+      "notes": "executor=qa tier=sonnet/medium; CL30 as a gate script: built dist, scratch stateDir, a closed CDP port; ensureBackend gives spawned, ping/hello/activity/status answer, the host retires on its own after orphanWindowMs=1s and removes its socket; proves the entry path, the lifecycle namespace export and the package externalization on real processes; never touches port 9222"
+    },
+    "sp-switch": {
+      "kind": "work",
+      "phase": "verify",
+      "depends_on": [
+        "chrome-lifecycle",
+        "core-seam",
+        "tripwire-pack",
+        "search-hosts"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py sp-switch",
+      "artifacts": [
+        "package.json",
+        "pnpm-lock.yaml",
+        "docs/plan/stealth-browser/smoke/switch.md"
+      ],
+      "context": "contexts/sp-switch.md",
+      "notes": "executor=devops-engineer tier=sonnet/medium; human-gated (hb-sp-release): once @adhd/sox-service-proxy 0.6.0 is on the registry delete the root pnpm.overrides dev-tarball entry, pnpm install, prove the lockfile resolves from the registry and that build and the lifecycle unit lane pass with no source change; verification-only no-op when 0.6.0 was already published before sp-link"
+    },
+    "tripwire-scaffold": {
+      "kind": "work",
+      "phase": "scaffold",
+      "depends_on": [
+        "port-fixes"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py tripwire-scaffold",
+      "artifacts": [
+        "packages/resilience/resilience-core-tripwire/",
+        "tsconfig.base.json",
+        ".adhd/workspace.json",
+        "docs/plan/stealth-browser/evidence/tripwire/",
+        "tools/nx-plugins/build/executors/typecheck-spec/resilience-core-tripwire.baseline.json"
+      ],
+      "context": "contexts/tripwire-scaffold.md",
+      "notes": "executor=typescript-pro tier=sonnet/medium; second approved package @adhd/resilience-core-tripwire (APPROVAL-tripwire.md, D1 new resilience group) generated with the workspace generator (core, --name=tripwire --group=resilience), ADR-0003 CJS-only manifest, version 0.1.0, zero dependencies; anchored on port-fixes so it is never concurrent with the evidence/-tree owners"
+    },
+    "tripwire-core": {
+      "kind": "work",
+      "phase": "migrate",
+      "depends_on": [
+        "tripwire-scaffold"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py tripwire-core",
+      "artifacts": [
+        "packages/resilience/resilience-core-tripwire/src/",
+        "packages/resilience/resilience-core-tripwire/*"
+      ],
+      "context": "contexts/tripwire-core.md",
+      "notes": "executor=typescript-pro tier=sonnet/high; the unified tripwire core: TripwireStorage seam with fs and memory implementations, FsPort memory-fs interleaving harness, createTripwire (read, gate, assertOpen, trip, clear, resolve, status), errors with a code and a brand, defaultRedactor, NDJSON audit with capped atomic rotation, adhdDataDir; TW1-TW23, TW30-TW33, TW35-TW38 map to tripwire-core.1-32; zero dependencies, unit lane only"
+    },
+    "tripwire-interactive": {
+      "kind": "work",
+      "phase": "migrate",
+      "depends_on": [
+        "tripwire-core"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py tripwire-interactive",
+      "artifacts": [
+        "packages/resilience/resilience-core-tripwire/src/",
+        "packages/resilience/resilience-core-tripwire/*"
+      ],
+      "context": "contexts/tripwire-interactive.md",
+      "notes": "executor=typescript-pro tier=sonnet/high; interactiveGate, confirmSolved, runUnlockCli, renderStatusText, statusJsonLine and the single Node IO adapter nodeTripwireIo (TW24-TW28), the three consumer scenario suites, and the closed public-surface snapshot (TW30)"
+    },
+    "tripwire-docs": {
+      "kind": "work",
+      "phase": "docs",
+      "depends_on": [
+        "tripwire-interactive"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py tripwire-docs",
+      "artifacts": [
+        "packages/resilience/resilience-core-tripwire/README.md",
+        "packages/resilience/resilience-core-tripwire/CHANGELOG.md",
+        "packages/resilience/resilience-core-tripwire/docs/",
+        "packages/resilience/resilience-core-tripwire/src/test/unit/readme-examples.spec.ts"
+      ],
+      "context": "contexts/tripwire-docs.md",
+      "notes": "executor=typescript-pro tier=sonnet/medium; README with the three consumer recipes, docs/ERRORS.md, docs/RECOVERY.md (operator runbook with the break-glass rm), CHANGELOG 0.1.0, JSDoc on every export, README examples compiled through readme-examples.spec.ts (TW34)"
+    },
+    "tripwire-pack": {
+      "kind": "work",
+      "phase": "verify",
+      "depends_on": [
+        "tripwire-docs",
+        "port-fixes",
+        "sp-link"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py tripwire-pack",
+      "artifacts": [
+        "docs/plan/stealth-browser/evidence/tripwire/",
+        "packages/resilience/resilience-core-tripwire/package.json",
+        "packages/resilience/resilience-core-tripwire/project.json",
+        "packages/resilience/resilience-core-tripwire/vite.config.ts"
+      ],
+      "context": "contexts/tripwire-pack.md",
+      "notes": "executor=typescript-pro tier=sonnet/medium; runs lint, typecheck, typecheck-spec, test, build and verify-dist-load of the tripwire package (TW29), packs the consumer tarball outside every .worktrees/ and records its sha256 and packed_from_head, smoke-tests it from a CJS require and an ESM import (named-export detection), and records the importer-only lockfile change; depends on sp-link so the pnpm-lock.yaml owners are serialized"
+    },
+    "tripwire-reverse-migrate": {
+      "kind": "work",
+      "phase": "migrate",
+      "depends_on": [
+        "tripwire-pack"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py tripwire-reverse-migrate",
+      "artifacts": [
+        "/Users/nix/dev/projects/reverse-apis/.worktrees/tripwire-adopt/",
+        "/Users/nix/dev/projects/reverse-apis/.git/info/exclude",
+        "docs/plan/stealth-browser/tripwire-reverse/"
+      ],
+      "context": "contexts/tripwire-reverse-migrate.md",
+      "notes": "executor=typescript-pro tier=sonnet/high; cross-repo: adopts the tripwire in reverse-apis in the worktree .worktrees/tripwire-adopt on branch feat/tripwire-adopt (request-builder gate, unlock tool, reverse-auth, api packages, e2e harness, REARCHITECTURE section 12) against the tarball; lockfile unchanged until relink; main's dirty files untouched; verification results recorded in tripwire-reverse/reverse-verify.json"
+    },
+    "tripwire-reverse-relink": {
+      "kind": "work",
+      "phase": "release",
+      "depends_on": [
+        "merge-readiness",
+        "tripwire-reverse-migrate"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py tripwire-reverse-relink",
+      "artifacts": [
+        "/Users/nix/dev/projects/reverse-apis/.worktrees/tripwire-adopt/package.json",
+        "/Users/nix/dev/projects/reverse-apis/.worktrees/tripwire-adopt/pnpm-lock.yaml",
+        "docs/plan/stealth-browser/tripwire-reverse/"
+      ],
+      "context": "contexts/tripwire-reverse-relink.md",
+      "notes": "executor=typescript-pro tier=sonnet/medium; dispatcher-gated like agent-search-relink: after the release, pnpm add @adhd/resilience-core-tripwire@^0.1.0 in the reverse worktree, commit package.json and pnpm-lock.yaml, re-run the verification, ff-only merge feat/tripwire-adopt into reverse main and remove the worktree and branch"
+    },
+    "split-plan-repair": {
+      "kind": "work",
+      "phase": "scaffold",
+      "depends_on": [
+        "tripwire-pack"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py split-plan-repair",
+      "artifacts": [
+        "docs/plan/stealth-browser/scripts/",
+        "docs/plan/stealth-browser/dag.json",
+        "docs/plan/stealth-browser/contexts/",
+        "docs/plan/stealth-browser/README.md",
+        "docs/plan/stealth-browser/SCOPE.md",
+        "docs/plan/stealth-browser/USE_CASES.md",
+        "docs/plan/stealth-browser/TOOLS.md",
+        "docs/plan/stealth-browser/APPROVAL.md",
+        "docs/plan/stealth-browser/APPROVAL-split.md",
+        "docs/plan/stealth-browser/APPROVALS.md",
+        "docs/plan/stealth-browser/SPEC-stealth-search.md",
+        "docs/plan/stealth-browser/human-blockers.json",
+        "docs/plan/stealth-browser/references.json",
+        "docs/plan/stealth-browser/interfaces.json",
+        "docs/plan/stealth-browser/DEFERRED.md",
+        "docs/plan/plan-index.json"
+      ],
+      "context": "contexts/split-plan-repair.md",
+      "notes": "plan-builder amendment: rename core to @adhd/stealth-core-browser, port search to @adhd/stealth-search, retire surface-hosts/tracing-plugin/tracing-namespace-proof/agent-search-cutover/agent-search-relink"
+    },
+    "core-scaffold": {
+      "kind": "work",
+      "phase": "scaffold",
+      "depends_on": [
+        "split-plan-repair",
+        "surface-api",
+        "tests-unit-core",
+        "tests-unit-data",
+        "tests-unit-extract",
+        "mig-docs",
+        "chrome-lifecycle",
+        "capture-upgrade",
+        "cdp-test-harness",
+        "sp-reaper-load-proof"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py core-scaffold",
+      "artifacts": [
+        "packages/stealth/stealth-core-browser/",
+        "entrypoint/stealth-browser/",
+        ".adhd/workspace.json",
+        "tsconfig.base.json",
+        "pnpm-lock.yaml",
+        "tools/nx-plugins/build/executors/typecheck-spec/stealth-core-browser.baseline.json",
+        "docs/plan/stealth-browser/evidence/split/"
+      ],
+      "context": "contexts/core-scaffold.md",
+      "notes": "typescript-pro sonnet/high; generator-built core library @adhd/stealth-core-browser, serialized rename owner"
+    },
+    "core-seam": {
+      "kind": "work",
+      "phase": "migrate",
+      "depends_on": [
+        "core-scaffold",
+        "chrome-lifecycle",
+        "sp-link",
+        "surface-api"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py core-seam",
+      "artifacts": [
+        "packages/stealth/stealth-core-browser/src/lib/managers.ts",
+        "packages/stealth/stealth-core-browser/src/lib/chrome-manager.ts",
+        "packages/stealth/stealth-core-browser/src/lib/lifecycle/index.ts",
+        "packages/stealth/stealth-core-browser/src/index.ts",
+        "packages/stealth/stealth-core-browser/src/api.ts",
+        "packages/stealth/stealth-core-browser/src/test/unit/seam/",
+        "packages/stealth/stealth-core-browser/src/lib/cdp/browser.ts",
+        "packages/stealth/stealth-core-browser/src/test/unit/lifecycle/kill.spec.ts",
+        "packages/stealth/stealth-core-browser/src/test/unit/lifecycle/launch.spec.ts",
+        "packages/stealth/stealth-core-browser/src/lib/lifecycle/reaper-entry.ts",
+        "packages/stealth/stealth-core-browser/src/lib/lifecycle/reaper-host.ts",
+        "packages/stealth/stealth-core-browser/src/lib/lifecycle/reaper-link.ts",
+        "packages/stealth/stealth-core-browser/src/lib/cdp/targets.ts",
+        "packages/stealth/stealth-core-browser/src/lib/parsers.ts",
+        "packages/stealth/stealth-core-browser/src/lib/capture/bans.ts",
+        "packages/stealth/stealth-core-browser/src/test/unit/cdp/browser.spec.ts",
+        "packages/stealth/stealth-core-browser/src/test/unit/lifecycle/concurrent-launch.spec.ts",
+        "packages/stealth/stealth-core-browser/src/test/unit/lifecycle/reaper-scope.spec.ts",
+        "packages/stealth/stealth-core-browser/src/test/unit/capture-parsers/bans.spec.ts"
+      ],
+      "context": "contexts/core-seam.md",
+      "notes": "typescript-pro sonnet/high; manager seam (configureManagers/managerFor/chromeExitTarget) moved out of the retired surface-hosts"
+    },
+    "search-scaffold": {
+      "kind": "work",
+      "phase": "scaffold",
+      "depends_on": [
+        "core-scaffold",
+        "tripwire-pack"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py search-scaffold",
+      "artifacts": [
+        "entrypoint/stealth-search/",
+        "tsconfig.base.json",
+        "pnpm-lock.yaml",
+        "tools/nx-plugins/build/executors/typecheck-spec/stealth-search.baseline.json",
+        "docs/plan/stealth-browser/evidence/split/"
+      ],
+      "context": "contexts/search-scaffold.md",
+      "notes": "typescript-pro sonnet/high; generator-built entrypoint @adhd/stealth-search with every dependency declared"
+    },
+    "search-inventory": {
+      "kind": "work",
+      "phase": "migrate",
+      "depends_on": [
+        "search-scaffold"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py search-inventory",
+      "artifacts": [
+        "docs/plan/stealth-browser/evidence/search-failsafe-inventory.json"
+      ],
+      "context": "contexts/search-inventory.md",
+      "notes": "typescript-pro sonnet/high; search-side failsafe inventory"
+    },
+    "search-errors": {
+      "kind": "work",
+      "phase": "migrate",
+      "depends_on": [
+        "search-inventory",
+        "prod-errors"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py search-errors",
+      "artifacts": [
+        "entrypoint/stealth-search/src/errors.ts",
+        "entrypoint/stealth-search/src/test/unit/errors/",
+        "entrypoint/stealth-search/docs/ERRORS.md"
+      ],
+      "context": "contexts/search-errors.md",
+      "notes": "typescript-pro sonnet/high; StealthSearchError registry"
+    },
+    "search-port-providers": {
+      "kind": "work",
+      "phase": "migrate",
+      "depends_on": [
+        "search-errors"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py search-port-providers",
+      "artifacts": [
+        "entrypoint/stealth-search/src/lib/types.ts",
+        "entrypoint/stealth-search/src/lib/providers.ts",
+        "entrypoint/stealth-search/src/lib/utils.ts",
+        "entrypoint/stealth-search/src/lib/queries/last-search.ts",
+        "entrypoint/stealth-search/src/test/unit/providers/"
+      ],
+      "context": "contexts/search-port-providers.md",
+      "notes": "typescript-pro sonnet/high"
+    },
+    "search-port-fetch": {
+      "kind": "work",
+      "phase": "migrate",
+      "depends_on": [
+        "search-errors"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py search-port-fetch",
+      "artifacts": [
+        "entrypoint/stealth-search/src/lib/fetch/",
+        "entrypoint/stealth-search/src/test/unit/fetch/",
+        "docs/plan/stealth-browser/evidence/split/u-pdf.json"
+      ],
+      "context": "contexts/search-port-fetch.md",
+      "notes": "typescript-pro sonnet/high; U-PDF probe first"
+    },
+    "search-port-engine": {
+      "kind": "work",
+      "phase": "migrate",
+      "depends_on": [
+        "search-port-providers"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py search-port-engine",
+      "artifacts": [
+        "entrypoint/stealth-search/src/lib/network.ts",
+        "entrypoint/stealth-search/src/lib/dom.ts",
+        "entrypoint/stealth-search/src/lib/challenge.ts",
+        "entrypoint/stealth-search/src/test/unit/engine/"
+      ],
+      "context": "contexts/search-port-engine.md",
+      "notes": "typescript-pro sonnet/high"
+    },
+    "search-port-guards": {
+      "kind": "work",
+      "phase": "migrate",
+      "depends_on": [
+        "search-errors"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py search-port-guards",
+      "artifacts": [
+        "entrypoint/stealth-search/src/lib/guard.ts",
+        "entrypoint/stealth-search/src/lib/tripwire.ts",
+        "entrypoint/stealth-search/src/lib/config.ts",
+        "entrypoint/stealth-search/src/test/unit/guards/"
+      ],
+      "context": "contexts/search-port-guards.md",
+      "notes": "typescript-pro sonnet/high; tripwire adoption, cooldown, concurrency"
+    },
+    "search-verbs": {
+      "kind": "work",
+      "phase": "surface",
+      "depends_on": [
+        "search-port-providers",
+        "search-port-fetch",
+        "search-port-engine",
+        "search-port-guards"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py search-verbs",
+      "artifacts": [
+        "entrypoint/stealth-search/src/api.ts",
+        "entrypoint/stealth-search/src/lib/search.ts",
+        "entrypoint/stealth-search/src/host-projection.ts",
+        "entrypoint/stealth-search/src/index.ts",
+        "entrypoint/stealth-search/src/test/unit/verbs/",
+        "docs/plan/stealth-browser/evidence/split/search-verbs-probes.json"
+      ],
+      "context": "contexts/search-verbs.md",
+      "notes": "typescript-pro sonnet/high; U-REEXPORT and U-BOOL probes first"
+    },
+    "search-tracing": {
+      "kind": "work",
+      "phase": "surface",
+      "depends_on": [
+        "search-scaffold"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py search-tracing",
+      "artifacts": [
+        "entrypoint/stealth-search/src/tracing.ts",
+        "entrypoint/stealth-search/src/telemetry.ts"
+      ],
+      "context": "contexts/search-tracing.md",
+      "notes": "typescript-pro sonnet/medium; apigen tracing namespace adhd plus the single initTelemetry"
+    },
+    "search-hosts": {
+      "kind": "work",
+      "phase": "surface",
+      "depends_on": [
+        "search-verbs",
+        "search-tracing",
+        "core-seam"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py search-hosts",
+      "artifacts": [
+        "entrypoint/stealth-search/src/server.ts",
+        "entrypoint/stealth-search/src/cli.ts",
+        "entrypoint/stealth-search/src/host-flags.ts",
+        "entrypoint/stealth-search/src/host-errors.ts",
+        "entrypoint/stealth-search/bin/",
+        "entrypoint/stealth-search/src/test/unit/hosts/",
+        "entrypoint/stealth-search/package.json",
+        "pnpm-lock.yaml",
+        "docs/plan/stealth-browser/evidence/naming-decision.md"
+      ],
+      "context": "contexts/search-hosts.md",
+      "notes": "typescript-pro sonnet/high; CLI and MCP hosts, O12 commander probe first"
+    },
+    "search-usecases": {
+      "kind": "work",
+      "phase": "verify",
+      "depends_on": [
+        "search-hosts"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py search-usecases",
+      "artifacts": [
+        "entrypoint/stealth-search/src/test/use-cases/"
+      ],
+      "context": "contexts/search-usecases.md",
+      "notes": "typescript-pro sonnet/high; unit scenarios, no process spawn"
+    },
+    "search-examples": {
+      "kind": "work",
+      "phase": "verify",
+      "depends_on": [
+        "search-hosts"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py search-examples",
+      "artifacts": [
+        "entrypoint/stealth-search/examples/",
+        "entrypoint/stealth-search/src/test/unit/examples/",
+        "entrypoint/stealth-search/README.md"
+      ],
+      "context": "contexts/search-examples.md",
+      "notes": "typescript-pro sonnet/medium; runnable examples and README blocks"
+    },
+    "tracing-log-validation": {
+      "kind": "work",
+      "phase": "verify",
+      "depends_on": [
+        "search-hosts",
+        "search-tracing-fixes"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py tracing-log-validation",
+      "artifacts": [
+        "docs/plan/stealth-browser/evidence/tracing-log-validation.md",
+        "docs/plan/stealth-browser/evidence/tracing-log-validation.json"
+      ],
+      "context": "contexts/tracing-log-validation.md",
+      "notes": "general-purpose sonnet/medium; ONE validating agent reads the logs written by the built CLI and MCP hosts, no tests"
+    },
+    "search-cutover": {
+      "kind": "work",
+      "phase": "verify",
+      "depends_on": [
+        "search-usecases",
+        "search-examples",
+        "tracing-log-validation",
+        "tripwire-pack"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py search-cutover",
+      "artifacts": [
+        "docs/plan/stealth-browser/evidence/cutover/",
+        "/Users/nix/dev/ai/scratch/agent-browser/",
+        "/Users/nix/dev/ai/scratch/bin/scratch-agent-search",
+        "/Users/nix/dev/ai/scratch/bin/scratch-agent-search-serve",
+        "/Users/nix/dev/ai/scratch/bin/scratch-agent-search-mcp-cli",
+        "/Users/nix/dev/ai/scratch/docs/GIT-POLICY.md"
+      ],
+      "context": "contexts/search-cutover.md",
+      "notes": "typescript-pro sonnet/high; three-package tarball proof and scratch agent-browser removal"
+    },
+    "consumer-relink": {
+      "kind": "work",
+      "phase": "release",
+      "depends_on": [
+        "merge-readiness"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py consumer-relink",
+      "artifacts": [
+        "docs/plan/stealth-browser/evidence/relink/",
+        "/Users/nix/.claude/agents/",
+        "/Users/nix/.config/opencode/",
+        "/Users/nix/dev/ai/sox-ecosystem/extensions/agents/",
+        "/Users/nix/dev/ai/sox-ecosystem/libs/host-registry/",
+        "/Users/nix/dev/ai/sox-ecosystem/tools/test-c1b17653-researcher-single-definition.mjs",
+        "/Users/nix/dev/ai/sox-ecosystem/docs/guidelines/authoring.md",
+        "/Users/nix/dev/ai/sox-ecosystem/docs/spec/cross-platform-install-rendering.md"
+      ],
+      "context": "contexts/consumer-relink.md",
+      "notes": "dispatcher-gated after publication in order tripwire, stealth-core-browser, stealth-search"
+    },
+    "main-merge": {
+      "kind": "work",
+      "phase": "scaffold",
+      "depends_on": [
+        "search-examples",
+        "search-usecases",
+        "sp-reaper-smoke",
+        "sp-switch",
+        "tests-unit-surface",
+        "tests-use-cases",
+        "tripwire-reverse-migrate"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py main-merge",
+      "artifacts": [
+        ".adhd/workspace.json",
+        "tsconfig.base.json",
+        "pnpm-lock.yaml",
+        "package.json",
+        "docs/plan/stealth-browser/evidence/main-merge.md"
+      ],
+      "context": "contexts/main-merge.md",
+      "notes": "executor=haiku tier=haiku; merge conflict union edits and a lockfile regeneration; depends on every completed leaf state so all completed owners are ancestors of the conform and fix states"
+    },
+    "conform-tripwire": {
+      "kind": "work",
+      "phase": "migrate",
+      "depends_on": [
+        "main-merge"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py conform-tripwire",
+      "artifacts": [
+        "packages/resilience/resilience-core-tripwire/",
+        "tools/nx-plugins/build/executors/typecheck-spec/resilience-core-tripwire.baseline.json",
+        "docs/plan/stealth-browser/evidence/conform-tripwire.md"
+      ],
+      "context": "contexts/conform-tripwire.md",
+      "notes": "executor=haiku tier=haiku; mechanical codemod. Escalate to sonnet only when typecheck-spec stays red after two attempts. [inv:test-layout]"
+    },
+    "conform-core": {
+      "kind": "work",
+      "phase": "migrate",
+      "depends_on": [
+        "main-merge"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py conform-core",
+      "artifacts": [
+        "packages/stealth/stealth-core-browser/",
+        "tools/nx-plugins/build/executors/typecheck-spec/stealth-core-browser.baseline.json",
+        "docs/plan/stealth-browser/evidence/conform-core.md"
+      ],
+      "context": "contexts/conform-core.md",
+      "notes": "executor=haiku tier=haiku; mechanical codemod. Escalate to sonnet only when typecheck-spec stays red after two attempts. [inv:test-layout]"
+    },
+    "conform-search": {
+      "kind": "work",
+      "phase": "migrate",
+      "depends_on": [
+        "main-merge"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py conform-search",
+      "artifacts": [
+        "entrypoint/stealth-search/",
+        "tools/nx-plugins/build/executors/typecheck-spec/stealth-search.baseline.json",
+        "docs/plan/stealth-browser/evidence/conform-search.md"
+      ],
+      "context": "contexts/conform-search.md",
+      "notes": "executor=haiku tier=haiku; mechanical codemod. Escalate to sonnet only when typecheck-spec stays red after two attempts. [inv:test-layout]"
+    },
+    "fix-tripwire": {
+      "kind": "work",
+      "phase": "migrate",
+      "depends_on": [
+        "conform-tripwire"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py fix-tripwire",
+      "artifacts": [
+        "packages/resilience/resilience-core-tripwire/",
+        "docs/plan/stealth-browser/evidence/fix-tripwire.md"
+      ],
+      "context": "contexts/fix-tripwire.md",
+      "notes": "executor=typescript-pro tier=sonnet/medium; backlog 84e1f7a2"
+    },
+    "fix-core-parsers": {
+      "kind": "work",
+      "phase": "migrate",
+      "depends_on": [
+        "conform-core"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py fix-core-parsers",
+      "artifacts": [
+        "packages/stealth/stealth-core-browser/src/lib/parsers.ts",
+        "packages/stealth/stealth-core-browser/test/unit/parsers/",
+        "packages/stealth/stealth-core-browser/test/fixtures/parsers/",
+        "packages/stealth/stealth-core-browser/test/helpers/parsers/",
+        "docs/plan/stealth-browser/evidence/fix-core-parsers.md"
+      ],
+      "context": "contexts/fix-core-parsers.md",
+      "notes": "executor=typescript-pro tier=sonnet/medium"
+    },
+    "fix-core-lifecycle": {
+      "kind": "work",
+      "phase": "migrate",
+      "depends_on": [
+        "conform-core"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py fix-core-lifecycle",
+      "artifacts": [
+        "packages/stealth/stealth-core-browser/src/lib/lifecycle/",
+        "packages/stealth/stealth-core-browser/test/unit/lifecycle/",
+        "packages/stealth/stealth-core-browser/test/helpers/lifecycle/",
+        "docs/plan/stealth-browser/evidence/fix-core-lifecycle.md"
+      ],
+      "context": "contexts/fix-core-lifecycle.md",
+      "notes": "executor=typescript-pro tier=sonnet/medium; backlog 86a2318f"
+    },
+    "fix-core-errors": {
+      "kind": "work",
+      "phase": "migrate",
+      "depends_on": [
+        "conform-core"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py fix-core-errors",
+      "artifacts": [
+        "packages/stealth/stealth-core-browser/src/errors.ts",
+        "packages/stealth/stealth-core-browser/docs/ERRORS.md",
+        "packages/stealth/stealth-core-browser/test/unit/surface/",
+        "packages/stealth/stealth-core-browser/test/unit/errors/",
+        "docs/plan/stealth-browser/evidence/fix-core-errors.md"
+      ],
+      "context": "contexts/fix-core-errors.md",
+      "notes": "executor=typescript-pro tier=sonnet/medium"
+    },
+    "fix-search-fetch": {
+      "kind": "work",
+      "phase": "migrate",
+      "depends_on": [
+        "conform-search"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py fix-search-fetch",
+      "artifacts": [
+        "entrypoint/stealth-search/src/lib/fetch/",
+        "entrypoint/stealth-search/test/unit/fetch/",
+        "entrypoint/stealth-search/test/fixtures/fetch/",
+        "entrypoint/stealth-search/test/helpers/fetch/",
+        "docs/plan/stealth-browser/evidence/fix-search-fetch.md"
+      ],
+      "context": "contexts/fix-search-fetch.md",
+      "notes": "executor=typescript-pro tier=sonnet/medium"
+    },
+    "fix-search-engine": {
+      "kind": "work",
+      "phase": "migrate",
+      "depends_on": [
+        "conform-search",
+        "conform-core"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py fix-search-engine",
+      "artifacts": [
+        "entrypoint/stealth-search/src/lib/dom.ts",
+        "entrypoint/stealth-search/src/lib/providers.ts",
+        "entrypoint/stealth-search/src/lib/utils.ts",
+        "entrypoint/stealth-search/src/lib/network.ts",
+        "entrypoint/stealth-search/src/lib/challenge.ts",
+        "entrypoint/stealth-search/test/unit/engine/",
+        "entrypoint/stealth-search/test/unit/providers/",
+        "entrypoint/stealth-search/test/fixtures/engine/",
+        "entrypoint/stealth-search/test/fixtures/providers/",
+        "entrypoint/stealth-search/test/helpers/engine/",
+        "packages/stealth/stealth-core-browser/src/lib/capture/dom.ts",
+        "packages/stealth/stealth-core-browser/test/unit/capture-parsers/dom.spec.ts",
+        "docs/plan/stealth-browser/OPEN-DECISIONS.md",
+        "docs/plan/stealth-browser/evidence/fix-search-engine.md"
+      ],
+      "context": "contexts/fix-search-engine.md",
+      "notes": "executor=typescript-pro tier=sonnet/high; OD-11 provisional resolution"
+    },
+    "fix-search-output": {
+      "kind": "work",
+      "phase": "migrate",
+      "depends_on": [
+        "conform-search"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py fix-search-output",
+      "artifacts": [
+        "entrypoint/stealth-search/src/lib/search.ts",
+        "entrypoint/stealth-search/src/api.ts",
+        "entrypoint/stealth-search/src/lib/output.ts",
+        "entrypoint/stealth-search/test/unit/verbs/",
+        "entrypoint/stealth-search/test/helpers/verbs/",
+        "docs/plan/stealth-browser/evidence/fix-search-output.md",
+        "entrypoint/stealth-search/test/unit/guards/tripwire-wiring.spec.ts"
+      ],
+      "context": "contexts/fix-search-output.md",
+      "notes": "executor=typescript-pro tier=sonnet/medium"
+    },
+    "search-mcp-iserror": {
+      "kind": "work",
+      "phase": "surface",
+      "depends_on": [
+        "conform-search"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py search-mcp-iserror",
+      "artifacts": [
+        "entrypoint/stealth-search/src/server.ts",
+        "entrypoint/stealth-search/src/errors.ts",
+        "entrypoint/stealth-search/docs/ERRORS.md",
+        "entrypoint/stealth-search/test/unit/hosts/",
+        "entrypoint/stealth-search/test/unit/use-cases/hosts.spec.ts",
+        "entrypoint/stealth-search/test/unit/errors/",
+        "entrypoint/stealth-search/project.json",
+        "entrypoint/stealth-search/vitest.e2e.config.ts",
+        "docs/plan/stealth-browser/evidence/search-mcp-iserror.md"
+      ],
+      "context": "contexts/search-mcp-iserror.md",
+      "notes": "executor=typescript-pro tier=sonnet/high; adhd ADR-0018; backlog 4909102e"
+    },
+    "fix-search-build": {
+      "kind": "work",
+      "phase": "migrate",
+      "depends_on": [
+        "search-mcp-iserror"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py fix-search-build",
+      "artifacts": [
+        "entrypoint/stealth-search/package.json",
+        "entrypoint/stealth-search/project.json",
+        "entrypoint/stealth-search/vite.config.ts",
+        "entrypoint/stealth-search/tsconfig.build-bin.json",
+        "entrypoint/stealth-search/bin/",
+        "entrypoint/stealth-search/scripts/",
+        "entrypoint/stealth-search/src/server.ts",
+        "entrypoint/stealth-search/test/unit/build/",
+        "docs/plan/stealth-browser/evidence/fix-search-build.md"
+      ],
+      "context": "contexts/fix-search-build.md",
+      "notes": "executor=typescript-pro tier=sonnet/high; I-35"
+    },
+    "search-tracing-fixes": {
+      "kind": "work",
+      "phase": "surface",
+      "depends_on": [
+        "search-mcp-iserror",
+        "fix-search-build",
+        "fix-search-output",
+        "fix-search-fetch",
+        "fix-search-engine",
+        "fix-core-parsers",
+        "fix-core-lifecycle",
+        "fix-core-errors",
+        "fix-tripwire"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py search-tracing-fixes",
+      "artifacts": [
+        "entrypoint/stealth-search/src/tracing.ts",
+        "entrypoint/stealth-search/src/telemetry.ts",
+        "entrypoint/stealth-search/src/cli.ts",
+        "entrypoint/stealth-search/src/host-flags.ts",
+        "entrypoint/stealth-search/src/host-errors.ts",
+        "entrypoint/stealth-search/src/host-projection.ts",
+        "entrypoint/stealth-search/src/api.ts",
+        "entrypoint/stealth-search/src/index.ts",
+        "entrypoint/stealth-search/test/unit/hosts/",
+        "entrypoint/stealth-search/test/unit/tracing/",
+        "entrypoint/stealth-search/docs/OBSERVABILITY.md",
+        "entrypoint/stealth-search/docs/CONFIGURATION.md",
+        "entrypoint/stealth-search/README.md",
+        "docs/plan/stealth-browser/evidence/search-tracing-fixes.md",
+        "entrypoint/stealth-search/test/unit/use-cases/hosts.spec.ts",
+        "entrypoint/stealth-search/docs/ERRORS.md"
+      ],
+      "context": "contexts/search-tracing-fixes.md",
+      "notes": "executor=typescript-pro tier=sonnet/high; fixes the failed tracing-log-validation"
+    },
+    "plan-notes": {
+      "kind": "work",
+      "phase": "docs",
+      "depends_on": [
+        "main-merge"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py plan-notes",
+      "artifacts": [
+        "docs/plan/stealth-browser/README.md",
+        "docs/plan/stealth-browser/evidence/plan-notes.md"
+      ],
+      "context": "contexts/plan-notes.md",
+      "notes": "executor=haiku tier=haiku; documentation only"
+    },
+    "release-readiness": {
+      "kind": "work",
+      "phase": "release",
+      "depends_on": [
+        "search-cutover",
+        "plan-notes",
+        "fix-tripwire",
+        "fix-core-parsers",
+        "fix-core-lifecycle",
+        "fix-core-errors",
+        "release-gate-fixes"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py release-readiness",
+      "artifacts": [
+        "docs/plan/stealth-browser/release-readiness/",
+        "docs/plan/stealth-browser/APPROVAL-split.md",
+        "docs/plan/stealth-browser/APPROVAL-tripwire.md",
+        "docs/plan/stealth-browser/APPROVAL.md",
+        "docs/plan/stealth-browser/APPROVALS.md",
+        "docs/plan/stealth-browser/evidence/release-readiness.md"
+      ],
+      "context": "contexts/release-readiness.md",
+      "notes": "executor=haiku tier=haiku; runs gates and records exit codes"
+    },
+    "release-gate-fixes": {
+      "kind": "work",
+      "phase": "release",
+      "depends_on": [
+        "search-cutover",
+        "plan-notes",
+        "fix-tripwire",
+        "fix-core-parsers",
+        "fix-core-lifecycle",
+        "fix-core-errors"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py release-gate-fixes",
+      "artifacts": [
+        "package.json",
+        "tools/nx-plugins/test/executors/wiring/check-test-wiring.mjs",
+        "tools/nx-plugins/test/executors/wiring/check-test-wiring.spec.mjs",
+        "tools/nx-plugins/test/executors/wiring/release-dry-clean.spec.mjs",
+        "entrypoint/decompile-cli/test/unit/lib/validators/local/index.spec.ts",
+        "entrypoint/backlog/test/unit/c8-vocabulary.spec.ts",
+        "entrypoint/backlog/project.json",
+        "tools/nx-plugins/build/executors/publish/impl.js",
+        "tools/nx-plugins/build/executors/publish/impl.spec.mjs",
+        "docs/plan/stealth-browser/evidence/release-gate-fixes.md",
+        "docs/plan/stealth-browser/evidence/release-gate-fixes.dry.json"
+      ],
+      "context": "contexts/release-gate-fixes.md",
+      "notes": "executor=sonnet tier=sonnet; root-cause fixes for the release gates that were red: check-test-wiring inferred targets, release:dry mutating tracked files, decompile-cli fixture path, backlog c8-vocabulary load-dependence"
+    }
+  },
+  "authored_with": {
+    "plugin": "workflow",
+    "version": "0.8.35",
+    "hash": "0b6bc1f3d70e"
+  },
+  "goal": "Extract the Chrome/CDP runner from scratch/agent-browser/adhd into a new generator-built entrypoint package @adhd/stealth-browser, with apigen tracing under the adhd namespace",
+  "demo": {
+    "source": "demo/DEMO.md",
+    "validate": "demo/UNRESOLVED.md",
+    "package_artifact": "entrypoint/stealth-browser/src/test/use-cases/"
+  }
+}

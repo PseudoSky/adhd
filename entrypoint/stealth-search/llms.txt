@@ -1,0 +1,23 @@
+# @adhd/stealth-search
+
+> CLI (`stealth-search`) and MCP server (`stealth-search-mcp`) that search and fetch the web through a Chrome you run, read over the Chrome DevTools Protocol. Chrome is launched without `--enable-automation` and pages are read without `Runtime.evaluate`. Version 0.1.0. macOS is the supported platform.
+
+## Docs
+
+- [README](README.md): install, operations, MCP configuration, safe defaults.
+- [Configuration](docs/CONFIGURATION.md): every default and host flag.
+- [Errors](docs/ERRORS.md): the 13 typed error codes, exit statuses, MCP rendering.
+- [Observability](docs/OBSERVABILITY.md): `adhd.<op>.start|finish|error` records, `--verbose`, stdout rules.
+- [Library](docs/LIBRARY.md): wiring, configuration and error exports of the package root.
+- [Examples](docs/EXAMPLES.md): every file under `examples/` with its scenario.
+- [Responsible use](docs/RESPONSIBLE-USE.md): terms of service, robots.txt, rate limits, no CAPTCHA or ban circumvention, own profile only.
+- [Changelog](CHANGELOG.md)
+- [Agent notes](AGENTS.md)
+
+## Facts
+
+- Operations (CLI name; MCP name is `stealth_<name>`): search, listProviders, describeProvider, tripwireStatus, clearTripwire, chromeStatus, launchChrome, shutdownChrome, listPageTargets, checkChromeActivity, getPageContext.
+- Default CDP endpoint `127.0.0.1:9222`; default profile `~/Library/Application Support/Google/Chrome-CDP`; default data dir `~/.adhd/reverse/data`; default MCP transport stdio.
+- Google search parsers are provisional (synthetic-fixture verified).
+- Outcomes are data; failures are typed errors with codes UNKNOWN_PROVIDER, SEARCH_FAILED, SELECTOR_TIMEOUT, HITL_ABORTED, TRIPWIRE_STATE_UNREADABLE, TRIPWIRE_CLEAR_FAILED, PROVIDER_STATE_IO, FETCH_URL_REFUSED, PDF_EXTRACT_FAILED, HOST_FLAG_INVALID, HOST_TRANSPORT_UNSUPPORTED, HOST_BOOT_FAILED, NODE_TOO_OLD.
+- The MCP bin writes only JSON-RPC to stdout under stdio; logs go to stderr.

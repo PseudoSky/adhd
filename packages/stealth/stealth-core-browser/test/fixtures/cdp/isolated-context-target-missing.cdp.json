@@ -1,0 +1,51 @@
+{
+  "meta": {
+    "name": "isolated-context-target-missing",
+    "origin": "synthetic-protocol-conformant",
+    "chromeVersion": "126.0.6478.0"
+  },
+  "steps": [
+    {
+      "when": {
+        "method": "Target.createBrowserContext"
+      },
+      "reply": {
+        "result": {
+          "browserContextId": "CTX1"
+        }
+      }
+    },
+    {
+      "when": {
+        "method": "Target.createTarget"
+      },
+      "reply": {
+        "result": {
+          "targetId": "T1"
+        }
+      }
+    },
+    {
+      "when": {
+        "method": "Target.closeTarget"
+      },
+      "reply": {
+        "error": {
+          "code": -32602,
+          "message": "No target with given id found"
+        }
+      }
+    },
+    {
+      "when": {
+        "method": "Target.disposeBrowserContext"
+      },
+      "reply": {
+        "error": {
+          "code": -32602,
+          "message": "Failed to find context with id CTX1"
+        }
+      }
+    }
+  ]
+}

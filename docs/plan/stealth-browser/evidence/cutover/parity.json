@@ -1,0 +1,107 @@
+{
+  "before": {
+    "provider_ids": [
+      "duckduckgo",
+      "google",
+      "arxiv",
+      "npm",
+      "github",
+      "maven",
+      "wikipedia",
+      "crates",
+      "pypi",
+      "mdn",
+      "stackoverflow",
+      "fetch"
+    ],
+    "tools": [
+      "agent_browser_search_mcp_source_search",
+      "agent_browser_search_mcp_source_list_providers",
+      "agent_browser_search_mcp_source_tripwire_status",
+      "agent_browser_search_mcp_source_clear_tripwire",
+      "agent_browser_search_mcp_source_chrome_status",
+      "agent_browser_search_mcp_source_launch_chrome",
+      "agent_browser_search_mcp_source_shutdown_search_chrome",
+      "agent_browser_search_mcp_source_provider_usage"
+    ],
+    "legacy_lock": {
+      "outcome": "hitl",
+      "chrome_calls": 0,
+      "provider": "google",
+      "reason": "captcha",
+      "lock_format": "old search-tripwire.ts flat JSON at <SEARCH_ADHD_DATA_DIR>/tripwire/<provider>.lock",
+      "lock_keys": [
+        "reason",
+        "provider",
+        "query",
+        "searchSessionId",
+        "browserSessionId",
+        "pageUrl",
+        "strategy",
+        "trippedAt",
+        "reverifiedAt",
+        "resolvedAt",
+        "blockedCount",
+        "lastOperation"
+      ],
+      "method": "search('google','cutover probe') called in-process against the old search-mcp-source.ts with SEARCH_ADHD_DATA_DIR/SEARCH_AUDIT_PATH/HOME in a temp dir; a NODE_OPTIONS preload refusing and counting every TCP connect, fetch, WebSocket and Chrome spawn recorded zero events (no Chrome binary, no CDP port contacted)",
+      "hitl": {
+        "pageUrl": "https://example.invalid/",
+        "reason": "captcha",
+        "provider": "google",
+        "query": "seeded",
+        "trippedAt": "2026-10-24T02:42:30.966Z",
+        "strategy": "network"
+      }
+    },
+    "source": "evidence/cutover/before.json"
+  },
+  "after": {
+    "provider_ids": [
+      "duckduckgo",
+      "google",
+      "arxiv",
+      "npm",
+      "github",
+      "maven",
+      "wikipedia",
+      "crates",
+      "pypi",
+      "mdn",
+      "stackoverflow",
+      "fetch"
+    ],
+    "tools": [
+      "stealth_search",
+      "stealth_listProviders",
+      "stealth_describeProvider",
+      "stealth_tripwireStatus",
+      "stealth_clearTripwire",
+      "stealth_getPageContext",
+      "stealth_chromeStatus",
+      "stealth_launchChrome",
+      "stealth_shutdownChrome",
+      "stealth_listPageTargets",
+      "stealth_checkChromeActivity"
+    ],
+    "help_keys": [
+      "providers"
+    ],
+    "legacy_lock": {
+      "outcome": "hitl",
+      "chrome_calls": 0,
+      "provider": "google",
+      "reason": "captcha",
+      "via_mcp": "stealth_search (data.input provider=google) over stdio MCP with --cdp-port 19999 --data-dir <temp>/d, HOME=<temp>",
+      "via_cli": "stealth-search search --provider google (stdin /dev/null, --cdp-port 19999): outcome hitl, exit 2 (the interactive gate cannot prompt without a TTY)",
+      "namespace_handling": "Decision O8: the tripwire namespace changed from agent-search to stealth-search. The lock path carries no namespace segment (<dataDir>/tripwire/<provider>.lock), and resilience-core-tripwire parses the legacy flat record shape, so the seeded old-format lock (same bytes the old search-tripwire.ts writes: reason, provider, query, searchSessionId, browserSessionId, pageUrl, strategy, trippedAt, reverifiedAt, resolvedAt, blockedCount, lastOperation) is accepted and honoured under stealth-search until the 2 h TTL removes it; no lock is migrated.",
+      "chrome_call_proof": "a NODE_OPTIONS preload refused and counted every TCP connect, fetch, WebSocket and Chrome spawn; the only recorded events were non-Chrome git probes made by tracing; zero connect or Chrome events. Port 19999 was passed as the CDP port and no Chrome binary was configured."
+    }
+  },
+  "differences": {
+    "help_keys": "old listProviders returned a help envelope {message, providers, usage, response_structure, fetch_usage, mcp_only_params, cli_only_params}; the new listProviders returns {providers:[{id,name,help,strategies}]} (provider_ids identical and in the same order)",
+    "tool_names": "old tools were agent_browser_search_mcp_source_* (8 tools); new tools are the eleven stealth_* operations (spec section 3)",
+    "mcp_call_shape": "new MCP calls wrap arguments as {data:{input:{...}}}"
+  },
+  "live_rerun": "guard search-cutover.5 re-runs node_modules/@adhd/stealth-search/dist/bin/mcp.js --transport stdio and compares tool names to after.tools"
+}

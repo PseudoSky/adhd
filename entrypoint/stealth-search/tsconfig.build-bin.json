@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.lib.json",
+  "compilerOptions": {
+    "paths": {
+      "@adhd/stealth-core-browser": ["../../packages/stealth/stealth-core-browser/dist/index.d.ts"],
+      "@adhd/resilience-core-tripwire": ["../../packages/resilience/resilience-core-tripwire/dist/index.d.ts"]
+    }
+  }
+}

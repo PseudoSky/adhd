@@ -1,0 +1,66 @@
+{
+  "meta": {
+    "name": "isolated-context-ok",
+    "origin": "synthetic-protocol-conformant",
+    "chromeVersion": "126.0.6478.0"
+  },
+  "steps": [
+    {
+      "when": {
+        "method": "Target.createBrowserContext"
+      },
+      "reply": {
+        "result": {
+          "browserContextId": "CTX1"
+        }
+      }
+    },
+    {
+      "when": {
+        "method": "Target.createTarget",
+        "params": {
+          "browserContextId": "CTX1"
+        }
+      },
+      "reply": {
+        "result": {
+          "targetId": "T1"
+        }
+      }
+    },
+    {
+      "when": {
+        "method": "Target.attachToTarget",
+        "params": {
+          "targetId": "T1"
+        }
+      },
+      "reply": {
+        "result": {
+          "sessionId": "S1"
+        }
+      }
+    },
+    {
+      "when": {
+        "method": "Target.closeTarget",
+        "params": {
+          "targetId": "T1"
+        }
+      },
+      "reply": {
+        "result": {
+          "success": true
+        }
+      }
+    },
+    {
+      "when": {
+        "method": "Target.disposeBrowserContext",
+        "params": {
+          "browserContextId": "CTX1"
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,123 @@
+{
+  "meta": {
+    "name": "redirect-301-200",
+    "origin": "synthetic-protocol-conformant",
+    "chromeVersion": "126.0.6478.0"
+  },
+  "steps": [
+    {
+      "when": {
+        "method": "Page.enable"
+      }
+    },
+    {
+      "when": {
+        "method": "Network.enable"
+      }
+    },
+    {
+      "when": {
+        "method": "Page.navigate",
+        "params": {
+          "url": "https://site.test/old"
+        }
+      },
+      "reply": {
+        "result": {
+          "frameId": "F1",
+          "loaderId": "L1"
+        }
+      },
+      "emit": [
+        {
+          "method": "Network.requestWillBeSent",
+          "params": {
+            "requestId": "R1",
+            "loaderId": "L1",
+            "documentURL": "https://site.test/old",
+            "request": {
+              "url": "https://site.test/old",
+              "method": "GET",
+              "headers": {
+                "Accept": "*/*"
+              }
+            },
+            "timestamp": 100.0,
+            "wallTime": 1700000000.0,
+            "initiator": {
+              "type": "other"
+            },
+            "type": "Document"
+          }
+        },
+        {
+          "method": "Network.requestWillBeSent",
+          "params": {
+            "requestId": "R1",
+            "loaderId": "L1",
+            "documentURL": "https://site.test/new",
+            "request": {
+              "url": "https://site.test/new",
+              "method": "GET",
+              "headers": {
+                "Accept": "*/*"
+              }
+            },
+            "timestamp": 100.0,
+            "wallTime": 1700000000.0,
+            "initiator": {
+              "type": "other"
+            },
+            "type": "Document",
+            "redirectResponse": {
+              "url": "https://site.test/old",
+              "status": 301,
+              "statusText": "Moved Permanently",
+              "headers": {
+                "location": "https://site.test/new"
+              },
+              "mimeType": "text/html"
+            }
+          }
+        },
+        {
+          "method": "Network.responseReceived",
+          "params": {
+            "requestId": "R1",
+            "loaderId": "L1",
+            "timestamp": 100.1,
+            "type": "Document",
+            "response": {
+              "url": "https://site.test/new",
+              "status": 200,
+              "statusText": "OK",
+              "headers": {
+                "content-type": "text/html"
+              },
+              "mimeType": "text/html"
+            }
+          }
+        },
+        {
+          "method": "Network.loadingFinished",
+          "params": {
+            "requestId": "R1",
+            "timestamp": 100.2,
+            "encodedDataLength": 1024
+          }
+        }
+      ]
+    },
+    {
+      "when": {
+        "method": "Network.getResponseBody"
+      },
+      "reply": {
+        "result": {
+          "body": "<html>new</html>",
+          "base64Encoded": false
+        }
+      }
+    }
+  ]
+}

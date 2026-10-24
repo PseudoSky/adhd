@@ -1,0 +1,99 @@
+{
+  "hb-deps-approval": {
+    "type": "manual-approval",
+    "description": "Human approval to add node-html-parser, xpath and @xmldom/xmldom as dependencies of @adhd/stealth-core-browser (absent from the scratch runner adhd/ package; new to the workspace dependency set)",
+    "required_by": [
+      "deps-install"
+    ],
+    "verification": "python3 docs/plan/stealth-browser/scripts/guard.py deps-install --only deps-install.1",
+    "status": "needed",
+    "owner": "human",
+    "how_to_provide": "Write docs/plan/stealth-browser/APPROVALS.md containing the line 'DEP-APPROVAL: granted' and naming the three packages",
+    "destination": "docs/plan/stealth-browser/APPROVALS.md",
+    "blocks_at": "per-state"
+  },
+  "hb-release-decision": {
+    "type": "manual-approval",
+    "description": "Dispatcher decision to publish (per PUBLISHING.md) or defer the release; names what agent-search consumes",
+    "required_by": [
+      "merge-readiness"
+    ],
+    "verification": "python3 docs/plan/stealth-browser/scripts/guard.py merge-readiness --only merge-readiness.2",
+    "status": "needed",
+    "owner": "dispatcher",
+    "how_to_provide": "Write RELEASE-DECISION.md with DECISION: publish|defer, a CONSUME: line and the pre-push gate exit codes",
+    "destination": "docs/plan/stealth-browser/RELEASE-DECISION.md",
+    "blocks_at": "per-state"
+  },
+  "hb-design-evaluations": {
+    "type": "manual-approval",
+    "description": "The two architect evaluations are recorded (EVALUATIONS.md, EVAL-store-adapter.md, EVAL-service-proxy.md) and folded into the capture-upgrade and chrome-lifecycle criteria; the provisional defaults they rest on are listed as OPEN-DECISIONS in EVALUATIONS.md and are reversible.",
+    "required_by": [
+      "capture-upgrade",
+      "chrome-lifecycle"
+    ],
+    "verification": "test \"$(rg -c '^STATUS: recorded' docs/plan/stealth-browser/EVALUATIONS.md)\" = 2",
+    "status": "verified",
+    "owner": "dispatcher",
+    "how_to_provide": "Done: see EVALUATIONS.md (STATUS: recorded).",
+    "destination": "docs/plan/stealth-browser/EVALUATIONS.md",
+    "blocks_at": "per-state"
+  },
+  "hb-tripwire-domain": {
+    "type": "manual-approval",
+    "description": "Human approval of the second package @adhd/resilience-core-tripwire and of the new `resilience` workspace group (decision D1), recorded with the verbatim request.",
+    "required_by": [
+      "tripwire-scaffold"
+    ],
+    "verification": "python3 docs/plan/stealth-browser/scripts/guard.py tripwire-scaffold --only tripwire-scaffold.1",
+    "status": "verified",
+    "owner": "human",
+    "how_to_provide": "docs/plan/stealth-browser/APPROVAL-tripwire.md quotes the verbatim request, the approver, the date and D1-D4",
+    "destination": "docs/plan/stealth-browser/APPROVAL-tripwire.md",
+    "blocks_at": "per-state"
+  },
+  "hb-sp-release": {
+    "type": "manual-approval",
+    "description": "Release of @adhd/sox-service-proxy 0.6.0 from the sox-ecosystem repository (a human go; publishing is never done by an executor). Done: the human approved the publish and @adhd/sox-service-proxy@0.6.0 is on the registry (`npm view @adhd/sox-service-proxy@0.6.0 version` prints 0.6.0, exit 0), together with @adhd/sox-embedding-provider 0.6.4 and @adhd/sox-mcp-runtime 0.3.6. sp-link already completed through the root pnpm.overrides dev tarball; sp-switch removes that override and re-locks against the registry.",
+    "required_by": [
+      "sp-link",
+      "sp-switch"
+    ],
+    "verification": "python3 docs/plan/stealth-browser/scripts/guard.py sp-switch --only sp-switch.1",
+    "status": "verified",
+    "owner": "human",
+    "how_to_provide": "Done: @adhd/sox-service-proxy@0.6.0 published (npm view exits 0). sp-link completed through the dev-tarball override; sp-switch removes the override and re-locks against the registry.",
+    "destination": "/Users/nix/.cache/adhd-dev-tarballs/ (sp-link); npm registry (sp-switch)",
+    "blocks_at": "per-state"
+  },
+  "hb-confirm-token": {
+    "type": "manual-approval",
+    "description": "CONFIRM_TOKEN is the exported constant 'I-UNDERSTAND-THE-RISK' of @adhd/resilience-core-tripwire. It is a code identifier, not a secret; no human supplies it.",
+    "required_by": [
+      "tripwire-core",
+      "tripwire-pack",
+      "tripwire-reverse-migrate"
+    ],
+    "verification": "rg -q \"export const CONFIRM_TOKEN = 'I-UNDERSTAND-THE-RISK'\" docs/plan/stealth-browser/SPEC-tripwire.md",
+    "status": "verified",
+    "owner": "dispatcher",
+    "how_to_provide": "Nothing to provide: CONFIRM_TOKEN is a code identifier defined in SPEC-tripwire.md, not a secret or credential.",
+    "destination": "env:CONFIRM_TOKEN",
+    "blocks_at": "per-state"
+  },
+  "hb-tripwire-invalid-key": {
+    "type": "manual-approval",
+    "description": "TRIPWIRE_INVALID_KEY is a TripwireErrorCode string of @adhd/resilience-core-tripwire. It is a code identifier, not a secret; no human supplies it.",
+    "required_by": [
+      "tripwire-core",
+      "tripwire-pack",
+      "tripwire-reverse-migrate"
+    ],
+    "verification": "rg -q \"'TRIPWIRE_INVALID_KEY'\" docs/plan/stealth-browser/SPEC-tripwire.md",
+    "status": "verified",
+    "owner": "dispatcher",
+    "how_to_provide": "Nothing to provide: TRIPWIRE_INVALID_KEY is a code identifier defined in SPEC-tripwire.md, not a secret or credential.",
+    "destination": "env:TRIPWIRE_INVALID_KEY",
+    "blocks_at": "per-state"
+  }
+}

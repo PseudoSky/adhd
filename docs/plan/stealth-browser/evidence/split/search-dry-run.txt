@@ -1,0 +1,13 @@
+
+ NX  Generating @adhd/workspace-codegen-nx:entrypoint
+
+Scaffolding stealth-search at entrypoint/stealth-search (@adhd/stealth-search)
+  Tags: domain:entrypoint, pkg-kind:entrypoint, pkg-class:entrypoint, layer:entrypoints, platform:node, access:domain
+CREATE entrypoint/stealth-search/src/index.ts
+CREATE entrypoint/stealth-search/project.json
+CREATE entrypoint/stealth-search/package.json
+CREATE entrypoint/stealth-search/tsconfig.json
+UPDATE tsconfig.base.json
+CREATE entrypoint/stealth-search/README.md
+
+NOTE: The "dryRun" flag means no changes were made.
