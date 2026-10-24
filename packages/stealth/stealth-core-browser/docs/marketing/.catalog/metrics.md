@@ -12,12 +12,12 @@ notes: Baseline docs = README.md(65) AGENTS.md(21) CHANGELOG.md(5) docs/ERRORS.m
 - Junk share: 0% outright wrong files; INCORRECT spots: docs/reference/parsers.md lines 74 and 126 (nonexistent '/types' subpath), CHANGELOG missing 0.1.0 entry.
 - Reader-search proxy (7): (1) default profile dir per OS -> src/lib/helpers.ts; (2) lifecycle state dir pattern -> src/lib/lifecycle/state-dir.ts; (3) chromeManager option defaults -> src/lib/chrome-manager.ts; (4) verb input defaults/launchChrome restrictions -> src/api.ts; (5) which OS code paths exist -> src/lib/cdp/browser.ts; (6) lifecycle/recording exports -> src/lib/lifecycle/index.ts, src/lib/recording/index.ts; (7) chromeStatus verb semantics -> src/api.ts.
 
-## run after-rewrite — 2026-10-24 (reviewer-computed)
-metric_1_eliminated_reader_searches: 1   # baseline 7; remaining: docs/reference/README.md quickstart still uses ensureChromeRunning on port 9222 (ported reference)
-metric_2_feature_delta: discovered=15 documented=15 deprecated=0   # all 15 shipped capabilities documented; verbs/config spot-checks match src
-metric_3_doc_junk_ratio: junk=0% redundant=~23% (reference set unchanged) undocumented=46% (57 of 124 exports named nowhere in docs incl. reference; baseline 59 of 124, 48%)
+## run after-rewrite — 2026-10-24 (reviewer-computed, second pass)
+metric_1_eliminated_reader_searches: 0   # baseline 7; reference quickstart and README snippet now use port 9333
+metric_2_feature_delta: discovered=15 documented=15 deprecated=0
+metric_3_doc_junk_ratio: junk=0% redundant=~23% (reference set unchanged) undocumented=26% (32 of 124 exports named nowhere; baseline 59 of 124, 48%)
 
 ### After detail
-- Exports named (word-match, upper bound) in the 124-export surface: owned hand-written docs only (README, AGENTS, llms.txt, CHANGELOG, docs/*.md) 25; owned docs plus docs/reference 67 (54%) vs baseline 65 (52%).
-- Still unnamed anywhere: lifecycle 37, recording 15, cdp 3, chromeManager 2 (the baseline gap in lifecycle/recording is essentially unchanged; improvement is chromeStatus plus per-verb detail, not namespace members).
-- Link resolver: every relative link in README, AGENTS, llms.txt, CHANGELOG, docs/*.md and docs/reference/** resolves (0 misses).
+- Exports named (word-match, upper bound): owned docs plus docs/reference 92 of 124 (74%) vs baseline 65 (52%); owned hand-written docs alone 57.
+- Still unnamed: lifecycle 25 (grouped as file-level rows in docs/LIFECYCLE-AND-RECORDING.md), cdp 3, chromeManager 2, recording 2.
+- Link resolver: 0 misses across README, AGENTS, llms.txt, CHANGELOG, docs/*.md, docs/reference/**.
