@@ -130,10 +130,10 @@
       "end_ref": "8d21b983807fe98bcb0082b88a30492a21822305"
     },
     "audit-migration-blind": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-10-24T14:08:21.409Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "0c7cbe282fbc4b93bf1f009218e7bab6c0fb553b",
       "end_ref": null
     },
     "resolve-findings": {
