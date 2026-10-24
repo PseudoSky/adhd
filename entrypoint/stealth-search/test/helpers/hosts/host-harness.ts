@@ -25,13 +25,17 @@ export const OPERATIONS_CACHE = join(tmpdir(), 'stealth-search-hosts-spec-operat
 
 /**
  * A verb error or a schema rejection reaches an MCP client as a tool result with `isError: true` and its code under
- * `_meta['adhd/error']` (apigen ADR-0018 D2), not as a thrown client error. Asserts that result and that its text
- * matches `pattern`.
+ * `_meta['adhd/error']` (apigen ADR-0018 D2), not as a thrown client error. Asserts that result, that its text matches
+ * `pattern` and that the machine-readable `code` is in it: the whole text for an ApiError (`<code>: <message>`), or
+ * the token right after the canonical code for a typed library error (`<canonical>: <CODE>: <message>`).
  */
-export async function expectMcpToolError(call: Promise<unknown>, pattern: RegExp): Promise<void> {
-  const res = (await call) as { isError?: boolean; content?: unknown }
+export async function expectMcpToolError(call: Promise<unknown>, pattern: RegExp, code: string): Promise<void> {
+  const res = (await call) as { isError?: boolean; content?: Array<{ text?: string }>; _meta?: Record<string, unknown> }
   expect(res.isError).toBe(true)
-  expect(JSON.stringify(res.content)).toMatch(pattern)
+  const text = res.content?.[0]?.text ?? ''
+  expect(text).toMatch(pattern)
+  expect(text).toMatch(new RegExp(`^(?:[a-z_]+: )?${code}: |^${code}: `))
+  expect(res._meta?.['adhd/error']).toBeDefined()
 }
 
 /** A generous bound for the first (extracting) build of a spec file. */

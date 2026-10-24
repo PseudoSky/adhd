@@ -44,8 +44,8 @@ $ echo $?
 70
 ```
 
-MCP: a `StealthSearchError` extends the core's error class, not apigen's `ApiError`, so the MCP plugin re-throws it and the client's call rejects with a JSON-RPC error response whose message is the error message (the code is not a separate field). Only an `ApiError` becomes a tool result with `isError: true`, text `<code>: <message>` and the code under `_meta['adhd/error']` (apigen ADR-0018): a request the host schema rejects, such as `extraArgs` on `launchChrome`, answers that way with `invalid_argument`. An unregistered provider id is not rejected by the schema (the `provider` input has no enum): the verb itself raises `UNKNOWN_PROVIDER`, so over MCP that call rejects with a JSON-RPC error whose message is the verb's message, and over the CLI it exits 70.
+MCP: a typed failure (a `StealthSearchError`, or any core `StealthCoreBrowserError` that reaches the search host) is a tool result with `isError: true` (apigen ADR-0018), never a JSON-RPC rejection. The text is `<canonical>: <CODE>: <message>`: `<canonical>` is the apigen code (`invalid_argument` for `UNKNOWN_PROVIDER`, `HOST_FLAG_INVALID` and `FETCH_URL_REFUSED`, `internal` for every other typed code), `<CODE>` is the stable code of this table and `<message>` the message with its remediation. `_meta['adhd/error']` carries the canonical code. A thrown value that is not a typed error, an unknown tool name and a malformed request stay JSON-RPC protocol errors. A request the host schema rejects, such as `extraArgs` on `launchChrome`, answers with `invalid_argument` and no library code.
 
 ```json
-{ "isError": true, "content": [{ "type": "text", "text": "invalid_argument: ..." }], "_meta": { "adhd/error": { "code": "invalid_argument" } } }
+{ "isError": true, "content": [{ "type": "text", "text": "invalid_argument: UNKNOWN_PROVIDER: provider \"nope\" is not registered — Use one of the registered provider ids ..." }], "_meta": { "adhd/error": { "code": "invalid_argument" } } }
 ```

@@ -12,12 +12,14 @@
  * `NODE_TOO_OLD` is owned by the core registry and reused here (`nodeTooOldError`).
  *
  * Rendering: the CLI writes `<CODE>: <message>` on ONE stderr line (never a stack) and exits with
- * `exitCodeFor(code)`; the MCP host lets the apigen transport carry the code and message back as a
- * tool error. `renderHostError` and `hostExitCode` are the only places that decide either.
+ * `exitCodeFor(code)`; the MCP host answers a typed failure as a tool result with `isError: true`
+ * whose text is `<canonical>: <CODE>: <message>` (`withMcpErrorChannel`). `renderHostError` and
+ * `hostExitCode` are the only places that decide the CLI forms.
  *
  * Inventory rows: I-33 (boot), I-34 (transports), I-36 (CLI one-shot).
  * Ticket 8468f7b1 · plan state search-hosts · [search-hosts.10]
  */
+import { StealthCoreBrowserError } from '@adhd/stealth-core-browser'
 import { StealthSearchError, exitCodeFor, isSearchErrorCode, searchError } from './errors.js'
 import type { SearchErrorCode, StealthSearchErrorInit } from './errors.js'
 
@@ -88,4 +90,55 @@ export function renderHostError(e: unknown): string {
 /** The process exit status of a host failure (`exitCodeFor` of its code). */
 export function hostExitCode(e: unknown): number {
   return exitCodeFor(asHostError(e).code)
+}
+
+// ─── The MCP error channel ────────────────────────────────────────────────────
+
+/** Typed codes that blame the caller's input; every other typed code is an `internal` failure. */
+const INVALID_ARGUMENT_CODES: ReadonlySet<string> = new Set(['UNKNOWN_PROVIDER', 'HOST_FLAG_INVALID', 'FETCH_URL_REFUSED'])
+
+/**
+ * A typed failure in the form the apigen MCP plugin turns into a tool result (ADR-0018 D2). A
+ * `StealthCoreBrowserError` cannot extend apigen's `ApiError` (it already extends the core error), so
+ * this carrier has the structural shape the plugin tests (`name` 'ApiError', a canonical `code`, `toJSON`);
+ * the stable library code travels as the first token of the message and in `details.code`.
+ */
+export class McpToolError extends Error {
+  readonly code: 'invalid_argument' | 'internal'
+  readonly details: { code: string; remediation: string; detail?: Record<string, unknown> }
+  readonly cause: StealthCoreBrowserError
+
+  constructor(source: StealthCoreBrowserError) {
+    const code = String(source.code)
+    super(`${code}: ${source.message}`)
+    this.cause = source
+    this.name = 'ApiError'
+    this.code = INVALID_ARGUMENT_CODES.has(code) ? 'invalid_argument' : 'internal'
+    this.details = { code, remediation: source.remediation, ...(source.detail ? { detail: source.detail } : {}) }
+  }
+
+  toJSON(): { code: string; message: string; details: McpToolError['details'] } {
+    return { code: this.code, message: this.message, details: this.details }
+  }
+}
+
+/** A typed library or search failure as an `McpToolError`; anything else is returned as is (the plugin re-throws it as a protocol error). */
+export function toMcpToolError(e: unknown): unknown {
+  return e instanceof StealthCoreBrowserError ? new McpToolError(e) : e
+}
+
+/** The live functions of a package with every typed failure mapped by `toMcpToolError`. */
+export function withMcpErrorChannel<P extends { fns?: Record<string, (...args: unknown[]) => unknown> }>(pkg: P): P {
+  if (!pkg.fns) return pkg
+  const fns: Record<string, (...args: unknown[]) => unknown> = {}
+  for (const [name, fn] of Object.entries(pkg.fns)) {
+    fns[name] = async (...args: unknown[]) => {
+      try {
+        return await fn(...args)
+      } catch (e) {
+        throw toMcpToolError(e)
+      }
+    }
+  }
+  return { ...pkg, fns }
 }

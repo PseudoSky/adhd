@@ -1,7 +1,7 @@
 /**
  * guards: UNKNOWN_PROVIDER is unreachable from the CLI or the MCP host (an enum rejects the provider first), or its span does not record the failure of the verb
  * tier: S
- * cites: ticket 8468f7b1 [search-tracing-fixes.1] [search-hosts.16] backlog 5152786d
+ * cites: ticket 8468f7b1 [search-tracing-fixes.1] [search-hosts.16] [audit-fixes.1] backlog 5152786d
  * The REAL `runCli` and the REAL `startMcpHost` (in-memory MCP client) over the real package, with the REAL
  * `describeProvider` verb bound to it, an unknown provider id, a real sox-telemetry file sink in a temp dir and a
  * process-spawn fake (no Chrome, no socket, no subprocess). Criteria: [search-tracing-fixes.1].
@@ -20,7 +20,7 @@ import { exitCodeFor } from '../../../src/errors.js'
 import { defaultHostSettings } from '../../../src/host-flags.js'
 import { startMcpHost } from '../../../src/server.js'
 import type { McpHostHandle } from '../../../src/server.js'
-import { BUILD_TIMEOUT_MS, FakeStdin, cliHarness, fakeVerbs, packageFor } from '../../helpers/hosts/host-harness.js'
+import { BUILD_TIMEOUT_MS, FakeStdin, cliHarness, expectMcpToolError, fakeVerbs, packageFor } from '../../helpers/hosts/host-harness.js'
 
 const hoisted = vi.hoisted(() => ({ serverTransport: undefined as unknown }))
 
@@ -109,7 +109,7 @@ describe('UNKNOWN_PROVIDER reaches the verb and is recorded on the span [search-
   )
 
   it(
-    'UNKNOWN_PROVIDER mcp span: the provider input has no enum, the tool call reaches the verb, rejects with the UNKNOWN_PROVIDER message of the verb and the adhd span records it',
+    'UNKNOWN_PROVIDER mcp span: the provider input has no enum, the tool call reaches the verb, answers an isError result naming UNKNOWN_PROVIDER and the adhd span records the message of the verb',
     async () => {
       startSink('live-service')
       const verbs = fakeVerbs(vi.fn, { describeProvider: describeProvider as never })
@@ -134,14 +134,7 @@ describe('UNKNOWN_PROVIDER reaches the verb and is recorded on the span [search-
       const client = new Client({ name: 'unknown-provider-spec', version: '0.0.0' })
       await client.connect(clientEnd)
       sessions.push({ host, client })
-      const outcome = await client
-        .callTool({ name: 'stealth_describeProvider', arguments: { data: { input: { provider: 'not-a-provider' } } } })
-        .then(
-          (res) => ({ res }),
-          (err: unknown) => ({ err })
-        )
-      expect(outcome).toHaveProperty('err')
-      expect(String((outcome as { err: Error }).err.message)).toMatch(/not-a-provider/)
+      await expectMcpToolError(client.callTool({ name: 'stealth_describeProvider', arguments: { data: { input: { provider: 'not-a-provider' } } } }), /not-a-provider/, 'UNKNOWN_PROVIDER')
       const recs = await records()
       const span = ofOp(recs, id)
       expect(span.map((r) => r.event)).toEqual([`adhd.${id}.start`, `adhd.${id}.error`])

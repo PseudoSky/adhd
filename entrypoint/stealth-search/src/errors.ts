@@ -12,10 +12,9 @@
  * Outcomes (`success|empty|error|timeout|hitl|captcha|rate_limited|banned`) are data, never
  * exceptions: a search or fetch RESULT carries them, an error is thrown only for a failure.
  *
- * CLI form: `<CODE>: <message>` on stderr, exit `exitCodeFor(code)`. MCP form: `StealthSearchError` is not an
- * apigen `ApiError` (it extends the core's error class), so the MCP plugin re-throws it and the client sees a
- * JSON-RPC error response carrying the message; only an `ApiError` (for example a schema rejection) becomes a tool
- * result with the error flag set (apigen ADR-0018). See docs/ERRORS.md.
+ * CLI form: `<CODE>: <message>` on stderr, exit `exitCodeFor(code)`. MCP form: a tool result with `isError: true` whose
+ * text is `<canonical>: <CODE>: <message>` (`withMcpErrorChannel` in host-errors.ts maps every typed failure to the
+ * apigen ApiError shape, because a StealthSearchError cannot itself extend ApiError; apigen ADR-0018). See docs/ERRORS.md.
  *
  * Ticket 8468f7b1 · plan state search-errors.
  */

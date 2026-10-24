@@ -22,7 +22,7 @@ import type { HostSettings } from '../../../src/host-flags.js'
 import { hitlResponse, input, makeFakeCore, makeWorld, response, scriptedEngine } from '../../helpers/verbs/harness.js'
 import { startMcpHost } from '../../../src/server.js'
 import type { McpHostDeps, McpHostHandle, Verbs } from '../../../src/server.js'
-import { BUILD_TIMEOUT_MS, FakeStdin, cliHarness, fakeVerbs, packageFor, trippedWorld, wire } from '../../helpers/hosts/host-harness.js'
+import { BUILD_TIMEOUT_MS, FakeStdin, cliHarness, expectMcpToolError, fakeVerbs, packageFor, trippedWorld, wire } from '../../helpers/hosts/host-harness.js'
 
 const hoisted = vi.hoisted(() => ({ serverTransport: undefined as unknown }))
 
@@ -176,7 +176,7 @@ describe('CLI and MCP report the same tripwire status [search-hosts.20]', () => 
 
 describe('a hitl outcome on the MCP host [search-hosts.22]', () => {
   it(
-    '591e1a7 isError: a tripped provider answers outcome hitl with attempts 0 as data (isError unset), and an unknown provider reaches the verb, which rejects the call with UNKNOWN_PROVIDER',
+    '591e1a7 isError: a tripped provider answers outcome hitl with attempts 0 as data (isError unset), and an unknown provider reaches the verb, which answers an isError result with UNKNOWN_PROVIDER',
     async () => {
       const world = await trippedWorld()
       const { client } = await session(api as unknown as Verbs, { build: () => packageFor(api as unknown as Verbs), configure: wire(world, scriptedEngine(response()).strategies) })
@@ -185,8 +185,8 @@ describe('a hitl outcome on the MCP host [search-hosts.22]', () => {
       const out = res.structuredContent as Record<string, unknown>
       expect(out).toMatchObject({ outcome: 'hitl', attempts: 0, provider: 'github' })
       expect(out['hitl']).toMatchObject({ reason: 'captcha' })
-      // the provider input has no enum: the verb raises the typed UNKNOWN_PROVIDER, which rejects the call (it is not an ApiError)
-      await expect(client.callTool({ name: 'stealth_describeProvider', arguments: { data: { input: { provider: 'not-a-provider' } } } })).rejects.toThrow(/not-a-provider/)
+      // the provider input has no enum: the verb raises the typed UNKNOWN_PROVIDER, which the host maps to an isError result carrying the code
+      await expectMcpToolError(client.callTool({ name: 'stealth_describeProvider', arguments: { data: { input: { provider: 'not-a-provider' } } } }), /not-a-provider/, 'UNKNOWN_PROVIDER')
     },
     BUILD_TIMEOUT_MS
   )

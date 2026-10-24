@@ -35,7 +35,7 @@ import { buildApigenPackage, createLogger } from '@adhd/apigen-engine-runtime'
 import { mcpPlugin } from '@adhd/apigen-plugin-mcp'
 import { lifecycle, shutdownChrome } from '@adhd/stealth-core-browser'
 import * as api from './api.js'
-import { HostBootFailedError, asHostError, bootFailed, flagInvalid, hostExitCode, transportUnsupported } from './host-errors.js'
+import { HostBootFailedError, asHostError, bootFailed, flagInvalid, hostExitCode, transportUnsupported, withMcpErrorChannel } from './host-errors.js'
 import { MCP_TRANSPORTS, renderMcpHelp, toSearchHostConfig } from './host-flags.js'
 import type { HostSettings, McpTransport, ParsedHostArgs } from './host-flags.js'
 import { parseHostFlags } from './host-flags.js'
@@ -669,7 +669,7 @@ export async function startMcpHost(settings: HostSettings, deps: McpHostDeps = {
   })
   const controller = new AbortController()
   const input: RunInput = {
-    packages: [built.pkg],
+    packages: [withMcpErrorChannel(built.pkg)],
     outputDir: '',
     options: {
       transport,
