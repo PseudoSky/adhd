@@ -144,10 +144,10 @@
       "end_ref": "a8245098ef6b9222cd7be6e80de0680f18ebaa4c"
     },
     "gates-rerun": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-10-24T18:03:31.056Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "35f4287edb8850e312473a78a59c20f5a7addfe1",
       "end_ref": null
     },
     "docs-marketing-run": {
