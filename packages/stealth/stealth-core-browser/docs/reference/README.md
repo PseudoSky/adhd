@@ -167,3 +167,7 @@ All Chrome SQLite databases (History, Cookies) are opened with `mode=ro&immutabl
 - No file locking — multiple processes can read simultaneously
 - No risk of corrupting Chrome's databases
 - No write access (read-only by design)
+
+## Endpoint policy
+
+Every verb and the chrome manager address Chrome through `endpoint.resolveEndpoint({ host, port })`. The host must be a bare host name or address and, by default, loopback (`127.0.0.1`, `localhost`, `::1`). A hosting process that really talks to a remote Chrome opts in once with `endpoint.configureEndpointPolicy({ allowHosts: ['chrome.internal'] })`; the entry point reads no environment variable. The debugger WebSocket URL a Chrome reports must name the host that was asked (`endpoint.assertSameEndpoint`), every CDP HTTP request times out after 5 s, and a frame that is not a CDP message closes the connection with `CDP_BAD_RESPONSE`. The launch lock of a port is reclaimed atomically after 15 s without an owner; a launcher that cannot take it within 30 s fails with `LAUNCH_LOCK_TIMEOUT` and never starts a second Chrome without the lock. A launch that does not answer CDP within 10 s kills the Chrome it spawned (`CHROME_START_TIMEOUT`). `killChrome(port)` signals only the Chrome this process launched on that port, and forgets it the moment the child exits.

@@ -19,6 +19,8 @@ try {
 
 An endpoint that cannot address a Chrome (a port outside 1-65535 or non-integer, a host with a path or whitespace) is a plain `StealthCoreBrowserError` with code `CDP_UNREACHABLE` and `detail.reason` of `invalid-endpoint`; it is thrown before any socket is touched. Tell it apart by `error.code` (and `error.detail?.reason`), exactly as for every other code. It is not a `RangeError`.
 
+The host is restricted to loopback (`127.0.0.1`, `localhost`, `::1`) unless the hosting process allowed more through `endpoint.configureEndpointPolicy({ allowHosts })`; any other host is refused the same way (`CDP_UNREACHABLE`, `detail.reason` `invalid-endpoint`) before a socket is touched. The debugger WebSocket URL a Chrome reports must point at the host that was asked, otherwise the call fails with `CDP_BAD_RESPONSE` (`detail.reason` `ws-host-mismatch` or `ws-url-invalid`); a CDP frame that is not a message fails every command in flight with `CDP_BAD_RESPONSE` (`detail.reason` `malformed-frame`) and drops the connection. A CDP HTTP request (`/json/version`, `/json/list`, `/json/new`) that does not answer within 5 s fails with `CDP_TIMEOUT`.
+
 The codes below are listed in the order of `ERROR_CODES`.
 
 ## Environment
