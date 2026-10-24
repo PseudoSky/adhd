@@ -561,6 +561,19 @@ def migration_snapshot(slug, path):
     return None
 
 
+def pre_descendant_snapshot(path, descendants):
+    """The content of `path` as it stood before the first commit of a DESCENDANT state (one of `descendants`, tagged [psm:<slug>]) changed it; None while no
+    descendant commit touched the file, so the live tree is measured then. Used for states that own no commit of the file themselves (their baseline is the
+    pre-existing content), so a later state's legitimate edit does not reopen them. Rename-aware like migration_snapshot."""
+    paths = path_history(path)
+    log = sh(["git", "log", "--format=%H%x1f%B%x1e", "--"] + paths)[1]
+    recs = [r.strip().split("\x1f", 1) for r in log.split("\x1e") if "\x1f" in r]
+    tagged = [i for i, (_, body) in enumerate(recs) if any(f"[psm:{d}]" in body for d in descendants)]
+    if not tagged or tagged[-1] + 1 >= len(recs):
+        return None
+    return blob_at(recs[tagged[-1] + 1][0], path)
+
+
 def port_check(bucket, strict=False, final=False, slug=None):
     """strict=False is the migration-time check (the port still carries the source names); strict=True is the corrected tree after port-fixes (greenfield renames and require_exports enforced).
     Line similarity is a migration-time property: once a later state's greenfield commit changes a ported file it is measured on the migration's own
@@ -3353,7 +3366,10 @@ def _cl11():
         return t.replace("[stealth-browser]", f"[{CORE_PKG}]").replace(LEGACY_PKG, CORE_PKG).replace(LEGACY_DIR, CORE_DIR)
     old_blob = blob_at(ref, spec)
     # fixture-only edits are allowed (core-seam.12): every assertion and title line must equal the baseline once the lsof LISTEN insertion is normalized
-    same = old_blob is not None and assertion_lines(_renorm(old_blob)) == assertion_lines(_renorm(read(spec))) and git("status", "--porcelain", "--", spec) == ""
+    # a later state's greenfield edit (audit-fixes P14-P17) does not reopen chrome-lifecycle: when another state changed the file since, measure it as
+    # chrome-lifecycle left it (its own commit, else the content before the first audit-fixes commit); the weakening protection within this state is unchanged (live tree otherwise).
+    cur = migration_snapshot("chrome-lifecycle", spec) or pre_descendant_snapshot(spec, dag_descendants("chrome-lifecycle")) or read(spec)
+    same = old_blob is not None and assertion_lines(_renorm(old_blob)) == assertion_lines(_renorm(cur)) and git("status", "--porcelain", "--", spec) == ""
     return "killProcessGroup" in exports_of(b) and same and ok, f"browser.spec.ts assertion/title lines unchanged since {ref[:8]}={same}; {why}"
 
 

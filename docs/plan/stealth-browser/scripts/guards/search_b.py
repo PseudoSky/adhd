@@ -330,11 +330,28 @@ def _uc_text():
     return "\n".join(read(f) for f in spec_files_of(SEARCH_DIR, "unit/use-cases"))
 
 
+def _uc_cites(files, minimum=5):
+    """Every spec cites ticket 8468f7b1 and a valid criterion id of search-usecases or of a DESCENDANT state (audit-fixes adds specs to this directory after the
+    state completed and cites its own ids, the convention of search-port-*.5 and search-verbs.6); at least `minimum` specs (the five the state shipped) still
+    cite search-usecases itself, so the state's own coverage cannot be replaced by descendant citations."""
+    ids = criteria_ids()
+    owners = {_UC} | dag_descendants(_UC)
+    bad, own = [], 0
+    for f in files:
+        txt = read(f)
+        found = {i for i in re.findall(r"\[([a-z0-9-]+\.\d+)\]", txt) if i in ids}
+        if TICKET not in txt or not any(i.rsplit(".", 1)[0] in owners for i in found):
+            bad.append(f)
+        elif any(i.startswith(_UC + ".") for i in found):
+            own += 1
+    return bool(files) and not bad and own >= minimum, f"uncited or no files: {bad[:5]} (files={len(files)}, citing {_UC}={own}, need >= {minimum})"
+
+
 @check(_UC, 1)
 def _bu1():
     """test/unit/use-cases/ holds spec files that each cite ticket 8468f7b1 and a search-usecases.N id, with at least 14 test cases in total (ported e2e, guard and lifecycle scenarios, no e2e lane)."""
     files = spec_files_of(SEARCH_DIR, "unit/use-cases")
-    ok, why = cites(files, _UC)
+    ok, why = _uc_cites(files)
     n = len(re.findall(r"^\s*(?:it|test)(?:\.each\([^)]*\))?\s*\(", _uc_text(), re.M))
     return ok and n >= 14, f"{why} cases={n}"
 
