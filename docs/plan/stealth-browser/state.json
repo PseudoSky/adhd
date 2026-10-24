@@ -123,10 +123,10 @@
       "end_ref": "fcaa816ac166b2925f59cec64dff4079265ebff6"
     },
     "review-prep": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-10-24T13:34:21.040Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "7fe9070be1227bfba0dc4938d0d19b533952b7f6",
       "end_ref": null
     },
     "audit-migration-blind": {
