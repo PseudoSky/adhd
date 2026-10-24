@@ -56,11 +56,11 @@ describe('chromeStatus', () => {
     lib.isChromeReachable.mockResolvedValue(true)
     lib.getChromeInfo.mockResolvedValue({ browserVersion: 'Chrome/126', protocolVersion: '1.3' })
     lib.isManagedAt.mockReturnValue(false)
-    const r = await chromeStatus({ host: 'chrome.local', port: 9333 })
+    const r = await chromeStatus({ host: 'localhost', port: 9333 })
     expect(r).toEqual({ running: true, version: 'Chrome/126', protocol: '1.3', managed: false })
     expect(typeof r.managed).toBe('boolean')
-    expect(lib.getChromeInfo).toHaveBeenCalledWith('chrome.local:9333')
-    expect(lib.isManagedAt).toHaveBeenCalledWith('chrome.local', 9333)
+    expect(lib.getChromeInfo).toHaveBeenCalledWith('localhost:9333')
+    expect(lib.isManagedAt).toHaveBeenCalledWith('localhost', 9333)
   })
 
   it('rejects an out-of-range port and a host with a path or whitespace without touching Chrome', async () => {

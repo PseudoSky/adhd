@@ -20,6 +20,7 @@
  */
 
 import { StealthCoreBrowserError } from './errors.js'
+import { resolveEndpoint as resolveChromeEndpoint } from './lib/endpoint.js'
 import { lifecycleError } from './lib/lifecycle/errors.js'
 import { getChromeInfo, isChromeReachable, listPageTargetsOnly } from './lib/cdp/targets.js'
 import { isManagedAt, managerFor, noteManagerActivity, shutdownIdleAt } from './lib/managers.js'
@@ -28,14 +29,9 @@ import { getPageContext as readPageContext } from './lib/queries/context.js'
 import type { PageContext } from './lib/queries/context.js'
 import type { ChromeVisit } from './lib/types.js'
 
-/** Host used when a verb is called without one. Override per call with `host`. */
-const DEFAULT_HOST = '127.0.0.1'
-/** CDP port used when a verb is called without one. Override per call with `port`. */
-const DEFAULT_PORT = 9222
-
 /** Which Chrome DevTools endpoint a verb talks to. */
 export interface ChromeEndpointInput {
-  /** CDP host name or address (default 127.0.0.1) */
+  /** CDP host name or address (default 127.0.0.1). Loopback only unless the hosting process allowed more (see `endpoint.configureEndpointPolicy`). */
   host?: string
   /** CDP remote-debugging port (default 9222) */
   port?: number
@@ -127,17 +123,9 @@ export interface PageContextResult {
 
 // ─── Configuration helpers ────────────────────────────────────────────────────
 
-/** Resolve and validate the CDP endpoint from typed input. */
+/** Resolve and validate the CDP endpoint from typed input (loopback unless the hosting process allowed more, see `endpoint`). */
 function resolveEndpoint(input: ChromeEndpointInput = {}): { host: string; port: number; cdpHost: string } {
-  const host = input.host?.trim() || DEFAULT_HOST
-  const port = input.port ?? DEFAULT_PORT
-  if (!Number.isInteger(port) || port < 1 || port > 65535) {
-    throw StealthCoreBrowserError.invalidEndpoint(`port must be an integer between 1 and 65535, got ${String(port)}`)
-  }
-  if (/[\s/]/.test(host)) {
-    throw StealthCoreBrowserError.invalidEndpoint(`host must be a bare host name or address, got "${host}"`)
-  }
-  return { host, port, cdpHost: `${host}:${port}` }
+  return resolveChromeEndpoint(input)
 }
 
 /** The CDP `host:port` of typed input. */

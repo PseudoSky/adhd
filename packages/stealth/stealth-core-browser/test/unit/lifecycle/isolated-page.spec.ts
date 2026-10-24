@@ -18,8 +18,8 @@ import { openIsolatedPage, withIsolatedPage } from '../../../src/lib/lifecycle/i
 import { LifecycleError } from '../../../src/lib/lifecycle/errors.js'
 
 const HOST = '127.0.0.1:9333'
-const BROWSER_WS = 'ws://fake/devtools/browser/b1'
-const PAGE_WS = 'ws://fake/devtools/page/T1'
+const BROWSER_WS = 'ws://127.0.0.1/devtools/browser/b1'
+const PAGE_WS = 'ws://127.0.0.1/devtools/page/T1'
 
 interface World {
   server: FakeCdpServer

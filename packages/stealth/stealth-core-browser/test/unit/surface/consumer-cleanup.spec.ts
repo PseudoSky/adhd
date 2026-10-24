@@ -21,7 +21,7 @@ vi.mock('../../../src/lib/cdp/targets.js', () => ({
   createIsolatedPageTarget: vi.fn(async () => ({
     targetId: 'T1',
     browserContextId: 'ctx-1',
-    pageWsUrl: 'ws://fake/devtools/page/T1',
+    pageWsUrl: 'ws://127.0.0.1/devtools/page/T1',
     reveal: vi.fn(async () => undefined),
     dispose: world.disposeContext,
   })),

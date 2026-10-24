@@ -30,6 +30,14 @@ export class CdpSession {
   private handlers = new Map<string, Set<(params: Record<string, unknown>) => void>>()
   private _ws: WebSocket | null = null
   private _connected = false
+  /**
+   * Called when an event subscriber throws. The throw never reaches the other subscribers or the socket
+   * (one bad handler must not starve the rest), but it is not silent: the default writes one stderr line
+   * naming the event and the message.
+   */
+  onHandlerError: (method: string, err: unknown) => void = (method, err) => {
+    console.error(`[@adhd/stealth-core-browser] a CDP subscriber for ${method} threw: ${err instanceof Error ? err.message : String(err)}`)
+  }
 
   get connected(): boolean {
     return this._connected
@@ -70,7 +78,21 @@ export class CdpSession {
     this._connected = true
 
     this._ws.addEventListener('message', (ev) => {
-      const msg = JSON.parse(String(ev.data)) as CdpMessage
+      let msg: CdpMessage
+      try {
+        const parsed: unknown = JSON.parse(String(ev.data))
+        if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) throw new TypeError('the frame is not a JSON object')
+        msg = parsed as CdpMessage
+      } catch (err) {
+        // A frame that is not a CDP message means the endpoint is broken or hostile: fail closed with a typed
+        // error for every command in flight and drop the connection, instead of throwing inside the listener.
+        const cause = err instanceof Error ? err.message : String(err)
+        for (const [, cb] of this.pending) cb.reject(StealthCoreBrowserError.of('CDP_BAD_RESPONSE', `the CDP endpoint sent a malformed frame (${cause})`, { cause: err, detail: { reason: 'malformed-frame' } }))
+        this.pending.clear()
+        this._connected = false
+        try { this._ws?.close() } catch { /* already closing */ }
+        return
+      }
 
       // Command response
       if ('id' in msg && typeof msg.id === 'number') {
@@ -87,7 +109,7 @@ export class CdpSession {
       const event = msg as CdpEvent
       const subs = this.handlers.get(event.method)
       if (subs) for (const handler of [...subs]) {
-        try { handler(event.params) } catch { /* a bad subscriber isn't the session's problem */ }
+        try { handler(event.params) } catch (err) { this.onHandlerError(event.method, err) }
       }
     })
 

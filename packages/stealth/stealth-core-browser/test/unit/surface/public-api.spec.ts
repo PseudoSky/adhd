@@ -35,6 +35,7 @@ const ROOT_EXPORTS = [
   'checkChromeActivity',
   'chromeManager',
   'chromeStatus',
+  'endpoint',
   'getPageContext',
   'launchChrome',
   'lifecycle',
@@ -45,6 +46,7 @@ const ROOT_EXPORTS = [
 ]
 
 const MEMBERS: Record<string, string[]> = {
+  endpoint: ['DEFAULT_HOST', 'DEFAULT_PORT', 'allowedHosts', 'assertSameEndpoint', 'configureEndpointPolicy', 'isLoopbackHost', 'portOf', 'resolveEndpoint'],
   cdp: [
     'CdpClient',
     'CdpSession',

@@ -100,11 +100,11 @@ describe('8468f7b1 [prod-errors.9] chromeStatus keeps typed errors and types the
     const cause = new Error('bad json')
     seam.isChromeReachable.mockResolvedValue(true)
     seam.getChromeInfo.mockRejectedValue(cause)
-    await expect(chromeStatus({ host: 'chrome.local', port: 9444 })).rejects.toMatchObject({
+    await expect(chromeStatus({ host: 'localhost', port: 9444 })).rejects.toMatchObject({
       code: 'CDP_UNREACHABLE',
       cause,
       message: expect.stringContaining('Failed to check Chrome status: bad json'),
-      detail: { host: 'chrome.local', port: 9444 },
+      detail: { host: 'localhost', port: 9444 },
     })
   })
 })

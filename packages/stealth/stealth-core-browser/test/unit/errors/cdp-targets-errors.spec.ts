@@ -37,7 +37,7 @@ let fetchError: unknown = null
 
 beforeEach(() => {
   versionStatus = 200
-  versionBody = () => ({ webSocketDebuggerUrl: 'ws://fake/b', Browser: 'Chrome/150', 'Protocol-Version': '1.3', 'User-Agent': 'x' })
+  versionBody = () => ({ webSocketDebuggerUrl: 'ws://127.0.0.1/b', Browser: 'Chrome/150', 'Protocol-Version': '1.3', 'User-Agent': 'x' })
   fetchError = null
   vi.stubGlobal('fetch', async (input: string) => {
     if (fetchError) throw fetchError

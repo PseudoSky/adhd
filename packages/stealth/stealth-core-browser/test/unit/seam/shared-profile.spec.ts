@@ -34,7 +34,7 @@ vi.mock('../../../src/lib/cdp/session.js', () => ({ CdpSession: cdp.CdpSession }
 import { createIsolatedPageTarget } from '../../../src/lib/cdp/targets.js'
 
 const HOST = '127.0.0.1:9333'
-const VERSION = { webSocketDebuggerUrl: 'ws://fake/devtools/browser/b1', Browser: 'Chrome/150.0', 'Protocol-Version': '1.3', 'User-Agent': 'Mozilla/5.0 Fake' }
+const VERSION = { webSocketDebuggerUrl: 'ws://127.0.0.1/devtools/browser/b1', Browser: 'Chrome/150.0', 'Protocol-Version': '1.3', 'User-Agent': 'Mozilla/5.0 Fake' }
 
 const methods = (): string[] => cdp.state.sent.map((s) => s.method)
 
@@ -48,7 +48,7 @@ beforeEach(() => {
   }
   vi.stubGlobal('fetch', async (input: string) => {
     if (input.endsWith('/json/version')) return { ok: true, status: 200, json: async () => VERSION }
-    return { ok: true, status: 200, json: async () => [{ id: 'T9', type: 'page', url: 'about:blank', webSocketDebuggerUrl: 'ws://fake/page/T9' }] }
+    return { ok: true, status: 200, json: async () => [{ id: 'T9', type: 'page', url: 'about:blank', webSocketDebuggerUrl: 'ws://127.0.0.1/page/T9' }] }
   })
   vi.spyOn(console, 'warn').mockImplementation(() => undefined)
   vi.spyOn(console, 'error').mockImplementation(() => undefined)
@@ -65,7 +65,7 @@ describe('8468f7b1 [core-seam.7] sharedProfile pages (commit 591e1a7)', () => {
     expect(methods()).not.toContain('Target.createBrowserContext')
     const create = cdp.state.sent.find((s) => s.method === 'Target.createTarget')!
     expect(create.params).not.toHaveProperty('browserContextId')
-    expect(r).toMatchObject({ targetId: 'T9', pageWsUrl: 'ws://fake/page/T9' })
+    expect(r).toMatchObject({ targetId: 'T9', pageWsUrl: 'ws://127.0.0.1/page/T9' })
     expect(r.browserContextId).toBeUndefined()
   })
 

@@ -14,6 +14,7 @@ export * as parsers from './lib/parsers.js'
 export * as chromeManager from './lib/chrome-manager.js'
 export * as lifecycle from './lib/lifecycle/index.js'
 export * as recording from './lib/recording/index.js'
+export * as endpoint from './lib/endpoint.js'
 
 export * from './api.js'
 export * from './errors.js'

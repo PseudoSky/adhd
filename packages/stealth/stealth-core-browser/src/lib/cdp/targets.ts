@@ -9,6 +9,10 @@
 
 import { CdpSession } from './session.js'
 import { StealthCoreBrowserError } from '../../errors.js'
+import { assertSameEndpoint } from '../endpoint.js'
+
+/** Longest a single CDP HTTP request (version, list) may take before it fails with CDP_TIMEOUT, in milliseconds. */
+export const CDP_HTTP_TIMEOUT_MS = 5000
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -47,9 +51,18 @@ export type PageOptions = {
  */
 async function cdpFetch(cdpHost: string, path: string): Promise<Response> {
   let res: Response
+  const controller = new AbortController()
+  let timedOut = false
+  const timer = setTimeout(() => {
+    timedOut = true
+    controller.abort()
+  }, CDP_HTTP_TIMEOUT_MS)
   try {
-    res = await fetch(`http://${cdpHost}${path}`)
+    res = await fetch(`http://${cdpHost}${path}`, { signal: controller.signal })
   } catch (err) {
+    if (timedOut) {
+      throw StealthCoreBrowserError.of('CDP_TIMEOUT', `CDP on ${cdpHost} did not answer ${path} within ${CDP_HTTP_TIMEOUT_MS} ms`, { cause: err, detail: { cdpHost, path, timeoutMs: CDP_HTTP_TIMEOUT_MS } })
+    }
     let cause = err instanceof Error ? err.message : String(err)
     // undici: TypeError "fetch failed" with the real error in .cause
     const nested = err instanceof Error ? (err as { cause?: unknown }).cause : undefined
@@ -61,6 +74,8 @@ async function cdpFetch(cdpHost: string, path: string): Promise<Response> {
       `CDP unreachable on ${cdpHost} — Chrome is not running or remote debugging is not enabled on that port (${cause})`,
       { cause: err, detail: { cdpHost } },
     )
+  } finally {
+    clearTimeout(timer)
   }
   if (!res.ok) {
     throw StealthCoreBrowserError.of(
@@ -87,6 +102,10 @@ export async function getChromeInfo(cdpHost: string): Promise<ChromeVersionInfo>
     const cause = err instanceof Error ? err.message : String(err)
     throw StealthCoreBrowserError.of('CDP_BAD_RESPONSE', `CDP on ${cdpHost} returned a non-JSON /json/version response (${cause})`, { cause: err, detail: { cdpHost } })
   }
+  if (typeof v !== 'object' || v === null || typeof v.webSocketDebuggerUrl !== 'string') {
+    throw StealthCoreBrowserError.of('CDP_BAD_RESPONSE', `CDP on ${cdpHost} answered /json/version without a debugger WebSocket URL`, { detail: { cdpHost, reason: 'missing-ws-url' } })
+  }
+  assertSameEndpoint(cdpHost, v.webSocketDebuggerUrl)
   return {
     browserWsUrl: v.webSocketDebuggerUrl,
     browserVersion: v.Browser,
@@ -111,7 +130,21 @@ export async function isChromeReachable(cdpHost: string): Promise<boolean> {
 /** List all page targets with their WebSocket URLs. */
 export async function listPageTargets(cdpHost: string): Promise<PageTargetInfo[]> {
   const res = await cdpFetch(cdpHost, '/json/list')
-  return (await res.json()) as PageTargetInfo[]
+  let list: unknown
+  try {
+    list = await res.json()
+  } catch (err) {
+    const cause = err instanceof Error ? err.message : String(err)
+    throw StealthCoreBrowserError.of('CDP_BAD_RESPONSE', `CDP on ${cdpHost} returned a non-JSON /json/list response (${cause})`, { cause: err, detail: { cdpHost } })
+  }
+  if (!Array.isArray(list)) {
+    throw StealthCoreBrowserError.of('CDP_BAD_RESPONSE', `CDP on ${cdpHost} returned a /json/list response that is not an array`, { detail: { cdpHost, reason: 'not-an-array' } })
+  }
+  const targets = (list as unknown[]).filter((t): t is PageTargetInfo => typeof t === 'object' && t !== null && typeof (t as { id?: unknown }).id === 'string')
+  for (const t of targets) {
+    if (typeof t.webSocketDebuggerUrl === 'string') assertSameEndpoint(cdpHost, t.webSocketDebuggerUrl)
+  }
+  return targets
 }
 
 /** List only page-type targets (excludes service workers, background pages, etc.). */
@@ -135,15 +168,18 @@ export async function createPageTarget(cdpHost: string, options: PageOptions = {
 }> {
   const info = await getChromeInfo(cdpHost)
   const browser = new CdpSession()
-  await browser.connect(info.browserWsUrl)
-
-  const result = await browser.send<{ targetId: string }>('Target.createTarget', {
-    url: 'about:blank',
-    background: !options.foreground,
-    focus: !!options.foreground,
-  })
-  const targetId = result.targetId
-  browser.close()
+  let targetId: string
+  try {
+    await browser.connect(info.browserWsUrl)
+    const result = await browser.send<{ targetId: string }>('Target.createTarget', {
+      url: 'about:blank',
+      background: !options.foreground,
+      focus: !!options.foreground,
+    })
+    targetId = result.targetId
+  } finally {
+    browser.close()
+  }
 
   // Poll /json/list for the new target's WebSocket URL (up to 3s)
   for (let i = 0; i < 30; i++) {
@@ -155,6 +191,8 @@ export async function createPageTarget(cdpHost: string, options: PageOptions = {
     await new Promise((r) => setTimeout(r, 100))
   }
 
+  // The page was created but never became addressable: close it instead of leaving it open.
+  await closePageTarget(cdpHost, targetId).catch(() => undefined)
   console.error(`[@adhd/stealth-core-browser] Target ${targetId} not found in /json/list after 3s`)
   throw StealthCoreBrowserError.of('TARGET_NOT_FOUND', `Target ${targetId} not found in /json/list after 3s`, { detail: { targetId, cdpHost } })
 }

@@ -167,7 +167,7 @@ export function browserModule(spy: Spy = plain): Record<string, unknown> {
 export function targetsModule(spy: Spy = plain): Record<string, unknown> {
   const list = async () => {
     if (!world.chromeUp || world.listFails) throw new Error('connect ECONNREFUSED')
-    return world.pages.map((p) => ({ id: p.id, type: 'page', url: p.url, title: '', webSocketDebuggerUrl: `ws://fake/${p.id}` }))
+    return world.pages.map((p) => ({ id: p.id, type: 'page', url: p.url, title: '', webSocketDebuggerUrl: `ws://127.0.0.1/${p.id}` }))
   }
   return {
     isChromeReachable: spy(async (_host: string) => {

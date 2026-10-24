@@ -53,7 +53,7 @@ import { loadFixture } from '../../helpers/fake-cdp.js'
 
 const HOST = '127.0.0.1:9333'
 const VERSION = {
-  webSocketDebuggerUrl: 'ws://fake/devtools/browser/b1',
+  webSocketDebuggerUrl: 'ws://127.0.0.1/devtools/browser/b1',
   Browser: 'Chrome/150.0',
   'Protocol-Version': '1.3',
   'User-Agent': 'Mozilla/5.0 Fake',
@@ -105,11 +105,11 @@ describe('8468f7b1 AC2 [tests-unit-core.1] getChromeInfo / isChromeReachable', (
     const info = await getChromeInfo(HOST)
     expect(net.urls).toEqual([`http://${HOST}/json/version`])
     expect(info).toEqual({
-      browserWsUrl: 'ws://fake/devtools/browser/b1',
+      browserWsUrl: 'ws://127.0.0.1/devtools/browser/b1',
       browserVersion: 'Chrome/150.0',
       protocolVersion: '1.3',
       userAgent: 'Mozilla/5.0 Fake',
-      webSocketDebuggerUrl: 'ws://fake/devtools/browser/b1',
+      webSocketDebuggerUrl: 'ws://127.0.0.1/devtools/browser/b1',
     })
   })
 
@@ -158,7 +158,7 @@ describe('8468f7b1 AC2 [tests-unit-core.1] getChromeInfo / isChromeReachable', (
 
 describe('8468f7b1 AC2 [tests-unit-core.1] target listing', () => {
   const targets: PageTargetInfo[] = [
-    { id: 'p1', type: 'page', url: 'https://a.test/', webSocketDebuggerUrl: 'ws://fake/page/p1' },
+    { id: 'p1', type: 'page', url: 'https://a.test/', webSocketDebuggerUrl: 'ws://127.0.0.1/page/p1' },
     { id: 'sw1', type: 'service_worker', url: 'https://a.test/sw.js' },
     { id: 'p2', type: 'page', url: 'about:blank' },
   ]
@@ -188,10 +188,10 @@ describe('8468f7b1 AC2 [tests-unit-core.1] createPageTarget', () => {
   })
 
   it('creates a background about:blank target and returns its page WebSocket URL', async () => {
-    net.list = [{ id: 'T1', type: 'page', url: 'about:blank', webSocketDebuggerUrl: 'ws://fake/page/T1' }]
+    net.list = [{ id: 'T1', type: 'page', url: 'about:blank', webSocketDebuggerUrl: 'ws://127.0.0.1/page/T1' }]
     const r = await createPageTarget(HOST)
-    expect(r).toEqual({ targetId: 'T1', pageWsUrl: 'ws://fake/page/T1' })
-    expect(cdp.state.connects).toEqual(['ws://fake/devtools/browser/b1'])
+    expect(r).toEqual({ targetId: 'T1', pageWsUrl: 'ws://127.0.0.1/page/T1' })
+    expect(cdp.state.connects).toEqual(['ws://127.0.0.1/devtools/browser/b1'])
     expect(cdp.state.sent[0]).toEqual({
       method: 'Target.createTarget',
       params: { url: 'about:blank', background: true, focus: false },
@@ -200,7 +200,7 @@ describe('8468f7b1 AC2 [tests-unit-core.1] createPageTarget', () => {
   })
 
   it('foreground flips background/focus', async () => {
-    net.list = [{ id: 'T1', type: 'page', url: 'about:blank', webSocketDebuggerUrl: 'ws://fake/page/T1' }]
+    net.list = [{ id: 'T1', type: 'page', url: 'about:blank', webSocketDebuggerUrl: 'ws://127.0.0.1/page/T1' }]
     await createPageTarget(HOST, { foreground: true })
     expect(cdp.state.sent[0].params).toMatchObject({ background: false, focus: true })
   })
@@ -210,9 +210,9 @@ describe('8468f7b1 AC2 [tests-unit-core.1] createPageTarget', () => {
     net.list = [{ id: 'T1', type: 'page', url: 'about:blank' }]
     const p = createPageTarget(HOST)
     await vi.advanceTimersByTimeAsync(250)
-    net.list = [{ id: 'T1', type: 'page', url: 'about:blank', webSocketDebuggerUrl: 'ws://fake/page/T1' }]
+    net.list = [{ id: 'T1', type: 'page', url: 'about:blank', webSocketDebuggerUrl: 'ws://127.0.0.1/page/T1' }]
     await vi.advanceTimersByTimeAsync(200)
-    await expect(p).resolves.toEqual({ targetId: 'T1', pageWsUrl: 'ws://fake/page/T1' })
+    await expect(p).resolves.toEqual({ targetId: 'T1', pageWsUrl: 'ws://127.0.0.1/page/T1' })
   })
 
   it('throws after 3s when the target never registers (error path)', async () => {
@@ -241,12 +241,12 @@ describe('8468f7b1 AC2 [tests-unit-core.1] createIsolatedPageTarget', () => {
       if (method === 'Browser.getWindowForTarget') return { windowId: 77 }
       return {}
     }
-    net.list = [{ id: 'T9', type: 'page', url: 'about:blank', webSocketDebuggerUrl: 'ws://fake/page/T9' }]
+    net.list = [{ id: 'T9', type: 'page', url: 'about:blank', webSocketDebuggerUrl: 'ws://127.0.0.1/page/T9' }]
   })
 
   it('creates an isolated context, a background target inside it, and minimizes the window', async () => {
     const r = await createIsolatedPageTarget(HOST)
-    expect(r).toMatchObject({ targetId: 'T9', pageWsUrl: 'ws://fake/page/T9', browserContextId: 'CTX1' })
+    expect(r).toMatchObject({ targetId: 'T9', pageWsUrl: 'ws://127.0.0.1/page/T9', browserContextId: 'CTX1' })
     expect(sentMethods()).toEqual([
       'Target.createBrowserContext',
       'Target.createTarget',
@@ -423,7 +423,7 @@ describe('8468f7b1 [chrome-lifecycle.13] createIsolatedPageTarget cleans up on e
   beforeEach(() => {
     cdp.state.connectError = null
     cdp.state.respond = respondFromFixture('isolated-context-ok')
-    net.list = [{ id: 'T1', type: 'page', url: 'about:blank', webSocketDebuggerUrl: 'ws://fake/page/T1' }]
+    net.list = [{ id: 'T1', type: 'page', url: 'about:blank', webSocketDebuggerUrl: 'ws://127.0.0.1/page/T1' }]
   })
 
   it('closes the creator browser session on success', async () => {
@@ -559,9 +559,9 @@ describe('8468f7b1 [chrome-lifecycle.13] failsafe-inventory pins fs-053..fs-069 
     net.list = []
     const p = createPageTarget(HOST)
     await vi.advanceTimersByTimeAsync(150)
-    net.list = [{ id: 'N1', type: 'page', url: 'about:blank', webSocketDebuggerUrl: 'ws://fake/page/N1' }]
+    net.list = [{ id: 'N1', type: 'page', url: 'about:blank', webSocketDebuggerUrl: 'ws://127.0.0.1/page/N1' }]
     await vi.advanceTimersByTimeAsync(150)
-    await expect(p).resolves.toEqual({ targetId: 'N1', pageWsUrl: 'ws://fake/page/N1' })
+    await expect(p).resolves.toEqual({ targetId: 'N1', pageWsUrl: 'ws://127.0.0.1/page/N1' })
     expect(cdp.state.sent[0]).toEqual({ method: 'Target.createTarget', params: { url: 'about:blank', background: true, focus: false } })
   })
 
@@ -579,7 +579,7 @@ describe('8468f7b1 [chrome-lifecycle.13] failsafe-inventory pins fs-053..fs-069 
   it('creates a cookie-less isolated context', async () => {
     // [fs-061]
     cdp.state.respond = respondFromFixture('isolated-context-ok')
-    net.list = [{ id: 'T1', type: 'page', url: 'about:blank', webSocketDebuggerUrl: 'ws://fake/page/T1' }]
+    net.list = [{ id: 'T1', type: 'page', url: 'about:blank', webSocketDebuggerUrl: 'ws://127.0.0.1/page/T1' }]
     const r = await createIsolatedPageTarget(HOST)
     expect(sentMethods()[0]).toBe('Target.createBrowserContext')
     expect(cdp.state.sent[1].params).toMatchObject({ browserContextId: 'CTX1' })
@@ -589,7 +589,7 @@ describe('8468f7b1 [chrome-lifecycle.13] failsafe-inventory pins fs-053..fs-069 
   it('the context survives the creator connection closing', async () => {
     // [fs-062] NOT disposeOnDetach: the context is created without it and is only disposed by dispose().
     cdp.state.respond = respondFromFixture('isolated-context-ok')
-    net.list = [{ id: 'T1', type: 'page', url: 'about:blank', webSocketDebuggerUrl: 'ws://fake/page/T1' }]
+    net.list = [{ id: 'T1', type: 'page', url: 'about:blank', webSocketDebuggerUrl: 'ws://127.0.0.1/page/T1' }]
     await createIsolatedPageTarget(HOST)
     expect(cdp.state.sent[0].params).toEqual({})
     expect(cdp.state.closes).toBe(1)
@@ -600,7 +600,7 @@ describe('8468f7b1 [chrome-lifecycle.13] failsafe-inventory pins fs-053..fs-069 
     // [fs-063]
     const ok = respondFromFixture('isolated-context-ok')
     cdp.state.respond = (method, params) => (method === 'Browser.getWindowForTarget' ? { windowId: 5 } : ok(method, params))
-    net.list = [{ id: 'T1', type: 'page', url: 'about:blank', webSocketDebuggerUrl: 'ws://fake/page/T1' }]
+    net.list = [{ id: 'T1', type: 'page', url: 'about:blank', webSocketDebuggerUrl: 'ws://127.0.0.1/page/T1' }]
     await createIsolatedPageTarget(HOST)
     expect(cdp.state.sent[1].params).toMatchObject({ background: true, focus: false })
     expect(cdp.state.sent.find((s) => s.method === 'Browser.setWindowBounds')?.params).toEqual({ windowId: 5, bounds: { windowState: 'minimized' } })
@@ -610,7 +610,7 @@ describe('8468f7b1 [chrome-lifecycle.13] failsafe-inventory pins fs-053..fs-069 
     // [fs-064]
     const ok = respondFromFixture('isolated-context-ok')
     cdp.state.respond = (method, params) => (method === 'Browser.getWindowForTarget' ? { windowId: 5 } : ok(method, params))
-    net.list = [{ id: 'T1', type: 'page', url: 'about:blank', webSocketDebuggerUrl: 'ws://fake/page/T1' }]
+    net.list = [{ id: 'T1', type: 'page', url: 'about:blank', webSocketDebuggerUrl: 'ws://127.0.0.1/page/T1' }]
     const r = await createIsolatedPageTarget(HOST)
     cdp.state.sent.length = 0
     await r.reveal()
@@ -622,7 +622,7 @@ describe('8468f7b1 [chrome-lifecycle.13] failsafe-inventory pins fs-053..fs-069 
   it('dispose closes the whole context', async () => {
     // [fs-065]
     cdp.state.respond = respondFromFixture('isolated-context-ok')
-    net.list = [{ id: 'T1', type: 'page', url: 'about:blank', webSocketDebuggerUrl: 'ws://fake/page/T1' }]
+    net.list = [{ id: 'T1', type: 'page', url: 'about:blank', webSocketDebuggerUrl: 'ws://127.0.0.1/page/T1' }]
     const r = await createIsolatedPageTarget(HOST)
     cdp.state.sent.length = 0
     await r.dispose()
