@@ -1,67 +1,29 @@
-# pnpm release:dry (exit 130)
+# release:dry — engine-runtime extract
 
-Command: pnpm release:dry
-EXIT 130. First 40 lines of the failure (vitest policy:test, nx publish phase), then the failed-task summary.
+Command: `pnpm release:dry`, exit code 0 (`/private/tmp/claude-502/-Users-nix-dev-ai-scratch/c8273d10-b319-41df-99f1-5458418387f6/scratchpad/rr-dry.rc`). Full log: `/private/tmp/claude-502/-Users-nix-dev-ai-scratch/c8273d10-b319-41df-99f1-5458418387f6/scratchpad/rr-dry.log`.
 
-```
-⎯⎯⎯⎯⎯⎯ Failed Tests 13 ⎯⎯⎯⎯⎯⎯⎯
+## engine-runtime lines
 
- FAIL  test/unit/functional/review-fixes-entrypoint.spec.ts > Review fixes E1 / E13 - dist layout lookup, stale artifact warning, loadable version > a baked artifact is used only when it is current > E1 a freshly baked artifact is accepted
-AssertionError: expected false to be true // Object.is equality
-
-- Expected
-+ Received
-
-- true
-+ false
-
- ❯ test/unit/functional/review-fixes-entrypoint.spec.ts:445:78
-    443|       await scratch.with('e1-fresh', async (dir) => {
-    444|         const inspected = await inspectChanged(dir, () => undefined);
-    445|         expect('operations' in inspected && inspected.operations.lengt…
-       |                                                                              ^
-    446|       });
-    447|     });
- ❯ test/unit/functional/review-fixes-entrypoint.spec.ts:443:7
-
-⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/13]⎯
-
- FAIL  test/unit/functional/review-fixes-entrypoint.spec.ts > Review fixes E1 / E13 - dist layout lookup, stale artifact warning, loadable version > a baked artifact is used only when it is current > E1 no operations is rejected with a reason
-AssertionError: expected 'artifact was baked by extractor 0.3.6…' to match /holds no operations/
-
-- Expected:
-/holds no operations/
-
-+ Received:
-"artifact was baked by extractor 0.3.6, this install has 0.3.7"
-
- ❯ test/unit/functional/review-fixes-entrypoint.spec.ts:459:61
-    457|         await scratch.with('e1-stale', async (dir) => {
-    458|           const inspected = await inspectChanged(dir, row.change);
-    459|           expect('reason' in inspected && inspected.reason).toMatch(ro…
-       |                                                             ^
-    460|         });
-    461|       });
- ❯ test/unit/functional/review-fixes-entrypoint.spec.ts:457:9
-
+```text
+553:✔  nx run apigen-engine-runtime:version --dryRun
+1288:✔  nx run apigen-engine-runtime:publish-hygiene  [existing outputs match the cache, left as is]
+1399:✔  nx run apigen-engine-runtime:version
+1474:✔  nx run apigen-engine-runtime:publish --dryRun
 ```
 
-Failed-task summary from the same run:
+No line in the log states a planned version (no `bumping to` or `would write`) for `@adhd/apigen-engine-runtime`; the version dry-run line reports only the task status.
 
+## Final summary
+
+```text
+ NX   Successfully ran target publish for 69 projects and 831 tasks they depend on
+Nx read the output from the cache instead of running the command for 692 out of 900 tasks.
+Output of 900 successful tasks were not shown. Run with --verbose or --output-style=static to see it.
+  Run duration:      1m 30s
+  Cache:             692/900 hit (77%)
+  Critical path:     20.4s (12 tasks)
+  Recoverable time:  1m 9s (77% of the run)
+  Recommendation: Increase parallelism to recover up to 1m 4s → https://nx.dev/docs/concepts/ci-concepts/parallelization-distribution?utm_source=nx-cli&utm_medium=cli&utm_campaign=performance-report&utm_content=parallelization.
 ```
- NX   Running target publish for 69 projects and 831 tasks they depend on failed
 
-Tasks not run because their dependencies failed or --nx-bail=true:
-
-- backlog:publish
-- decompile-cli:publish
-- dispatch-cli:publish
-- policy:publish
-
-Failed tasks:
-
-- policy:test
-- backlog:test
-- decompile-cli:test
-
-```
+Porcelain status before and after the run differs only by the two APPROVAL edits (`/private/tmp/claude-502/-Users-nix-dev-ai-scratch/c8273d10-b319-41df-99f1-5458418387f6/scratchpad/rr-status-before.txt`).
