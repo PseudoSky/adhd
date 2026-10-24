@@ -23,6 +23,7 @@
 - [release-gate-fixes.4] `pnpm release:dry` (ADHD_NX_VERSION_DRY_RUN NOT pre-set) exits 0 on the fixed tree, does real dry work (not the 'nothing to version/publish' no-op) and leaves `git status --porcelain` identical before and after (plan bookkeeping paths ignored); run only once the fixes exist, cached by code identity in evidence/release-gate-fixes.dry.json.
 - [release-gate-fixes.5] decompile-cli's validators/local/index.spec.ts builds fixturesDir from the current test/fixtures layout (not src/tests), entrypoint/decompile-cli/test/fixtures is populated, and `nx run decompile-cli:test --skip-nx-cache` exits 0.
 - [release-gate-fixes.6] The backlog c8-vocabulary failure is fixed at its root cause: evidence/release-gate-fixes.md has a `ROOT-CAUSE backlog: <mechanism>` line, `nx run backlog:test --skip-nx-cache` exits 0, and the end-to-end release:dry run (release-gate-fixes.4) is green for the current code.
+- [release-gate-fixes.7] Only owned paths changed by [psm:release-gate-fixes] commits (package.json, the wiring check and its two specs, the decompile-cli and backlog specs, backlog project.json, the state's evidence).
 ---
 
 ## Reservations
