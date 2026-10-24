@@ -425,8 +425,8 @@
       "id": "F61",
       "status": "fixed",
       "commit": "e0d039afbb8248bb904175c3e344e1fb164b4ae9",
-      "evidence": "storage-contract.spec.ts no longer pins read-only stat ops and no longer uses real-disk mkdtemp in a tier S spec (memory fs only).",
-      "reproduction": "./node_modules/.bin/nx run resilience-core-tripwire:test --skip-nx-cache -- test/unit/storage-contract.spec.ts"
+      "evidence": "storage-contract.spec.ts no longer pins read-only stat ops and no longer uses real-disk mkdtemp in a tier S spec (memory fs only). The real-directory (mkdtemp) run of the same contract cases lives in packages/resilience/resilience-core-tripwire/test/e2e/storage-contract.e2e.ts (tier P, nx run resilience-core-tripwire:e2e); the cases are shared through test/helpers/storage-contract.ts.",
+      "reproduction": "./node_modules/.bin/nx run resilience-core-tripwire:test --skip-nx-cache -- test/unit/storage-contract.spec.ts ; ./node_modules/.bin/nx run resilience-core-tripwire:e2e --skip-nx-cache"
     },
     {
       "id": "F62",
