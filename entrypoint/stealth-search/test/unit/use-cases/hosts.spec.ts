@@ -39,7 +39,7 @@ import { defaultHostSettings } from '../../../src/host-flags.js'
 import { startMcpHost } from '../../../src/server.js'
 import type { McpHostDeps, McpHostHandle, Verbs } from '../../../src/server.js'
 import { input, makeFakeCore, makeWorld, response, scriptedEngine } from '../../helpers/verbs/harness.js'
-import { BUILD_TIMEOUT_MS, FakeStdin, cliHarness, fakeVerbs, packageFor, trippedWorld, wire } from '../../helpers/hosts/host-harness.js'
+import { BUILD_TIMEOUT_MS, FakeStdin, cliHarness, expectMcpToolError, fakeVerbs, packageFor, trippedWorld, wire } from '../../helpers/hosts/host-harness.js'
 
 const TOOLS = ['search', 'listProviders', 'describeProvider', 'tripwireStatus', 'clearTripwire', 'getPageContext', 'chromeStatus', 'launchChrome', 'shutdownChrome', 'listPageTargets', 'checkChromeActivity'].map((n) => `stealth_${n}`)
 
@@ -267,15 +267,10 @@ describe('a wrong provider surfaces UNKNOWN_PROVIDER with its code and exit mapp
   )
 
   it(
-    '[search-mcp-iserror.1] ADR-0018: over MCP an unknown provider reaches the verb, which raises the typed UNKNOWN_PROVIDER as a JSON-RPC rejection (not an ApiError), and the session keeps serving',
+    '[search-mcp-iserror.1] ADR-0018: over MCP an unknown provider reaches the verb, which raises the typed UNKNOWN_PROVIDER as an isError tool result carrying the code, and the session keeps serving',
     async () => {
       const { client } = await session(realVerbs, { build: () => packageFor(realVerbs) })
-      const outcome = await client.callTool({ name: 'stealth_describeProvider', arguments: { data: { input: { provider: 'altavista' } } } }).then(
-        (res) => ({ res }),
-        (err: unknown) => ({ err })
-      )
-      expect(outcome).toHaveProperty('err')
-      expect(String((outcome as { err: Error }).err.message)).toMatch(/altavista/)
+      await expectMcpToolError(client.callTool({ name: 'stealth_describeProvider', arguments: { data: { input: { provider: 'altavista' } } } }), /altavista/, 'UNKNOWN_PROVIDER')
       expect((await client.listTools()).tools).toHaveLength(11)
     },
     BUILD_TIMEOUT_MS

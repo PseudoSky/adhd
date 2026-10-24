@@ -101,6 +101,10 @@ export function makeWorld(script: PageScript, extra: Partial<FetchDeps> = {}): W
     toMarkdown: (html) => htmlToMarkdown(html),
     extractPdf: (bytes) => extractPdfText(bytes),
     resolveHost: async () => ['93.184.216.34'],
+    // The unit lane never opens a socket: a spec that reaches the direct fetch supplies its own.
+    fetchDirect: async (url) => {
+      throw new Error(`unit lane: the direct fetch of ${url} was not injected`)
+    },
     now: () => clock.t,
     sleep: async (ms) => {
       clock.t += ms
