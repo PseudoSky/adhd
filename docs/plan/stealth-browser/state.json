@@ -172,10 +172,10 @@
       "end_ref": "33e826fdabe6938044a529ee638b192aaf38cb47"
     },
     "merge-readiness": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-10-24T22:16:39.070Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "bec8e2bd3e52ca85a8a56038af8c8ccfbb83ad72",
       "end_ref": null
     },
     "prod-errors": {
