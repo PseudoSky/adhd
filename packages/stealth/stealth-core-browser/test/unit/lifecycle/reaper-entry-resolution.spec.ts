@@ -20,7 +20,7 @@ import { pathToFileURL } from 'node:url'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { LifecycleError } from '../../../src/lib/lifecycle/errors.js'
-import { defaultReaperEntry } from '../../../src/lib/lifecycle/reaper-link.js'
+import { currentModuleUrl, defaultReaperEntry } from '../../../src/lib/lifecycle/reaper-link.js'
 
 let root: string
 let entry: string
@@ -83,5 +83,12 @@ describe('defaultReaperEntry (86a2318f)', () => {
 
   it('86a2318f defaultReaperEntry with neither __filename nor a module URL fails with a typed LifecycleError, never null', () => {
     expect(() => defaultReaperEntry({})).toThrow(LifecycleError)
+  })
+})
+
+describe('[fix-core-lifecycle.1] currentModuleUrl names this module without import.meta', () => {
+  it('answers the file URL of reaper-link under the running loader', () => {
+    const url = currentModuleUrl()
+    expect(url).toMatch(/^file:\/\/.*reaper-link\.(?:ts|js)$/)
   })
 })

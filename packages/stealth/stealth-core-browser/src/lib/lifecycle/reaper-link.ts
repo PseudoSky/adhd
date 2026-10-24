@@ -19,6 +19,7 @@
 
 import { createRequire } from 'node:module'
 import { isAbsolute } from 'node:path'
+import { pathToFileURL } from 'node:url'
 
 import { errorMessage, lifecycleError, lifecycleErrors, type LifecycleError } from './errors.js'
 import type { ReaperScope } from './reap-policy.js'
@@ -134,13 +135,23 @@ export function defaultReaperEntry(source?: ReaperEntrySource): string {
   return resolveReaperEntry(source ?? realSource())
 }
 
+/**
+ * The `file:` URL of THIS module under any loader, without `import.meta` (whose syntax tsc rejects when a consumer
+ * type-checks this source as CommonJS, and which a suppression comment may not hide in src/lib). CJS (the published bundle,
+ * vitest's vite-node) provides `__filename`; a native ESM loader does not, so the first stack frame, which is this
+ * function in this module, names the file URL.
+ */
+export function currentModuleUrl(): string | undefined {
+  if (typeof __filename === 'string' && __filename !== '') return pathToFileURL(__filename).href
+  const frame = /(file:\/\/[^\s)]+?):\d+:\d+/.exec(new Error().stack ?? '')
+  return frame?.[1]
+}
+
 function realSource(): ReaperEntrySource {
+  const moduleUrl = currentModuleUrl()
   return {
     ...(typeof __filename === 'string' ? { filename: __filename } : {}),
-    // The CJS build rewrites `import.meta.url` to `pathToFileURL(__filename).href` (tools/vite-plugins/import-meta-url-cjs.mjs).
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment -- @ts-expect-error would itself fail under the ESM spec tsconfig, where the line is valid
-    // @ts-ignore TS1343: tsconfig.lib compiles as commonjs; the bundler, not tsc, emits this module
-    moduleUrl: import.meta.url as string,
+    ...(moduleUrl !== undefined ? { moduleUrl } : {}),
   }
 }
 
