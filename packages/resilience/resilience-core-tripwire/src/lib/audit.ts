@@ -79,6 +79,7 @@ export function formatAuditLine(ev: AuditEvent): string {
     sessionId: clip(ev.sessionId, 128),
     actor: clip(ev.actor, 128),
     reason: clip(ev.reason, 256),
+    tripReason: clip(ev.tripReason, 256),
     pageUrl: clip(ev.pageUrl, 256),
     truncated: true,
   };

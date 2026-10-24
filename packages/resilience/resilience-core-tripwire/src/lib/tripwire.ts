@@ -448,6 +448,7 @@ export function createTripwire<C extends TripContext = TripContext>(
         event: 'tripwire-expired',
         key,
         reason: EXPIRY_AUDIT_REASON,
+        tripReason: r.reason,
         trippedAt: r.trippedAt,
         blockedCount: r.blockedCount,
         method: 'expired',

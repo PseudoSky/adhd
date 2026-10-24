@@ -221,6 +221,8 @@ export interface AuditEvent {
   sessionId?: string;
   actor?: string;
   reason?: string;
+  /** On `tripwire-expired`: the reason the lock was originally tripped for (`reason` there is `ttl-expired`). */
+  tripReason?: string;
   method?: ClearMethod;
   blockedCount?: number;
   /** Origin and path only: query and fragment are never audited. */

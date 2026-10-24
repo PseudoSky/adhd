@@ -1,7 +1,7 @@
 /**
  * guards: the audit line written when a tripped entry's ttl passes names the tripped reason instead of ttl-expired
  * tier: S
- * cites: 8468f7b1 [fix-tripwire.1]
+ * cites: 8468f7b1 [fix-tripwire.1] [audit-fixes.1]
  * Backlog 84e1f7a2 - a lock whose ttl has passed is removed lazily by the next
  * gate and exactly one `tripwire-expired` audit line is appended. The line's
  * reason is `ttl-expired`, so a reader of the audit log can tell an expiry
@@ -29,6 +29,29 @@ describe('[fix-tripwire.1] 84e1f7a2 audit line of an expired entry', () => {
     expect(expired).toHaveLength(1);
     expect(expired[0].reason).toBe('ttl-expired');
     expect(EXPIRY_AUDIT_REASON).toBe('ttl-expired');
+  });
+
+  it('[audit-fixes.1] P39 carries the original trip reason in tripReason next to ttl-expired', async () => {
+    const env = makeEnv({ expiry: { ttlMs: TTL_MS } });
+    await env.tw.trip('google', { reason: 'captcha', context: {} });
+    env.clock.advance(TTL_MS + 1);
+    await env.tw.gate('google');
+    expect(eventsOf(env, 'tripwire-expired')).toEqual([
+      expect.objectContaining({ key: 'google', reason: 'ttl-expired', tripReason: 'captcha' }),
+    ]);
+  });
+
+  it('[audit-fixes.1] P39 tripReason is kept per key', async () => {
+    const env = makeEnv({ expiry: { ttlMs: TTL_MS } });
+    await env.tw.trip('a', { reason: 'rate_limited', context: {} });
+    await env.tw.trip('b', { reason: 'banned', context: {} });
+    env.clock.advance(TTL_MS + 1);
+    await env.tw.gate('a');
+    await env.tw.gate('b');
+    expect(eventsOf(env, 'tripwire-expired').map((e) => [e.key, e.tripReason])).toEqual([
+      ['a', 'rate_limited'],
+      ['b', 'banned'],
+    ]);
   });
 
   it('keeps ttl-expired on the audit line whatever the original trip reason was', async () => {
