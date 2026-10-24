@@ -9,6 +9,10 @@ Every code block below is listed in `examples/manifest.json` and verified by
 `examples/`, command lines name real operations and flags, and the sample output is what the
 example prints against a fake Chrome.
 
+## What "stealth" means
+
+Exactly two concrete choices: Chrome is launched without `--enable-automation`, and pages are read without `Runtime.evaluate`. It is a lower-footprint way to work with your own logged-in browser. It is not a guarantee that a site will not notice, throttle or block you. Read [docs/RESPONSIBLE-USE.md](docs/RESPONSIBLE-USE.md) before pointing it at a site.
+
 ## Operations
 
 The CLI takes the operation name first, then the input as kebab-case flags (or one `--input` JSON
@@ -147,3 +151,16 @@ Printed by `examples/search-web.ts` when the provider answers with two hits:
 2. Chrome for Testing
    https://developer.chrome.com/docs/chrome-for-testing
 ```
+
+## Provider status
+
+The `google` provider's result parsers are provisional: they are verified against synthetic fixtures, not against live Google pages, so treat its results as best effort.
+
+## Documentation
+
+- [docs/CONFIGURATION.md](docs/CONFIGURATION.md): every default and host flag (port 9222, the Chrome-CDP profile, the state and data directories); macOS-first.
+- [docs/ERRORS.md](docs/ERRORS.md): the typed error codes, exit statuses and MCP rendering.
+- [docs/OBSERVABILITY.md](docs/OBSERVABILITY.md): `adhd.<op>.start|finish|error` records, `--verbose` diagnostics, what the MCP bin writes to stdout.
+- [docs/EXAMPLES.md](docs/EXAMPLES.md): every file under `examples/` with its scenario.
+- [docs/RESPONSIBLE-USE.md](docs/RESPONSIBLE-USE.md): terms of service, robots.txt, rate limits, no CAPTCHA or ban evasion, your own profile only.
+- [CHANGELOG.md](CHANGELOG.md), [LICENSE](LICENSE) (MIT).

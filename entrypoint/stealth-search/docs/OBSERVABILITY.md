@@ -21,6 +21,26 @@ The shared plugin also writes an upstream twin event, `adhd.op.error`, next to e
 - A rejected flag on the CLI (for example `chromeStatus --cdp-port abc`) is traced too: telemetry starts before any flag is validated (`--log-dir` is read from the command line first), and the refused call is run through the same mounted plugin layer, so it writes the start and error span of the operation the command line names (no second emitter). A command line that names no operation has no operation id and writes no span.
 - `--help` is not a dispatch: it starts no telemetry and writes no span. The same holds for `-h` and for running the CLI with no arguments (both print the help).
 
-## Where the records go
+## Where the records go and how to enable the sink
 
-`--log-dir <path>` selects the directory of the telemetry files; the default is the sox-telemetry default.
+The sink is on by default: each bin calls `initTelemetry` once, before its first dispatch, with service `stealth-search` and the `file` log sink (`src/telemetry.ts`). There is no environment variable to set (no environment variable is read anywhere in the package). Records are JSONL files written by `@adhd/sox-telemetry`.
+
+- `--log-dir <path>` selects the directory of the telemetry files; without it the sox-telemetry default directory is used. The flag is accepted by both bins.
+- If `initTelemetry` fails, the process continues and prints one `[sox-telemetry] WARNING: initTelemetry failed (...)` line on stderr; telemetry records are then dropped for that process (a no-op sink).
+
+## Diagnostics: `--verbose`, `--log-level`, `--log-file`
+
+Diagnostic logging is separate from the telemetry records above.
+
+- `--verbose` writes internal logs to stderr, never to stdout.
+- `--log-level <silent|fatal|error|warn|info|debug|trace>` sets the level. The default is `silent` for the CLI and `info` for the MCP host.
+- `--log-format <pretty|json>` sets the format (default `pretty` on a terminal, `json` otherwise).
+- `--log-file <path>` writes the logs to a file instead of stderr.
+- `--trace-file <path>` appends one JSON line per boot stage to the file.
+- `--monitor` (CLI) prints the resource usage of the operation on stderr.
+
+The CLI result is the only thing the CLI writes to stdout (one JSON document; `--pretty` indents it). A typed failure is one `<CODE>: <message>` line on stderr (see [ERRORS.md](ERRORS.md)).
+
+## The MCP bin and stdout
+
+With `--transport stdio` (the default), `stealth-search-mcp` writes only JSON-RPC messages to stdout. Every log line, warning and diagnostic goes to stderr, so a client that parses stdout as a JSON-RPC stream is never fed a stray line. Redirect stderr to a file (`2> mcp.err`) to keep the diagnostics while a client owns the pipes. Telemetry records never use stdout either: they go to the files of the sink.
