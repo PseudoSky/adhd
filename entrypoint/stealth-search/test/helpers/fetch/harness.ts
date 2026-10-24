@@ -16,6 +16,8 @@ export const PDF_SENTENCE = 'the stealth runner survived the audit'
 export interface PageScript {
   /** Document responses emitted during settle, in order (the last wins). */
   responses?: Array<{ url: string; status: number; mimeType: string; remoteIPAddress?: string }>
+  /** Document responses emitted one per challenge-wait sleep, after settle (a challenge that cleared reloads the page with a fresh response). */
+  laterResponses?: Array<{ url: string; status: number; mimeType: string }>
   /** Document requests emitted before the responses (redirect hops), each optionally carrying the redirect response it followed. */
   requests?: Array<{ url: string; redirectResponse?: { url: string; remoteIPAddress?: string } }>
   /** outerHTML per grab; the last entry repeats. */
@@ -111,6 +113,8 @@ export function makeWorld(script: PageScript, extra: Partial<FetchDeps> = {}): W
     now: () => clock.t,
     sleep: async (ms) => {
       clock.t += ms
+      const later = script.laterResponses?.shift()
+      if (later) emit('Network.responseReceived', { type: 'Document', requestId: 'req2', response: later })
     },
     log: (m) => {
       w.logs.push(m)

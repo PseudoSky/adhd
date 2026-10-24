@@ -38,11 +38,22 @@ describe('[audit-fixes.4] P21: error statuses are never a success', () => {
     expect((await fetchPage(NO_BANS, URL_, {}, w.deps)).outcome).toBe('success')
   })
 
-  it('a 403 Cloudflare wall that clears is a success: the status check runs after challenge handling', async () => {
+  it('a 403 Cloudflare wall that clears into a 200 page is a success: the status of the cleared document wins', async () => {
+    const wall = page('Just a moment', '<p>Just a moment</p>')
+    const w = makeWorld({
+      ...respond(403),
+      laterResponses: [{ url: URL_, status: 200, mimeType: 'text/html' }],
+      html: [wall, page('Real', longBody())],
+    })
+    const r = await fetchPage({ id: 'fetch', bans: [{ name: 'cf', signal: 'captcha', checkBody: /Just a moment/ }] }, URL_, { challengeWaitMs: 20_000 }, w.deps)
+    expect(r.outcome).toBe('success')
+    expect(r.status).toBe(200)
+  })
+
+  it('a 403 wall whose content cleared but whose document status stayed 403 is an error, never a silent success', async () => {
     const wall = page('Just a moment', '<p>Just a moment</p>')
     const w = makeWorld({ ...respond(403), html: [wall, page('Real', longBody())] })
     const r = await fetchPage({ id: 'fetch', bans: [{ name: 'cf', signal: 'captcha', checkBody: /Just a moment/ }] }, URL_, { challengeWaitMs: 20_000 }, w.deps)
-    // The wall cleared but the document status the browser reported stays 403: the outcome is an error, never silent success.
     expect(r.outcome).toBe('error')
     expect(r.error).toMatch(/HTTP 403/)
   })
