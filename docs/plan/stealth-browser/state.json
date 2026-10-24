@@ -529,10 +529,10 @@
       "end_ref": "f193d55fb179001597a4f69489f4cde4b7aed10b"
     },
     "search-mcp-iserror": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-10-24T00:16:43.565Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "ca63d9e5ff8538b515612640ab79216202843aad",
       "end_ref": null
     },
     "fix-search-build": {
