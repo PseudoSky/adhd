@@ -557,10 +557,10 @@
       "end_ref": "67046467ac20580e0213d4b58fc0c85ff76f137e"
     },
     "release-readiness": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-10-24T03:18:06.809Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "677f2a281bfcfe20e33bbba4918d0996ca3e4fb6",
       "end_ref": null
     }
   },
