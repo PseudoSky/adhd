@@ -60,7 +60,10 @@ describe('Scenario: replay a logged-in session by understanding which cookies su
   })
 
   it('[tests-use-cases.4] a tab that was closed is reported as not found, and an invalid port is a typed error', async () => {
-    world.useCdp({ meta: { name: 'no-target', origin: 'synthetic-protocol-conformant' }, steps: [] })
+    world.useCdp({
+      meta: { name: 'no-target', origin: 'synthetic-protocol-conformant' },
+      steps: [{ when: { method: 'Target.getTargetInfo', params: { targetId: 'GONE' } }, reply: { error: { code: -32602, message: 'No target with given id found' } } }],
+    })
     expect(await getPageContext({ targetId: 'GONE', port: world.port })).toEqual({ found: false, context: null })
     await expect(getPageContext({ targetId: 'T1', port: 70000 })).rejects.toMatchObject({ code: 'CDP_UNREACHABLE' })
   })

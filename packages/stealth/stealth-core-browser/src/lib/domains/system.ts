@@ -1,17 +1,17 @@
 import type { SystemInfo, ProcessInfo, ChromeMemoryCounters } from '../types.js'
-import { cdpCall } from './transport.js'
+import { cdpCall, cdpPageCall, resolvePageTarget } from './transport.js'
 
+/** SystemInfo and Memory reads. Memory.getDOMCounters is a page-session command (first open page unless a target is given). Failures throw a typed StealthCoreBrowserError. */
 export class SystemService {
   constructor(private readonly host: string) {}
 
-  async getSystemInfo(): Promise<SystemInfo | null> {
+  async getSystemInfo(): Promise<SystemInfo> {
     const result = await cdpCall<{
       gpu: { vendorString: string; deviceString: string; driverVersion: string }
       modelName: string
       modelVersion: string
       commandLine: string
     }>(this.host, 'SystemInfo.getInfo')
-    if (!result) return null
     return {
       modelName: result.modelName ?? '',
       modelVersion: result.modelVersion ?? '',
@@ -26,18 +26,17 @@ export class SystemService {
 
   async getProcessInfo(): Promise<ProcessInfo[]> {
     const result = await cdpCall<{ processInfo: ProcessInfo[] }>(this.host, 'SystemInfo.getProcessInfo')
-    return result?.processInfo ?? []
+    return result.processInfo ?? []
   }
 
-  async getMemoryCounters(): Promise<ChromeMemoryCounters | null> {
-    const result = await cdpCall<{
+  async getMemoryCounters(targetId?: string): Promise<ChromeMemoryCounters> {
+    const result = await cdpPageCall<{
       documents: number
       nodes: number
       jsEventListeners: number
       layouts: number
       recalcStyleCount: number
-    }>(this.host, 'Memory.getDOMCounters')
-    if (!result) return null
+    }>(this.host, await resolvePageTarget(this.host, targetId), 'Memory.getDOMCounters')
     return {
       documents: result.documents ?? 0,
       nodes: result.nodes ?? 0,

@@ -1,40 +1,41 @@
 import type { PageMetrics } from '../types.js'
-import { cdpCall } from './transport.js'
+import { cdpPageCall, cdpPageSession } from './transport.js'
 
+/** Page-domain commands. Each attaches a page session to the target; none sends a targetId as a parameter. Failures throw a typed StealthCoreBrowserError. */
 export class PageService {
   constructor(private readonly host: string) {}
 
-  async getNavigationHistory(targetId: string): Promise<{ currentIndex: number; entries: Array<{ id: number; url: string; title: string }> } | null> {
-    const result = await cdpCall<{ currentIndex: number; entries: Array<{ id: number; url: string; title: string }> }>(
-      this.host, 'Page.getNavigationHistory', { targetId },
-    )
-    return result ?? null
+  async getNavigationHistory(targetId: string): Promise<{ currentIndex: number; entries: Array<{ id: number; url: string; title: string }> }> {
+    return cdpPageCall(this.host, targetId, 'Page.getNavigationHistory')
   }
 
-  async getFrameTree(targetId: string): Promise<unknown | null> {
-    const result = await cdpCall<{ frameTree: unknown }>(this.host, 'Page.getFrameTree', { targetId })
-    return result?.frameTree ?? null
+  async getFrameTree(targetId: string): Promise<unknown> {
+    return (await cdpPageCall<{ frameTree: unknown }>(this.host, targetId, 'Page.getFrameTree')).frameTree
   }
 
-  async getResourceTree(targetId: string): Promise<unknown | null> {
-    const result = await cdpCall<{ frameTree: unknown }>(this.host, 'Page.getResourceTree', { targetId })
-    return result?.frameTree ?? null
+  async getResourceTree(targetId: string): Promise<unknown> {
+    return (await cdpPageCall<{ frameTree: unknown }>(this.host, targetId, 'Page.getResourceTree')).frameTree
   }
 
-  async getLayoutMetrics(targetId: string): Promise<unknown | null> {
-    const result = await cdpCall(this.host, 'Page.getLayoutMetrics', { targetId })
-    return result ?? null
+  async getLayoutMetrics(targetId: string): Promise<unknown> {
+    return cdpPageCall(this.host, targetId, 'Page.getLayoutMetrics')
   }
 
-  async captureScreenshot(targetId: string, format: 'png' | 'jpeg' | 'webp' = 'png'): Promise<string | null> {
-    const result = await cdpCall<{ data: string }>(this.host, 'Page.captureScreenshot', { targetId, format })
-    return result?.data ?? null
+  async captureScreenshot(targetId: string, format: 'png' | 'jpeg' | 'webp' = 'png'): Promise<string> {
+    return (await cdpPageCall<{ data: string }>(this.host, targetId, 'Page.captureScreenshot', { format })).data
   }
 
-  async getPageMetrics(targetId: string): Promise<PageMetrics | null> {
-    const result = await cdpCall<{ metrics: Array<{ name: string; value: number }> }>(this.host, 'Page.getMetrics', { targetId })
-    if (!result?.metrics) return null
-    const m = Object.fromEntries(result.metrics.map((e) => [e.name, e.value])) as Record<string, number>
+  /** Reads the Performance domain (Chrome serves no Page.getMetrics): enable, read, disable on one session. */
+  async getPageMetrics(targetId: string): Promise<PageMetrics> {
+    const result = await cdpPageSession(this.host, targetId, async (send) => {
+      await send('Performance.enable')
+      try {
+        return await send<{ metrics: Array<{ name: string; value: number }> }>('Performance.getMetrics')
+      } finally {
+        await send('Performance.disable').catch(() => undefined)
+      }
+    })
+    const m = Object.fromEntries((result.metrics ?? []).map((e) => [e.name, e.value])) as Record<string, number>
     return {
       timestamp: m['Timestamp'] ?? 0,
       documents: m['Documents'] ?? 0,

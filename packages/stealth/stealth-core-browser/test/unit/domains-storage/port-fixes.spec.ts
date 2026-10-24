@@ -1,13 +1,13 @@
 /**
  * Feature-level pins for the three source defects the port fixed.
- * Ticket 8468f7b1 AC port-fixes · criteria [port-fixes.2] [port-fixes.3] [port-fixes.4] [port-fixes.8] [port-fixes.11] ·
+ * Ticket 8468f7b1 AC port-fixes · criteria [port-fixes.2] [port-fixes.3] [port-fixes.4] [port-fixes.8] [port-fixes.11] [resolve-findings.1] ·
  * failsafe rows [fs-160] [fs-169] [fs-178].
  *
  * Each test drives the public class end to end against a throwaway Chrome-shaped SQLite profile in the
  * OS temp dir (no real profile) or against a WebSocket stub (no network, no Chrome).
  * guards: coerces bigint columns to numbers
  * tier: S
- * cites: 8468f7b1 [port-fixes.2] [port-fixes.3] [port-fixes.4] [port-fixes.8] [port-fixes.11]
+ * cites: 8468f7b1 [port-fixes.2] [port-fixes.3] [port-fixes.4] [port-fixes.8] [port-fixes.11] [resolve-findings.1]
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { CookieClient } from '../../../src/lib/storage/cookies.js'
@@ -78,7 +78,7 @@ describe('8468f7b1 AC port-fixes [port-fixes.3] [fs-169] session cookies', () =>
 
 describe('8468f7b1 AC port-fixes [port-fixes.4] [fs-178] cdpCall waits for the socket to open', () => {
   // FakeCdpServer's socket opens on a later tick and throws on send-before-open, so a cdpCall that
-  // sent immediately would resolve null instead of the reply.
+  // sent immediately would reject CDP_SEND_FAILED instead of resolving the reply.
   let restore: () => void
   let server: FakeCdpServer
 
@@ -88,12 +88,12 @@ describe('8468f7b1 AC port-fixes [port-fixes.4] [fs-178] cdpCall waits for the s
       steps: [{ when: { method: 'Browser.getVersion' }, reply: { result: { ok: true } } }],
     })
     restore = server.install()
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ json: async () => ({ webSocketDebuggerUrl: 'ws://127.0.0.1:1/devtools/browser/x' }) }))
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ webSocketDebuggerUrl: 'ws://127.0.0.1:1/devtools/browser/x' }) }))
   })
   afterEach(() => { restore(); vi.unstubAllGlobals() })
 
   it('waits for the socket to open before sending', async () => {
-    const out = await cdpCall<{ ok: boolean }>('h:1', 'Browser.getVersion')
+    const out = await cdpCall<{ ok: boolean }>('127.0.0.1:1', 'Browser.getVersion')
     expect(out).toEqual({ ok: true })
     expect(server.received.map((r) => r.method)).toEqual(['Browser.getVersion'])
   })

@@ -1,12 +1,13 @@
 /**
  * Unit spec for src/lib/queries/context.ts (getPageContext).
- * Ticket 8468f7b1 AC2 · criteria [tests-unit-data.1] [tests-unit-data.2] [tests-unit-data.3] [tests-unit-data.4].
+ * Ticket 8468f7b1 AC2 · criteria [tests-unit-data.1] [tests-unit-data.2] [tests-unit-data.3] [tests-unit-data.4] [resolve-findings.1].
  * CdpClient, CookieClient and HistoryClient are faked; no Chrome, no profile, no network.
  * guards: returns null when the target is unknown (error path)
  * tier: S
- * cites: 8468f7b1 [tests-unit-data.1] [tests-unit-data.2] [tests-unit-data.3] [tests-unit-data.4] [audit-fixes.5]
+ * cites: 8468f7b1 [tests-unit-data.1] [tests-unit-data.2] [tests-unit-data.3] [tests-unit-data.4] [audit-fixes.5] [resolve-findings.1]
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { StealthCoreBrowserError } from '../../../src/errors.js'
 
 const fake = vi.hoisted(() => ({
   info: null as null | { targetId: string; url: string; title: string },
@@ -18,11 +19,18 @@ const fake = vi.hoisted(() => ({
   urlInfo: null as null | { visitCount: number },
   historyError: false,
   asked: [] as string[],
+  /** When set, getTargetInfo rejects with it instead of answering. */
+  failure: null as null | StealthCoreBrowserError,
 }))
 
 vi.mock('../../../src/lib/domains/index.js', () => ({
   CdpClient: class {
-    async getTargetInfo(id: string) { fake.asked.push(id); return fake.info }
+    async getTargetInfo(id: string) {
+      fake.asked.push(id)
+      if (fake.failure) throw fake.failure
+      if (!fake.info) throw StealthCoreBrowserError.of('TARGET_NOT_FOUND', `no target ${id}`)
+      return fake.info
+    }
   },
 }))
 vi.mock('../../../src/lib/storage/cookies.js', () => ({
@@ -43,7 +51,12 @@ import { getPageContext } from '../../../src/lib/queries/context.js'
 describe('8468f7b1 AC2 [tests-unit-data.1] getPageContext', () => {
   beforeEach(() => {
     fake.info = { targetId: 'T', url: 'https://www.a.test/page', title: 'A' }
-    fake.cookies = []; fake.hostnames = []; fake.profiles = []; fake.cookieError = false; fake.urlInfo = null; fake.historyError = false; fake.asked = []
+    fake.cookies = []; fake.hostnames = []; fake.profiles = []; fake.cookieError = false; fake.urlInfo = null; fake.historyError = false; fake.asked = []; fake.failure = null
+  })
+
+  it('propagates a typed Chrome failure other than a missing target instead of reporting the tab as gone', async () => {
+    fake.failure = StealthCoreBrowserError.of('CDP_UNREACHABLE', 'chrome is down')
+    await expect(getPageContext('T')).rejects.toMatchObject({ code: 'CDP_UNREACHABLE' })
   })
 
   it('returns null when the target is unknown (error path)', async () => {

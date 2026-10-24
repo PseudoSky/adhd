@@ -13,15 +13,15 @@
  * matching step has been used the last match answers again, so a repeated
  * command (Network.enable on each of two tabs) keeps working.
  *
- * Fixture honesty: `meta.origin` is `synthetic-protocol-conformant` until a
- * dev-only recorder replaces them with `recorded` captures.
+ * Fixture honesty: a fixture's `meta.origin` is `synthetic-protocol-conformant` until a
+ * dev-only recorder replaces that fixture with a `recorded` capture.
  */
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 export interface CdpFixtureStep {
   /** Subset match on the client command: method equal, every key in params deep-equal. */
-  when: { method: string; params?: Record<string, unknown> }
+  when: { method: string; params?: Record<string, unknown>; sessionId?: string }
   /** Default result `{}`. */
   reply?: { result?: Record<string, unknown>; error?: { code: number; message: string } }
   /** Events pushed after the reply, in order. */
@@ -88,7 +88,7 @@ export class FakeWebSocket {
 
   send(raw: string): void {
     if (this.readyState !== OPEN) throw new Error(`FakeWebSocket.send in readyState ${this.readyState}`)
-    this.server._handleCommand(this, JSON.parse(raw) as { id: number; method: string; params?: Record<string, unknown> })
+    this.server._handleCommand(this, JSON.parse(raw) as { id: number; method: string; params?: Record<string, unknown>; sessionId?: string })
   }
 
   close(code = 1000): void {
@@ -119,7 +119,7 @@ export class FakeWebSocket {
 }
 
 export class FakeCdpServer {
-  readonly received: Array<{ id: number; method: string; params: Record<string, unknown> }> = []
+  readonly received: Array<{ id: number; method: string; params: Record<string, unknown>; sessionId?: string }> = []
   readonly unexpected: string[] = []
   private readonly sockets: FakeWebSocket[] = []
   private readonly used = new Set<number>()
@@ -171,13 +171,14 @@ export class FakeCdpServer {
   }
 
   /** @internal */
-  _handleCommand(ws: FakeWebSocket, cmd: { id: number; method: string; params?: Record<string, unknown> }): void {
+  _handleCommand(ws: FakeWebSocket, cmd: { id: number; method: string; params?: Record<string, unknown>; sessionId?: string }): void {
     const params = cmd.params ?? {}
-    this.received.push({ id: cmd.id, method: cmd.method, params })
+    this.received.push({ id: cmd.id, method: cmd.method, params, ...(cmd.sessionId !== undefined ? { sessionId: cmd.sessionId } : {}) })
     const matches = this.fixture.steps
       .map((step, i) => ({ step, i }))
-      .filter(({ step }) => step.when.method === cmd.method && subsetMatch(step.when.params ?? {}, params))
+      .filter(({ step }) => step.when.method === cmd.method && subsetMatch(step.when.params ?? {}, params) && (step.when.sessionId === undefined || step.when.sessionId === cmd.sessionId))
     const pick = matches.find((m) => !this.used.has(m.i)) ?? matches[matches.length - 1]
+    const sid = cmd.sessionId !== undefined ? { sessionId: cmd.sessionId } : {}
     queueMicrotask(() => {
       if (!pick) {
         this.unexpected.push(cmd.method)
@@ -190,8 +191,8 @@ export class FakeCdpServer {
       }
       this.used.add(pick.i)
       const { reply, emit } = pick.step
-      if (reply?.error) ws._deliver({ id: cmd.id, error: reply.error })
-      else ws._deliver({ id: cmd.id, result: reply?.result ?? {} })
+      if (reply?.error) ws._deliver({ id: cmd.id, error: reply.error, ...sid })
+      else ws._deliver({ id: cmd.id, result: reply?.result ?? {}, ...sid })
       for (const ev of emit ?? []) {
         const frame = { method: ev.method, params: ev.params }
         if (ev.delayMs && ev.delayMs > 0) setTimeout(() => ws._deliver(frame), ev.delayMs)

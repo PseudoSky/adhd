@@ -198,6 +198,9 @@ describe('8468f7b1 [prod-examples.6] verb examples (PA7.2, PA7.4)', () => {
       steps: [{
         when: { method: 'Target.getTargetInfo', params: { targetId: 'T1' } },
         reply: { result: { targetInfo: { targetId: 'T1', type: 'page', title: 'Docs', url: 'https://docs.test/a' } } },
+      }, {
+        when: { method: 'Target.getTargetInfo', params: { targetId: 'GONE' } },
+        reply: { error: { code: -32602, message: 'No target with given id found' } },
       }],
     })
     const logs: string[] = []

@@ -1,13 +1,13 @@
 /**
  * Unit spec for src/lib/cdp/targets.ts.
  * Ticket 8468f7b1 AC2 (behavior-preserving port, unit lane) ·
- * criteria [tests-unit-core.1] [tests-unit-core.2] [tests-unit-core.3] [tests-unit-core.4].
+ * criteria [tests-unit-core.1] [tests-unit-core.2] [tests-unit-core.3] [tests-unit-core.4] [resolve-findings.2].
  * fetch is stubbed (vi.stubGlobal) and CdpSession is replaced by an in-memory fake: no network, no WebSocket.
  * Also chrome-lifecycle [chrome-lifecycle.13] (the gap-G1 cleanup of createIsolatedPageTarget) and the
  * failsafe-inventory pins [fs-053] .. [fs-069] (see the last two describe blocks).
  * guards: maps /json/version onto ChromeVersionInfo
  * tier: S
- * cites: 8468f7b1 [tests-unit-core.1] [tests-unit-core.2] [tests-unit-core.3] [tests-unit-core.4] [chrome-lifecycle.13]
+ * cites: 8468f7b1 [tests-unit-core.1] [tests-unit-core.2] [tests-unit-core.3] [tests-unit-core.4] [chrome-lifecycle.13] [resolve-findings.2]
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -64,6 +64,8 @@ interface Net {
   versionStatus: number
   versionBody: () => unknown
   fetchError: unknown
+  /** When set, only /json/list fails (the version request still answers). */
+  listError: unknown
   urls: string[]
 }
 let net: Net
@@ -77,7 +79,7 @@ beforeEach(() => {
   cdp.state.connects.length = 0
   cdp.state.closes = 0
   cdp.state.respond = () => ({})
-  net = { list: [], versionStatus: 200, versionBody: () => VERSION, fetchError: null, urls: [] }
+  net = { list: [], versionStatus: 200, versionBody: () => VERSION, fetchError: null, listError: null, urls: [] }
   vi.stubGlobal('fetch', async (input: string) => {
     net.urls.push(input)
     if (net.fetchError) throw net.fetchError
@@ -88,6 +90,7 @@ beforeEach(() => {
         json: async () => net.versionBody(),
       }
     }
+    if (net.listError) throw net.listError
     return { ok: true, status: 200, json: async () => net.list }
   })
   vi.spyOn(console, 'warn').mockImplementation(() => undefined)
@@ -679,5 +682,46 @@ describe('8468f7b1 [chrome-lifecycle.13] failsafe-inventory pins fs-053..fs-069 
       { windowId: 1, bounds: { windowState: 'minimized' } },
       { windowId: 2, bounds: { windowState: 'minimized' } },
     ])
+  })
+})
+
+describe('8468f7b1 [resolve-findings.2] no target, context or socket leaks when listing fails (F151, F156)', () => {
+  const countOf = (method: string): Array<Record<string, unknown>> => cdp.state.sent.filter((x) => x.method === method).map((x) => x.params)
+
+  it('createIsolatedPageTarget disposes the new browser context when /json/list throws while polling', async () => {
+    cdp.state.respond = respondFromFixture('isolated-context-ok')
+    net.listError = new Error('list refused')
+    await expect(createIsolatedPageTarget(HOST)).rejects.toMatchObject({ code: 'CDP_UNREACHABLE' })
+    expect(countOf('Target.disposeBrowserContext')).toEqual([{ browserContextId: 'CTX1' }])
+    expect(openSockets()).toBe(0)
+  })
+
+  it('createIsolatedPageTarget with sharedProfile closes just its own target when polling throws', async () => {
+    cdp.state.respond = respondFromFixture('isolated-context-ok')
+    net.listError = new Error('list refused')
+    await expect(createIsolatedPageTarget(HOST, { sharedProfile: true })).rejects.toMatchObject({ code: 'CDP_UNREACHABLE' })
+    expect(countOf('Target.disposeBrowserContext')).toEqual([])
+    expect(countOf('Target.closeTarget')).toHaveLength(1)
+  })
+
+  it('createPageTarget closes the page it created when /json/list throws while polling', async () => {
+    cdp.state.respond = (method) => (method === 'Target.createTarget' ? { targetId: 'T1' } : {})
+    net.listError = new Error('list refused')
+    await expect(createPageTarget(HOST)).rejects.toMatchObject({ code: 'CDP_UNREACHABLE' })
+    expect(countOf('Target.closeTarget')).toEqual([{ targetId: 'T1' }])
+    expect(openSockets()).toBe(0)
+  })
+
+  it('closePageTarget closes its session when Target.closeTarget rejects', async () => {
+    cdp.state.respond = (method) => { if (method === 'Target.closeTarget') throw new Error('gone'); return {} }
+    await closePageTarget(HOST, 'T1')
+    expect(openSockets()).toBe(0)
+  })
+
+  it('hideAllWindows closes its session when listing the pages throws', async () => {
+    net.listError = new Error('list refused')
+    await hideAllWindows(HOST)
+    expect(openSockets()).toBe(0)
+    expect(console.warn).toHaveBeenCalled()
   })
 })

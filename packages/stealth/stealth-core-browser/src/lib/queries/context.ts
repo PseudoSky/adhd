@@ -1,4 +1,6 @@
 import { CdpClient } from '../domains/index.js'
+import type { CdpTargetInfo } from '../types.js'
+import { StealthCoreBrowserError } from '../../errors.js'
 import { CookieClient } from '../storage/cookies.js'
 import { HistoryClient } from '../storage/history.js'
 
@@ -13,8 +15,15 @@ export interface PageContext {
 
 export async function getPageContext(targetId: string, cdpHost = '127.0.0.1:9222', profileDir?: string): Promise<PageContext | null> {
   const cdp = new CdpClient(cdpHost)
-  const targetInfo = await cdp.getTargetInfo(targetId)
-  if (!targetInfo?.url) return null
+  let targetInfo: CdpTargetInfo
+  try {
+    targetInfo = await cdp.getTargetInfo(targetId)
+  } catch (err) {
+    // A target Chrome no longer knows has no context; every other failure (Chrome down, bad answer) propagates typed.
+    if (err instanceof StealthCoreBrowserError && err.code === 'TARGET_NOT_FOUND') return null
+    throw err
+  }
+  if (!targetInfo.url) return null
 
   let cookieCount = 0
   let hasHistory = false

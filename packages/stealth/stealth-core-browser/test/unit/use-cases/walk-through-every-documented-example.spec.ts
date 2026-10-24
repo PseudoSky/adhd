@@ -93,7 +93,8 @@ describe('Scenario: follow the README by running every documented verb example',
   it('[tests-use-cases.4] verbs/getPageContext describes an open tab and reports a missing one', async () => {
     world.useCdp({
       meta: { name: 'page-context', origin: 'synthetic-protocol-conformant' },
-      steps: [{ when: { method: 'Target.getTargetInfo', params: { targetId: 'T1' } }, reply: { result: { targetInfo: { targetId: 'T1', type: 'page', title: 'Docs', url: 'https://docs.test/a' } } } }],
+      steps: [{ when: { method: 'Target.getTargetInfo', params: { targetId: 'T1' } }, reply: { result: { targetInfo: { targetId: 'T1', type: 'page', title: 'Docs', url: 'https://docs.test/a' } } } },
+        { when: { method: 'Target.getTargetInfo', params: { targetId: 'GONE' } }, reply: { error: { code: -32602, message: 'No target with given id found' } } }],
     })
     const found = await runGetPageContext({ targetId: 'T1', port: world.port, log: noLog })
     expect(found.context).toMatchObject({ url: 'https://docs.test/a', hasHistory: true, historyVisits: 4 })

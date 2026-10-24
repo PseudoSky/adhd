@@ -87,30 +87,39 @@ async function cdpFetch(cdpHost: string, path: string): Promise<Response> {
   return res
 }
 
-/** Get browser version + WebSocket URL from Chrome's /json/version endpoint. */
-export async function getChromeInfo(cdpHost: string): Promise<ChromeVersionInfo> {
-  const res = await cdpFetch(cdpHost, '/json/version')
-  let v: {
-    webSocketDebuggerUrl: string
-    Browser: string
-    'Protocol-Version': string
-    'User-Agent': string
-  }
+/**
+ * GET a CDP HTTP path and parse its JSON body. Fails with a typed error: CDP_UNREACHABLE (no answer),
+ * CDP_TIMEOUT (no answer within CDP_HTTP_TIMEOUT_MS), CDP_BAD_RESPONSE (HTTP error status or a body that is not JSON).
+ */
+export async function cdpJson(cdpHost: string, path: string): Promise<unknown> {
+  const res = await cdpFetch(cdpHost, path)
   try {
-    v = (await res.json()) as typeof v
+    return await res.json()
   } catch (err) {
     const cause = err instanceof Error ? err.message : String(err)
-    throw StealthCoreBrowserError.of('CDP_BAD_RESPONSE', `CDP on ${cdpHost} returned a non-JSON /json/version response (${cause})`, { cause: err, detail: { cdpHost } })
+    throw StealthCoreBrowserError.of('CDP_BAD_RESPONSE', `CDP on ${cdpHost} returned a non-JSON ${path} response (${cause})`, { cause: err, detail: { cdpHost, path } })
   }
-  if (typeof v !== 'object' || v === null || typeof v.webSocketDebuggerUrl !== 'string') {
+}
+
+/** The raw /json/version document of a Chrome, with its debugger WebSocket URL checked against `cdpHost`. */
+export async function getRawVersion(cdpHost: string): Promise<Record<string, string> & { webSocketDebuggerUrl: string }> {
+  const v = await cdpJson(cdpHost, '/json/version')
+  if (typeof v !== 'object' || v === null || typeof (v as { webSocketDebuggerUrl?: unknown }).webSocketDebuggerUrl !== 'string') {
     throw StealthCoreBrowserError.of('CDP_BAD_RESPONSE', `CDP on ${cdpHost} answered /json/version without a debugger WebSocket URL`, { detail: { cdpHost, reason: 'missing-ws-url' } })
   }
-  assertSameEndpoint(cdpHost, v.webSocketDebuggerUrl)
+  const doc = v as Record<string, string> & { webSocketDebuggerUrl: string }
+  assertSameEndpoint(cdpHost, doc.webSocketDebuggerUrl)
+  return doc
+}
+
+/** Get browser version + WebSocket URL from Chrome's /json/version endpoint. */
+export async function getChromeInfo(cdpHost: string): Promise<ChromeVersionInfo> {
+  const v = await getRawVersion(cdpHost)
   return {
     browserWsUrl: v.webSocketDebuggerUrl,
-    browserVersion: v.Browser,
-    protocolVersion: v['Protocol-Version'],
-    userAgent: v['User-Agent'],
+    browserVersion: v['Browser'] as string,
+    protocolVersion: v['Protocol-Version'] as string,
+    userAgent: v['User-Agent'] as string,
     webSocketDebuggerUrl: v.webSocketDebuggerUrl,
   }
 }
@@ -129,14 +138,7 @@ export async function isChromeReachable(cdpHost: string): Promise<boolean> {
 
 /** List all page targets with their WebSocket URLs. */
 export async function listPageTargets(cdpHost: string): Promise<PageTargetInfo[]> {
-  const res = await cdpFetch(cdpHost, '/json/list')
-  let list: unknown
-  try {
-    list = await res.json()
-  } catch (err) {
-    const cause = err instanceof Error ? err.message : String(err)
-    throw StealthCoreBrowserError.of('CDP_BAD_RESPONSE', `CDP on ${cdpHost} returned a non-JSON /json/list response (${cause})`, { cause: err, detail: { cdpHost } })
-  }
+  const list = await cdpJson(cdpHost, '/json/list')
   if (!Array.isArray(list)) {
     throw StealthCoreBrowserError.of('CDP_BAD_RESPONSE', `CDP on ${cdpHost} returned a /json/list response that is not an array`, { detail: { cdpHost, reason: 'not-an-array' } })
   }
@@ -181,14 +183,20 @@ export async function createPageTarget(cdpHost: string, options: PageOptions = {
     browser.close()
   }
 
-  // Poll /json/list for the new target's WebSocket URL (up to 3s)
-  for (let i = 0; i < 30; i++) {
-    const targets = await listPageTargets(cdpHost)
-    const found = targets.find((t) => t.id === targetId && t.webSocketDebuggerUrl)
-    if (found?.webSocketDebuggerUrl) {
-      return { targetId, pageWsUrl: found.webSocketDebuggerUrl }
+  // Poll /json/list for the new target's WebSocket URL (up to 3s). A listing failure must not leave the
+  // freshly created page open: close it before the error propagates.
+  try {
+    for (let i = 0; i < 30; i++) {
+      const targets = await listPageTargets(cdpHost)
+      const found = targets.find((t) => t.id === targetId && t.webSocketDebuggerUrl)
+      if (found?.webSocketDebuggerUrl) {
+        return { targetId, pageWsUrl: found.webSocketDebuggerUrl }
+      }
+      await new Promise((r) => setTimeout(r, 100))
     }
-    await new Promise((r) => setTimeout(r, 100))
+  } catch (err) {
+    await closePageTarget(cdpHost, targetId).catch(() => undefined)
+    throw err
   }
 
   // The page was created but never became addressable: close it instead of leaving it open.
@@ -290,22 +298,21 @@ export async function createIsolatedPageTarget(
   // short-lived browser session so it works after the creator connection closed.
   const reveal = async (): Promise<void> => {
     if (windowId === undefined) return
+    const b = new CdpSession()
     try {
       const i = await getChromeInfo(cdpHost)
-      const b = new CdpSession()
       await b.connect(i.browserWsUrl)
       await b.send('Browser.setWindowBounds', {
         windowId,
         bounds: { left: 80, top: 80, width: 1100, height: 850, windowState: 'normal' },
       }).catch(() => { /* best-effort */ })
-      b.close()
-    } catch (e) { console.warn("[@adhd/stealth-core-browser] Failed to run reveal", e) }
+    } catch (e) { console.warn("[@adhd/stealth-core-browser] Failed to run reveal", e) } finally { b.close() }
   }
 
   const dispose = async (): Promise<void> => {
+    const b = new CdpSession()
     try {
       const i = await getChromeInfo(cdpHost)
-      const b = new CdpSession()
       await b.connect(i.browserWsUrl)
       if (browserContextId) {
         // Disposing the context closes every target within it.
@@ -314,17 +321,22 @@ export async function createIsolatedPageTarget(
         // Shared profile: never dispose the user's default context, just this target.
         await b.send('Target.closeTarget', { targetId }).catch(() => { /* best-effort */ })
       }
-      b.close()
-    } catch (e) { console.warn("[@adhd/stealth-core-browser] Failed to run dispose", e) }
+    } catch (e) { console.warn("[@adhd/stealth-core-browser] Failed to run dispose", e) } finally { b.close() }
   }
 
-  for (let i = 0; i < 30; i++) {
-    const targets = await listPageTargets(cdpHost)
-    const found = targets.find((t) => t.id === targetId && t.webSocketDebuggerUrl)
-    if (found?.webSocketDebuggerUrl) {
-      return { targetId, pageWsUrl: found.webSocketDebuggerUrl, browserContextId, reveal, dispose }
+  // A listing failure must dispose the context/target just created: nothing else holds its handle.
+  try {
+    for (let i = 0; i < 30; i++) {
+      const targets = await listPageTargets(cdpHost)
+      const found = targets.find((t) => t.id === targetId && t.webSocketDebuggerUrl)
+      if (found?.webSocketDebuggerUrl) {
+        return { targetId, pageWsUrl: found.webSocketDebuggerUrl, browserContextId, reveal, dispose }
+      }
+      await new Promise((r) => setTimeout(r, 100))
     }
-    await new Promise((r) => setTimeout(r, 100))
+  } catch (err) {
+    await dispose()
+    throw err
   }
 
   await dispose()
@@ -339,13 +351,12 @@ export async function createIsolatedPageTarget(
  * Uses CdpSession for reliable close-with-confirmation (not raw WebSocket).
  */
 export async function closePageTarget(cdpHost: string, targetId: string): Promise<void> {
+  const session = new CdpSession()
   try {
     const info = await getChromeInfo(cdpHost)
-    const session = new CdpSession()
     await session.connect(info.browserWsUrl)
     await session.send('Target.closeTarget', { targetId })
-    session.close()
-  } catch (e) { console.warn("[@adhd/stealth-core-browser] Failed to run cdp closePageTarget:", e); }
+  } catch (e) { console.warn("[@adhd/stealth-core-browser] Failed to run cdp closePageTarget:", e); } finally { session.close() }
 }
 
 /** Close ALL page targets (but not the browser itself). */
@@ -360,9 +371,9 @@ export async function closeAllPageTargets(cdpHost: string): Promise<void> {
  * rendering pages and clearing Cloudflare managed challenges.
  */
 export async function hideAllWindows(cdpHost: string): Promise<void> {
+  const session = new CdpSession()
   try {
     const info = await getChromeInfo(cdpHost)
-    const session = new CdpSession()
     await session.connect(info.browserWsUrl)
     const targets = await listPageTargetsOnly(cdpHost)
     for (const t of targets) {
@@ -374,6 +385,5 @@ export async function hideAllWindows(cdpHost: string): Promise<void> {
         })
       } catch (e) { console.warn("[@adhd/stealth-core-browser] Failed to run hideAllWindows", e) }
     }
-    session.close()
-  } catch (e) { console.warn("[@adhd/stealth-core-browser] Failed to run hideAllWindows", e) }
+  } catch (e) { console.warn("[@adhd/stealth-core-browser] Failed to run hideAllWindows", e) } finally { session.close() }
 }

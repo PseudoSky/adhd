@@ -128,8 +128,10 @@ export class CdpSession {
    * @param method CDP method name (e.g. 'Page.navigate')
    * @param params Method parameters
    * @param timeoutMs Optional timeout (default 30_000)
+   * @param sessionId Optional flattened target session (from Target.attachToTarget with flatten: true); the
+   *        command is then routed to that target instead of the browser.
    */
-  send<T = Record<string, unknown>>(method: string, params: Record<string, unknown> = {}, timeoutMs = 30_000): Promise<T> {
+  send<T = Record<string, unknown>>(method: string, params: Record<string, unknown> = {}, timeoutMs = 30_000, sessionId?: string): Promise<T> {
     return new Promise<T>((resolve, reject) => {
       if (!this._ws || !this._connected) {
         reject(StealthCoreBrowserError.of('CDP_NOT_CONNECTED', 'CdpSession not connected', { detail: { method } }))
@@ -148,7 +150,7 @@ export class CdpSession {
       })
 
       try {
-        this._ws.send(JSON.stringify({ id, method, params }))
+        this._ws.send(JSON.stringify(sessionId === undefined ? { id, method, params } : { id, method, params, sessionId }))
       } catch (err) {
         clearTimeout(timer)
         this.pending.delete(id)
