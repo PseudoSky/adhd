@@ -3761,6 +3761,7 @@
         "docs/plan/stealth-browser/evidence/naming-decision.md",
         "docs/plan/stealth-browser/evidence/plan-notes.md",
         "docs/plan/stealth-browser/evidence/product-claims.json",
+        "docs/plan/stealth-browser/evidence/release-gate-fixes.md",
         "docs/plan/stealth-browser/evidence/release-readiness.md",
         "docs/plan/stealth-browser/evidence/relink/",
         "docs/plan/stealth-browser/evidence/search-failsafe-inventory.json",
@@ -3790,6 +3791,8 @@
         "docs/plan/stealth-browser/smoke/sp-link.md",
         "docs/plan/stealth-browser/smoke/switch.md",
         "docs/plan/stealth-browser/tripwire-reverse/",
+        "entrypoint/backlog/test/unit/c8-vocabulary.spec.ts",
+        "entrypoint/decompile-cli/test/unit/lib/validators/local/index.spec.ts",
         "entrypoint/stealth-browser/",
         "entrypoint/stealth-browser/*",
         "entrypoint/stealth-browser/docs/reference/",
@@ -3957,6 +3960,9 @@
         "tools/nx-plugins/build/executors/typecheck-spec/resilience-core-tripwire.baseline.json",
         "tools/nx-plugins/build/executors/typecheck-spec/stealth-core-browser.baseline.json",
         "tools/nx-plugins/build/executors/typecheck-spec/stealth-search.baseline.json",
+        "tools/nx-plugins/test/executors/wiring/check-test-wiring.mjs",
+        "tools/nx-plugins/test/executors/wiring/check-test-wiring.spec.mjs",
+        "tools/nx-plugins/test/executors/wiring/release-dry-clean.spec.mjs",
         "tsconfig.base.json"
       ],
       "read_only_set": [
@@ -3998,6 +4004,7 @@
         "entrypoint/stealth-browser/src/test/fixtures/cdp/",
         "entrypoint/stealth-browser/src/test/support/",
         "entrypoint/stealth-browser/vite.config.ts",
+        "entrypoint/stealth-search/",
         "entrypoint/stealth-search/src/api.ts",
         "entrypoint/stealth-search/src/host-flags.ts",
         "entrypoint/stealth-search/src/telemetry.ts",
@@ -4008,6 +4015,7 @@
         "packages/resilience/resilience-core-tripwire/src/lib/",
         "packages/resilience/resilience-core-tripwire/src/lib/types.ts",
         "packages/resilience/resilience-core-tripwire/vite.config.ts",
+        "packages/stealth/stealth-core-browser/",
         "packages/stealth/stealth-core-browser/examples/",
         "packages/stealth/stealth-core-browser/package.json",
         "packages/stealth/stealth-core-browser/src/api.ts",
@@ -4291,7 +4299,11 @@
             "/Users/nix/dev/node/adhd/.worktrees/stealth-browser/docs/plan/stealth-browser/review/PRE-REVIEW.json",
             "/Users/nix/dev/node/adhd/.worktrees/stealth-browser/docs/plan/stealth-browser/review/PRE-REVIEW.md"
           ],
-          "read_only": []
+          "read_only": [
+            "/Users/nix/dev/ai/scratch/agent-browser/",
+            "entrypoint/stealth-search/",
+            "packages/stealth/stealth-core-browser/"
+          ]
         },
         "audit-fixes": {
           "mutates": [
@@ -4813,6 +4825,7 @@
             "entrypoint/stealth-search/src/lib/output.ts",
             "entrypoint/stealth-search/src/lib/search.ts",
             "entrypoint/stealth-search/test/helpers/verbs/",
+            "entrypoint/stealth-search/test/unit/guards/tripwire-wiring.spec.ts",
             "entrypoint/stealth-search/test/unit/verbs/"
           ],
           "read_only": []
@@ -4850,6 +4863,7 @@
             "docs/plan/stealth-browser/evidence/search-tracing-fixes.md",
             "entrypoint/stealth-search/README.md",
             "entrypoint/stealth-search/docs/CONFIGURATION.md",
+            "entrypoint/stealth-search/docs/ERRORS.md",
             "entrypoint/stealth-search/docs/OBSERVABILITY.md",
             "entrypoint/stealth-search/src/api.ts",
             "entrypoint/stealth-search/src/cli.ts",
@@ -4860,7 +4874,8 @@
             "entrypoint/stealth-search/src/telemetry.ts",
             "entrypoint/stealth-search/src/tracing.ts",
             "entrypoint/stealth-search/test/unit/hosts/",
-            "entrypoint/stealth-search/test/unit/tracing/"
+            "entrypoint/stealth-search/test/unit/tracing/",
+            "entrypoint/stealth-search/test/unit/use-cases/hosts.spec.ts"
           ],
           "read_only": []
         },
@@ -4881,6 +4896,18 @@
             "docs/plan/stealth-browser/release-readiness/"
           ],
           "read_only": []
+        },
+        "release-gate-fixes": {
+          "mutates": [
+            "docs/plan/stealth-browser/evidence/release-gate-fixes.md",
+            "entrypoint/backlog/test/unit/c8-vocabulary.spec.ts",
+            "entrypoint/decompile-cli/test/unit/lib/validators/local/index.spec.ts",
+            "package.json",
+            "tools/nx-plugins/test/executors/wiring/check-test-wiring.mjs",
+            "tools/nx-plugins/test/executors/wiring/check-test-wiring.spec.mjs",
+            "tools/nx-plugins/test/executors/wiring/release-dry-clean.spec.mjs"
+          ],
+          "read_only": []
         }
       },
       "references": [],
@@ -4893,7 +4920,7 @@
       },
       "assumed_baseline": [],
       "depends_on": [],
-      "updated_at": "2026-10-23T22:08:13.069Z"
+      "updated_at": "2026-10-24T03:51:11.648Z"
     },
     {
       "plan": "task-dependency-dag",
@@ -5330,6 +5357,6 @@
       "updated_at": "2026-07-17T23:56:00.980Z"
     }
   ],
-  "updated_at": "2026-10-23T22:08:13.076Z",
+  "updated_at": "2026-10-24T03:51:11.655Z",
   "verified_at": null
 }

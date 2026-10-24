@@ -618,5 +618,16 @@
     "docs/plan/stealth-browser/APPROVAL.md",
     "docs/plan/stealth-browser/APPROVALS.md",
     "docs/plan/stealth-browser/evidence/release-readiness.md"
+  ],
+  "release-gate-fixes": [
+    "package.json",
+    "tools/nx-plugins/test/executors/wiring/check-test-wiring.mjs",
+    "tools/nx-plugins/test/executors/wiring/check-test-wiring.spec.mjs",
+    "tools/nx-plugins/test/executors/wiring/release-dry-clean.spec.mjs",
+    "entrypoint/decompile-cli/test/unit/lib/validators/local/index.spec.ts",
+    "entrypoint/backlog/test/unit/c8-vocabulary.spec.ts",
+    "entrypoint/backlog/project.json",
+    "docs/plan/stealth-browser/evidence/release-gate-fixes.md",
+    "docs/plan/stealth-browser/evidence/release-gate-fixes.dry.json"
   ]
 }

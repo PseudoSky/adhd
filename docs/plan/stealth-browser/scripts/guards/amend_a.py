@@ -291,11 +291,276 @@ def am_tlv_reach(slug, p):
     return not miss and ev.get("process_spawn_mocked") is True and "9222" not in cmds and ev.get("real_chrome_launched") is False and '"input"' in cmds and not dup, f"checks missing/not PASS {miss}; spawn mocked={ev.get('process_spawn_mocked')}; 9222 used={'9222' in cmds}; data.input envelope used={'\"input\"' in cmds}; bogus op id lines {len(dup)}"
 
 
+# ---------------------------------------------------------------- release amendment: release-gate-fixes + release-readiness .1/.5/.6
+RGF_WIRING_SRC = f"{AM_WIRING}/check-test-wiring.mjs"
+RGF_DRY_CACHE = f"{PLAN}/evidence/release-gate-fixes.dry.json"
+# paths the heavy release:dry comparison and cache key ignore: plan bookkeeping that every state legitimately rewrites
+RGF_BOOKKEEPING = (f"{PLAN}/events.ndjson", f"{PLAN}/state.json", f"{PLAN}/evidence/", "docs/plan/plan-index.json")
+RR_BASELINE = "6034633c6"  # the commit whose APPROVAL documents carry the human's verbatim quotes
+_SEMVER = re.compile(r"^\^?(\d+)\.(\d+)\.(\d+)$")
+
+
+def _semver(v):
+    m = _SEMVER.match(str(v or "").strip())
+    return tuple(int(x) for x in m.groups()) if m else None
+
+
+def _rgf_bookkeeping(path):
+    return any(path == b or (b.endswith("/") and path.startswith(b)) for b in RGF_BOOKKEEPING)
+
+
+def _rgf_dirty():
+    """{path: git blob hash of the working file or 'deleted'} for every modified or untracked path outside the bookkeeping set."""
+    out = {}
+    names = set(git("diff", "HEAD", "--name-only").splitlines()) | set(git("ls-files", "--others", "--exclude-standard").splitlines())
+    for f in sorted(n for n in names if n and not _rgf_bookkeeping(n)):
+        out[f] = git("hash-object", "--", f) if exists(f) else "deleted"
+    return out
+
+
+def _rgf_key(dirty):
+    """Identity of the code the dry run sees: HEAD's tree minus docs/plan (the cache file lives there, committing it must not invalidate it) plus every dirty path's content."""
+    head = git("ls-tree", "-r", "HEAD", "--", ".", ":(exclude)docs/plan")
+    return hashlib.sha256((head + "\n" + json.dumps(dirty, sort_keys=True)).encode()).hexdigest()
+
+
+def _rgf_dry_cached():
+    c = jread(RGF_DRY_CACHE, {}) or {}
+    key = _rgf_key(_rgf_dirty())
+    return c.get("key") == key and c.get("rc") == 0 and c.get("clean") is True, f"cached dry run key match={c.get('key') == key} rc={c.get('rc')} clean={c.get('clean')}"
+
+
+def _rgf_dry_static():
+    """package.json `release:dry` exports ADHD_NX_VERSION_DRY_RUN=1 before its first command, so every nx invocation of the chain (build, version, publish) inherits it."""
+    s = ((jread("package.json", {}) or {}).get("scripts") or {}).get("release:dry", "")
+    return re.match(r"\s*export\s+ADHD_NX_VERSION_DRY_RUN=1\s*(&&|;)", s) is not None, "package.json scripts['release:dry'] must begin with `export ADHD_NX_VERSION_DRY_RUN=1 &&`"
+
+
+def _rgf_spec_core(slug, n, spec, tokens):
+    path = f"{AM_WIRING}/{spec}"
+    if not exists(path):
+        return False, f"{path} missing"
+    txt = read(path)
+    bad = []
+    if not all(rx.search("\n".join(txt.splitlines()[:60])) for rx in AM_HEADER_PARTS):
+        bad.append("header lacks guards:/tier: S/cites: in its first 60 lines")
+    if TICKET not in txt or f"[{slug}.{n}]" not in txt:
+        bad.append(f"does not cite {TICKET} and [{slug}.{n}]")
+    miss = [t for t in tokens if t.lower() not in txt.lower()]
+    if miss:
+        bad.append(f"missing tokens {miss}")
+    if f"{AM_WIRING}/{spec}" not in ((jread("package.json", {}) or {}).get("scripts") or {}).get("test:build-tools", ""):
+        bad.append("not listed in package.json scripts['test:build-tools'] (the lane that runs it)")
+    return not bad, "; ".join(bad) or "ok"
+
+
+def am_rgf_spec(slug, p):
+    """A wiring spec exists with the testing-standard header, cites its criterion id, carries its tokens, is in the test:build-tools lane, passes `node --test`, and check-lane-reachability stays 0."""
+    n = p["n"]
+    ok, why = _rgf_spec_core(slug, n, p["spec"], p.get("tokens", []))
+    if not ok:
+        return False, why
+    if p.get("static") == "dry":
+        ok, why = _rgf_dry_static()
+        if not ok:
+            return False, why
+    rc, out = sh(["node", "--test", f"{AM_WIRING}/{p['spec']}"], timeout=600)
+    if rc != 0:
+        return False, f"node --test {p['spec']} exit {rc}: {out[-250:]}"
+    rc, out = sh(["node", f"{AM_WIRING}/check-lane-reachability.mjs"], timeout=300)
+    return rc == 0, f"check-lane-reachability exit {rc}: {out[-200:]}"
+
+
+def am_rgf_wiring(slug, p):
+    """check-test-wiring.mjs honours plugin-inferred `test` targets through the project graph, keeps its failing exit and has no project allow-list, and exits 0 on the tree."""
+    if not exists(f"{AM_WIRING}/check-test-wiring.spec.mjs"):
+        return False, "check-test-wiring.spec.mjs missing (the fix's own proof)"
+    src = code_lines(read(RGF_WIRING_SRC))
+    bad = []
+    if not re.search(r"project[-_ ]?graph|createProjectGraph\w*|readCachedProjectGraph|show\W+project", src, re.I):
+        bad.append("does not consult the Nx project graph / `nx show project` for inferred targets")
+    if "process.exit(1)" not in src:
+        bad.append("lost its exit 1 on a gap (gate relaxed)")
+    if re.search(r"agent-store-(runtime|prompts)", src):
+        bad.append("names agent-store-* (allow-list instead of a root-cause fix)")
+    if bad:
+        return False, "; ".join(bad)
+    rc, out = sh(["node", RGF_WIRING_SRC], timeout=600)
+    return rc == 0, f"check-test-wiring exit {rc}: {out[-250:]}"
+
+
+def am_rgf_dry(slug, p):
+    """`pnpm release:dry` with ADHD_NX_VERSION_DRY_RUN NOT pre-set exits 0, does real dry work (not 'nothing to version/publish'), and leaves `git status --porcelain` identical (bookkeeping paths ignored); a passing run is cached by code identity in evidence/release-gate-fixes.dry.json."""
+    ok, why = _rgf_dry_static()
+    if not ok:
+        return False, why
+    pre = [f for f in (f"{AM_WIRING}/check-test-wiring.spec.mjs", f"{AM_WIRING}/release-dry-clean.spec.mjs", _am_ev("release-gate-fixes")) if not exists(f)]
+    if pre:
+        return False, f"work product missing before the heavy run: {pre}"
+    rc, out = sh(["node", RGF_WIRING_SRC], timeout=300)
+    if rc != 0:
+        return False, f"check-test-wiring exit {rc} (fix 1 not in): {out[-160:]}"
+    if re.search(r"""['"]tests['"]\s*,\s*['"]fixtures['"]""", read("entrypoint/decompile-cli/test/unit/lib/validators/local/index.spec.ts")):
+        return False, "decompile-cli index.spec.ts still builds the old fixtures path (fix 3 not in)"
+    before = _rgf_dirty()
+    key = _rgf_key(before)
+    c = jread(RGF_DRY_CACHE, {}) or {}
+    if c.get("key") == key and c.get("rc") == 0 and c.get("clean") is True:
+        return True, "cached green for this code identity"
+    snap = {f: open(f, "rb").read() for f in before if exists(f)}
+    env = {k: v for k, v in os.environ.items() if k not in ("ADHD_NX_VERSION_DRY_RUN", "RELEASE_RUN_TOKEN")}
+    env.update({"CI": "true", "NX_NO_CLOUD": "true"})
+    try:
+        r = subprocess.run(["pnpm", "release:dry"], capture_output=True, text=True, timeout=3600, env=env)
+        rc, out = r.returncode, (r.stdout or "") + (r.stderr or "")
+    except subprocess.TimeoutExpired:
+        rc, out = 124, "timeout after 3600s"
+    after = _rgf_dirty()
+    new = sorted(set(after) - set(before))
+    changed = sorted(f for f in before if after.get(f) != before[f])
+    for f in new:  # restore only what the run dirtied; never touch a path that was dirty before (it is rewritten from the snapshot below)
+        if f in git("ls-files", "--", f).splitlines():
+            git("restore", "--", f)
+        elif exists(f):
+            os.remove(f)
+    for f in changed:
+        if f in snap:
+            with open(f, "wb") as fh:
+                fh.write(snap[f])
+    vacuous = "nothing to version/publish" in out or not re.search(r"dry-?run|would (write|publish)", out, re.I)
+    clean = not new and not changed
+    with open(RGF_DRY_CACHE, "w", encoding="utf8") as fh:
+        json.dump({"key": key, "rc": rc, "clean": clean, "vacuous": vacuous, "dirtied": new + changed, "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "tail": out[-400:]}, fh, indent=1)
+    if rc != 0 or vacuous or not clean:
+        return False, f"pnpm release:dry exit {rc}; vacuous={vacuous}; tracked/untracked paths it dirtied (restored) {(new + changed)[:6]}; tail {out[-200:]!r}"
+    return True, "ok"
+
+
+def am_rgf_decompile(slug, p):
+    """decompile-cli's index.spec.ts resolves its fixtures from test/fixtures (the directory exists) and `nx run decompile-cli:test --skip-nx-cache` exits 0."""
+    code = code_lines(read("entrypoint/decompile-cli/test/unit/lib/validators/local/index.spec.ts"))
+    m = re.search(r"fixturesDir\s*=\s*([^;\n]+)", code)
+    if not m or re.search(r"""['"]tests['"]""", m.group(1)) or "fixtures" not in m.group(1):
+        return False, f"fixturesDir is {m.group(1) if m else 'undefined'!r}: it must resolve to entrypoint/decompile-cli/test/fixtures, not the old src/tests layout"
+    if not os.path.isdir("entrypoint/decompile-cli/test/fixtures") or not os.listdir("entrypoint/decompile-cli/test/fixtures"):
+        return False, "entrypoint/decompile-cli/test/fixtures is missing or empty"
+    return _am_gate("decompile-cli", ["test"], ["--skip-nx-cache"])
+
+
+def am_rgf_backlog(slug, p):
+    """The evidence carries a `ROOT-CAUSE backlog: <mechanism>` line, `nx run backlog:test --skip-nx-cache` exits 0, and the end-to-end release:dry run (criterion .4) is green for this code identity."""
+    ev = read(_am_ev(slug))
+    m = re.search(r"^ROOT-CAUSE backlog:[ \t]*(.{60,})$", ev, re.M)
+    if not m or re.search(r"(?i)\b(tbd|unknown|not established|unclear|todo)\b", m.group(1)):
+        return False, f"evidence/{slug}.md has no mechanism-bearing `ROOT-CAUSE backlog: ...` line"
+    ok, why = _am_gate("backlog", ["test"], ["--skip-nx-cache"])
+    if not ok:
+        return False, why
+    return _rgf_dry_cached()
+
+
+def am_rr_gates(slug, p):
+    """Release-readiness gate evidence: every `EXIT <command>: <code>` token, the affected gate based on the merge-base of HEAD with LOCAL main (`BASE <sha>` equals `git merge-base HEAD main`), and no `--base=origin/main`."""
+    ev = read(f"{PLAN}/{p['file']}")
+    miss = [k for k in p["tokens"] if k not in ev]
+    base = re.search(r"^BASE ([0-9a-f]{7,40})\s*$", ev, re.M)
+    mb = git("merge-base", "HEAD", "main")
+    rec = git("rev-parse", base.group(1)) if base else ""
+    bad = []
+    if not ev:
+        bad.append("evidence missing")
+    if not base or not mb or rec != mb:
+        bad.append(f"BASE line {base.group(1) if base else None!r} is not `git merge-base HEAD main` ({mb[:12]})")
+    if "git merge-base HEAD main" not in ev:
+        bad.append("evidence does not show the `git merge-base HEAD main` base expression")
+    if "--base=origin/main" in ev:
+        bad.append("evidence still uses the stale --base=origin/main")
+    return not miss and not bad, f"missing tokens {miss}; {bad}"
+
+
+def am_rr_order(slug, p):
+    """release-readiness/release-order.md orders the release (1 publish engine-runtime, 2 bump stealth-search's range then check:release-ranges) with consistent versions, ranges and source evidence."""
+    t = read(f"{PLAN}/{p['file']}")
+    if not t:
+        return False, f"{p['file']} missing"
+    lines = t.splitlines()
+
+    def block(n):
+        start = next((i for i, ln in enumerate(lines) if re.match(rf"\s*{n}[.)]\s", ln)), None)
+        if start is None:
+            return None, ""
+        end = next((j for j in range(start + 1, len(lines)) if re.match(r"\s*\d+[.)]\s", lines[j]) or lines[j].startswith("#")), len(lines))
+        return start, "\n".join(lines[start:end])
+
+    def kv(k):
+        m = re.search(rf"^{k}:[ \t]*(\S+)[ \t]*$", t, re.M)
+        return m.group(1) if m else None
+    bad = []
+    s1, b1 = block(1)
+    s2, b2 = block(2)
+    if s1 is None or s2 is None or s1 >= s2:
+        bad.append("numbered items 1 and 2 missing or out of order")
+    bad += [f"item 1 lacks {k}" for k in ("publish", "@adhd/apigen-engine-runtime") if k not in b1.lower()]
+    bad += [f"item 2 lacks {k}" for k in ("bump", "entrypoint/stealth-search", "@adhd/stealth-core-browser", "@adhd/stealth-search", "check:release-ranges") if k not in b2.lower()]
+    bad += [f"missing {k}" for k in ("buildApigenPackage", "cutover-apigen-engine-runtime-0.3.5.tgz", "c4afebb0", "evidence/cutover/tarballs.json") if k not in t]
+    reg, wt, cur, plan_v, plan_r = (kv(k) for k in ("REGISTRY-VERSION", "WORKTREE-VERSION", "CURRENT-RANGE", "PLANNED-VERSION", "PLANNED-RANGE"))
+    if reg != "0.3.5":
+        bad.append(f"REGISTRY-VERSION is {reg!r}, expected 0.3.5")
+    eng = (jread("packages/apigen/apigen-engine-runtime/package.json", {}) or {}).get("version")
+    if wt not in (eng, plan_v) or not wt:
+        bad.append(f"WORKTREE-VERSION {wt!r} is neither engine-runtime's package.json version {eng!r} nor the planned one")
+    pv, rv = _semver(plan_v), _semver(reg)
+    if not pv or not rv or pv <= rv:
+        bad.append(f"PLANNED-VERSION {plan_v!r} must be a version greater than the registry's {reg!r}")
+    if plan_r != f"^{plan_v}":
+        bad.append(f"PLANNED-RANGE {plan_r!r} must be ^{plan_v}")
+    ss = (jread("entrypoint/stealth-search/package.json", {}) or {}).get("dependencies", {}).get("@adhd/apigen-engine-runtime")
+    if ss not in (cur, plan_r):
+        bad.append(f"entrypoint/stealth-search/package.json range {ss!r} is neither CURRENT-RANGE {cur!r} nor PLANNED-RANGE {plan_r!r}")
+    dry = read(f"{PLAN}/release-readiness/release-dry.log.md") + read(_am_ev("release-readiness"))
+    seen = set(re.findall(r"apigen-engine-runtime[^\n]*?(?:bumping to|would write)\s+v?(\d+\.\d+\.\d+)", dry)) | set(re.findall(r"(?:bumping to|would write)\s+v?(\d+\.\d+\.\d+)[^\n]*apigen-engine-runtime", dry)) | set(re.findall(r"@adhd/apigen-engine-runtime@(\d+\.\d+\.\d+)", dry))
+    if plan_v not in seen:
+        bad.append(f"the release:dry output in release-readiness/ shows engine-runtime versions {sorted(seen)}, not PLANNED-VERSION {plan_v!r}")
+    src = read("packages/apigen/apigen-engine-runtime/src/lib/build-apigen-package.ts") + "\n" + read("packages/apigen/apigen-engine-runtime/src/index.ts")
+    if not re.search(r"export\s+(async\s+)?function\s+buildApigenPackage", read("packages/apigen/apigen-engine-runtime/src/lib/build-apigen-package.ts")) or "build-apigen-package" not in read("packages/apigen/apigen-engine-runtime/src/index.ts"):
+        bad.append("buildApigenPackage is not defined in engine-runtime's src/lib/build-apigen-package.ts and re-exported from src/index.ts")
+    return not bad, "; ".join(bad) or "ok"
+
+
+def am_rr_approvals(slug, p):
+    """The APPROVAL documents name the three approved packages in their summary, no longer name the superseded package or 'exactly TWO/ONE' outside the human's quotes, carry a dated `Summary corrected` line, and every double-quoted segment of 6034633c6 is byte-identical."""
+    bad = []
+    for rel in p["files"]:
+        cur = read(f"{PLAN}/{rel}")
+        old = git("show", f"{RR_BASELINE}:{PLAN}/{rel}")
+        if not cur or not old:
+            bad.append(f"{rel}: current={bool(cur)} baseline={bool(old)}")
+            continue
+        quotes = re.findall(r'"[^"\n]{8,}"', old)
+        gone = [q[:50] for q in quotes if q not in cur]
+        outside = re.sub(r'"[^"\n]*"', "", cur)
+        summary = cur.split("## Human approval carried by the request")[0]
+        names = [n for n in p["names"] if n not in summary]
+        if gone:
+            bad.append(f"{rel}: verbatim quotes changed or lost {gone}")
+        if names:
+            bad.append(f"{rel}: summary does not name {names}")
+        if re.search(r"(@adhd|entrypoint)/stealth-browser(?![\w/-])", outside):
+            bad.append(f"{rel}: still names the superseded @adhd/stealth-browser (or entrypoint/stealth-browser) outside a quote")
+        if re.search(r"(?i)exactly\s+(one|two)\b", outside):
+            bad.append(f"{rel}: still says 'exactly ONE/TWO' outside a quote")
+        if not re.search(r"^[\s>*_-]*Summary corrected 2026-10-\d\d\b", outside, re.M):
+            bad.append(f"{rel}: no `Summary corrected 2026-10-23` line")
+    return not bad, "; ".join(bad) or "ok"
+
+
 AM_FN = {
     "layout": am_layout, "helpers": am_helpers, "config": am_config, "scanners": am_scanners, "headers": am_headers, "docs": am_docs, "gates": am_gates,
     "regress": am_regress, "own": am_own, "evidence": am_evidence, "text": am_text, "spec": am_spec, "repeat_guard": am_repeat_guard,
     "merge_commit": am_merge_commit, "merge_union": am_merge_union, "merge_lock": am_merge_lock, "merge_build": am_merge_build, "merge_own": am_merge_own,
     "tlv_fresh": am_tlv_fresh, "tlv_reach": am_tlv_reach,
+    "rgf_spec": am_rgf_spec, "rgf_wiring": am_rgf_wiring, "rgf_dry": am_rgf_dry, "rgf_decompile": am_rgf_decompile, "rgf_backlog": am_rgf_backlog,
+    "rr_gates": am_rr_gates, "rr_order": am_rr_order, "rr_approvals": am_rr_approvals,
 }
 
 
