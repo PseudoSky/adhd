@@ -7,9 +7,15 @@
 | Timestamp | 2026-10-12 |
 | Backlog item | `8468f7b1-8adc-4237-9986-21ea1e27c537` |
 
+## Summary
+
+This approval covers the three new packages of the plan: `@adhd/stealth-search`, `@adhd/stealth-core-browser` and `@adhd/resilience-core-tripwire`.
+
+Summary corrected 2026-10-23.
+
 ## Human approval carried by the request
 
-The human's verbatim request ("must be built with the workspace generator and match the entrypoint structure", package "called @adhd/stealth-browser and live in entrypoints") approves creating exactly ONE new package: `entrypoint/stealth-browser`. No other new package is approved. The nested `@adhd/cdp-connection` package proposed by the existing agent-search plan is not created; it becomes `src/lib/cdp/`.
+The human's verbatim request ("must be built with the workspace generator and match the entrypoint structure", package "called @adhd/stealth-browser and live in entrypoints") approves creating the new packages named in the summary above. No other new package is approved. The nested `@adhd/cdp-connection` package proposed by the existing agent-search plan is not created; it becomes `src/lib/cdp/`.
 
 ## Not approved (human gates remain)
 

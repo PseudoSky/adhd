@@ -4,11 +4,17 @@ APPROVER: Dispatcher (run dispatch-2026-10-12-ca18), relaying the human's decisi
 DATE: 2026-10-12
 BACKLOG: `8468f7b1-8adc-4237-9986-21ea1e27c537`
 
+## Summary
+
+This approval covers the three new packages of the plan: `@adhd/stealth-search`, `@adhd/stealth-core-browser` and `@adhd/resilience-core-tripwire`.
+
+Summary corrected 2026-10-23.
+
 ## Human approval carried by the request
 
 The human's verbatim request: "Implement tripwire package in this plan covering all 3"
 
-It approves creating ONE additional new package, `@adhd/resilience-core-tripwire` at `packages/resilience/resilience-core-tripwire`, in this plan. "All 3" are the three tripwire consumers: the reverse-apis request-builder gate, the reverse-apis unlock tool and the agent-search tripwire. Together with `entrypoint/stealth-browser` (see `APPROVAL.md`) the plan now has exactly TWO approved new packages. No third project.json may be added.
+It approves creating ONE additional new package, `@adhd/resilience-core-tripwire` at `packages/resilience/resilience-core-tripwire`, in this plan. "All 3" are the three tripwire consumers: the reverse-apis request-builder gate, the reverse-apis unlock tool and the agent-search tripwire. The other new packages approved for this plan are listed in the summary above and in `APPROVAL.md`. No project.json beyond those packages may be added.
 
 The same request direction also states: "Preserve every FEATURE and failsafe ... Legacy code, legacy tests and legacy names are not constraints" and "Group kill add up front if its genuinely a useful feature, and dont write it one way and then rewrite it later with the versioning plan, we're going to run this e2e as quickly as possible".
 
