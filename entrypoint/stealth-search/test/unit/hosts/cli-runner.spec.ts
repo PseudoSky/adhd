@@ -1,7 +1,7 @@
 /**
  * guards: runCli exits 0 with empty output, exits before the JSON is written, or mis-parses the one-shot and human flags
  * tier: S
- * cites: ticket 8468f7b1 [search-hosts.5] [search-hosts.10] [search-hosts.13] [search-hosts.16] [search-hosts.18] [search-hosts.21]
+ * cites: ticket 8468f7b1 [audit-fixes.1] [search-hosts.5] [search-hosts.10] [search-hosts.13] [search-hosts.16] [search-hosts.18] [search-hosts.21]
  * The CLI runner (`runCli`) over the real apigen package of the eleven verbs with fake verbs and
  * fake process edges. Ticket 8468f7b1 · plan state search-hosts.
  *
@@ -18,6 +18,45 @@ import { BUILD_TIMEOUT_MS, SAMPLES, cliHarness, fakeVerbs, packageFor } from '..
 
 afterEach(() => {
   vi.useRealTimers()
+})
+
+describe('CLI runner never rejects [audit-fixes.1] P31', () => {
+  it(
+    'a build failure whose stderr line cannot be written still resolves with the typed exit status and calls exit once',
+    async () => {
+      const h = cliHarness(fakeVerbs(vi.fn), {
+        build: async () => {
+          throw new Error('boom while building')
+        },
+        stderr: () => {
+          throw new Error('stderr is closed')
+        },
+      })
+      const code = await runCli(['chromeStatus'], h.deps)
+      expect(code).toBe(exitCodeFor('HOST_BOOT_FAILED'))
+      expect(h.exits).toEqual([code])
+    },
+    BUILD_TIMEOUT_MS
+  )
+
+  it(
+    'an exit hook that throws does not turn into a rejection',
+    async () => {
+      const h = cliHarness(fakeVerbs(vi.fn), {
+        build: async () => {
+          throw new Error('boom while building')
+        },
+        stderr: () => {
+          throw new Error('stderr is closed')
+        },
+        exit: () => {
+          throw new Error('exit refused')
+        },
+      })
+      await expect(runCli(['chromeStatus'], h.deps)).resolves.toBe(exitCodeFor('HOST_BOOT_FAILED'))
+    },
+    BUILD_TIMEOUT_MS
+  )
 })
 
 describe('CLI runner: one JSON document, flushed, handles closed, then exit [search-hosts.18]', () => {

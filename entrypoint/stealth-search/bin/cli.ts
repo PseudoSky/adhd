@@ -19,5 +19,14 @@ if (nodeMajor < 22 || (nodeMajor === 22 && nodeMinor < 5)) {
 } else {
   const { runCli } = require('../src/cli.js') as typeof import('../src/cli')
   const { initSearchTelemetry } = require('../src/telemetry.js') as typeof import('../src/telemetry')
-  void runCli(process.argv.slice(2), { initTelemetry: initSearchTelemetry })
+  void runCli(process.argv.slice(2), { initTelemetry: initSearchTelemetry }).then(
+    (code) => {
+      process.exitCode = code
+    },
+    (e: unknown) => {
+      // runCli does not reject; if it ever does, end with one typed line instead of an unhandled rejection.
+      process.stderr.write(`HOST_BOOT_FAILED: ${(e instanceof Error ? e.message : String(e)).replace(/\s*\r?\n\s*/g, ' ')}\n`)
+      process.exitCode = 79
+    },
+  )
 }

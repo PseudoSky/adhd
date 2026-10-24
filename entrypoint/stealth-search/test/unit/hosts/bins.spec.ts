@@ -1,7 +1,7 @@
 /**
  * guards: a bin loads the host graph before the Node preflight, reaches telemetry outside './telemetry.js', or a host file reads the environment
  * tier: S
- * cites: ticket 8468f7b1 [search-hosts.9] [search-hosts.11] [search-hosts.15] [search-hosts.16] [search-hosts.19]
+ * cites: ticket 8468f7b1 [audit-fixes.1] [search-hosts.9] [search-hosts.11] [search-hosts.15] [search-hosts.16] [search-hosts.19]
  * The two bins: the Node >= 22.5 preflight runs before the host graph is loaded, telemetry is
  * reached only through './telemetry.js', and no host file reads the environment. Ticket 8468f7b1 ·
  * plan state search-hosts.
@@ -39,6 +39,12 @@ for (const bin of ['bin/cli.ts', 'bin/mcp.ts']) {
       expect(written).toHaveLength(1)
       expect(written[0]).toMatch(/^NODE_TOO_OLD: Node\.js 20\.19\.0 is too old; stealth-search needs Node\.js 22\.5 or newer\n$/)
       expect(process.exitCode).toBe(12)
+    })
+
+    it('[audit-fixes.1] P31 the bin never discards the host promise: it applies the status and handles a rejection', () => {
+      const code = codeOf(read(bin))
+      expect(code).toMatch(/(?:runCli|mcpMain)\([\s\S]*?\)\.then\(/)
+      if (bin === 'bin/cli.ts') expect(code).toMatch(/process\.exitCode = code/)
     })
 
     it('the comparison against 22.5 comes before any require of the host graph, and telemetry is reached through ./telemetry.js only', () => {

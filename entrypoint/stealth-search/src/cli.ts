@@ -569,7 +569,8 @@ const stdoutSink: OutputSink = {
 /**
  * Run the CLI once: parse, boot, dispatch, write the one JSON document, close the browser handles
  * and `exit`. Returns the status it exited with (the injected `exit` of a spec returns). Order of a
- * successful run: write stdout, flush it, close the handles, `exit(0)`.
+ * successful run: write stdout, flush it, close the handles, `exit(0)`. The promise never rejects: a failure of
+ * the failure path itself ends in a last-resort typed line and exit status.
  */
 export async function runCli(argv: readonly string[], deps: CliDeps = {}): Promise<number> {
   const sink = deps.stdout ?? stdoutSink
@@ -685,7 +686,19 @@ export async function runCli(argv: readonly string[], deps: CliDeps = {}): Promi
     const { err: consoleErr } = await withCapturedConsole(() => runPlugin(input))
     return await finish(outcomeOf(capture, entry, verbInput, consoleErr, settings.pretty), settings.monitor ? startedAt : undefined)
   } catch (e) {
-    return failure(e)
+    try {
+      return await failure(e)
+    } catch (again) {
+      // The failure path itself threw (a closed stderr, an exit that throws): runCli still never rejects. The one
+      // typed line goes out if it can, the handles are released, and the process exits with the code's status.
+      const err = asHostError(again)
+      const code = exitCodeFor(err.code)
+      try { warn(renderHostError(err)) } catch { /* nothing left to write to */ }
+      try { await closeHandles() } catch { /* best effort */ }
+      try { exit(code) } catch { /* an injected exit may throw; the status is still returned */ }
+      uninstall?.()
+      return code
+    }
   }
 }
 
