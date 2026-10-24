@@ -4,10 +4,10 @@
  * Reads a SQLite fixture created in the OS temp dir; a spy on console proves no real profile path is used.
  * guards: reads all cookies ordered by last access desc with converted timestamps
  * tier: S
- * cites: 8468f7b1 [tests-unit-data.1] [tests-unit-data.2] [tests-unit-data.3] [tests-unit-data.4] [port-fixes.3]
+ * cites: 8468f7b1 [tests-unit-data.1] [tests-unit-data.2] [tests-unit-data.3] [tests-unit-data.4] [port-fixes.3] [audit-fixes.5]
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { CookieClient } from '../../../src/lib/storage/cookies.js'
+import { CookieClient, cookieHostKeys } from '../../../src/lib/storage/cookies.js'
 import { chromeMicros, makeProfile, type Fixture } from '../../helpers/domains-storage/profile-fixture.js'
 
 const DDL = `CREATE TABLE cookies (name TEXT, value TEXT, host_key TEXT, path TEXT,
@@ -81,5 +81,44 @@ describe('8468f7b1 AC2 [tests-unit-data.1] CookieClient', () => {
     try {
       expect(() => new CookieClient(empty.root).getCookies()).toThrow()
     } finally { empty.cleanup() }
+  })
+})
+
+describe('8468f7b1 [audit-fixes.5] P25 cookies are matched to a host by domain, not by substring', () => {
+  let fx: Fixture
+  beforeEach(() => {
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    fx = makeProfile()
+    const d = fx.db('Cookies', [DDL])
+    const ins = d.prepare('INSERT INTO cookies VALUES (?,?,?,?,?,?,?,?,?,?,?,?)')
+    const hosts = ['example.com', '.example.com', 'www.example.com', '.www.example.com', 'notexample.com', '.notexample.com', 'example.com.evil.net', 'sub.www.example.com', 'other.org', '.com']
+    hosts.forEach((h, i) => ins.run(`c${i}`, 'v', h, '/', chromeMicros(1000), chromeMicros(2000 + i), 0, 0, 0, 0, 0, 0))
+    d.close()
+  })
+  afterEach(() => { fx.cleanup(); vi.restoreAllMocks() })
+
+  it('www.example.com matches its own host-only and domain cookies and its parents, never a lookalike', () => {
+    const hosts = new CookieClient(fx.root).getCookiesForHostname('www.example.com').map((c) => c.host).sort()
+    expect(hosts).toEqual(['.example.com', '.www.example.com', 'www.example.com'])
+  })
+
+  it('example.com does not match notexample.com, example.com.evil.net or a subdomain host-only cookie', () => {
+    const hosts = new CookieClient(fx.root).getCookiesForHostname('example.com').map((c) => c.host).sort()
+    expect(hosts).toEqual(['.example.com', 'example.com'])
+  })
+
+  it('a bare top-level domain cookie (.com) is not counted for a host under it', () => {
+    expect(new CookieClient(fx.root).getCookiesForHostname('example.com').some((c) => c.host === '.com')).toBe(false)
+  })
+
+  it('an empty hostname matches nothing', () => {
+    expect(new CookieClient(fx.root).getCookiesForHostname('')).toEqual([])
+  })
+
+  it('cookieHostKeys: host, then each dotted parent domain, never the bare top-level label; IPs match only themselves', () => {
+    expect(cookieHostKeys('A.b.Example.com.')).toEqual(['a.b.example.com', '.a.b.example.com', '.b.example.com', '.example.com'])
+    expect(cookieHostKeys('localhost')).toEqual(['localhost'])
+    expect(cookieHostKeys('127.0.0.1')).toEqual(['127.0.0.1'])
+    expect(cookieHostKeys('[::1]')).toEqual(['[::1]'])
   })
 })

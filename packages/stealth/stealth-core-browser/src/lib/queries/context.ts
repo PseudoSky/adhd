@@ -11,7 +11,7 @@ export interface PageContext {
   historyVisits: number
 }
 
-export async function getPageContext(targetId: string, cdpHost = '127.0.0.1:9222'): Promise<PageContext | null> {
+export async function getPageContext(targetId: string, cdpHost = '127.0.0.1:9222', profileDir?: string): Promise<PageContext | null> {
   const cdp = new CdpClient(cdpHost)
   const targetInfo = await cdp.getTargetInfo(targetId)
   if (!targetInfo?.url) return null
@@ -21,13 +21,12 @@ export async function getPageContext(targetId: string, cdpHost = '127.0.0.1:9222
   let historyVisits = 0
 
   try {
-    const cookies = new CookieClient().getCookies()
     const hostname = new URL(targetInfo.url).hostname
-    cookieCount = cookies.filter((c) => c.host.includes(hostname)).length
+    cookieCount = new CookieClient(profileDir).getCookiesForHostname(hostname).length
   } catch { /* best effort */ }
 
   try {
-    const info = new HistoryClient().getUrlInfo(targetInfo.url)
+    const info = new HistoryClient(profileDir).getUrlInfo(targetInfo.url)
     if (info) {
       hasHistory = true
       historyVisits = info.visitCount

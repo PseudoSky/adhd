@@ -75,7 +75,8 @@ export async function runChromeReaper(cfg: ChromeReaperConfig, overrides: Chrome
   const cdpHost = cfg.cdpHost ?? `127.0.0.1:${cfg.port}`
   const tickMs = cfg.tickMs ?? REAPER_TICK_MS
   const owner = createOwnershipStore({ stateDir: cfg.stateDir, port: cfg.port, logger: log })
-  const history = new HistoryClient()
+  // The history safety tier must read the profile this reaper guards, not the default one.
+  const history = new HistoryClient(cfg.profileDir)
 
   let retirer: IdleRetirer | null = null
   const host = createReaperHost({

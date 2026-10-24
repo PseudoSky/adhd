@@ -4,13 +4,16 @@
  * CdpClient, CookieClient and HistoryClient are faked; no Chrome, no profile, no network.
  * guards: returns null when the target is unknown (error path)
  * tier: S
- * cites: 8468f7b1 [tests-unit-data.1] [tests-unit-data.2] [tests-unit-data.3] [tests-unit-data.4]
+ * cites: 8468f7b1 [tests-unit-data.1] [tests-unit-data.2] [tests-unit-data.3] [tests-unit-data.4] [audit-fixes.5]
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const fake = vi.hoisted(() => ({
   info: null as null | { targetId: string; url: string; title: string },
+  /** What the cookie store answers for the page hostname (the host matching itself is proven against SQLite in cookies.spec). */
   cookies: [] as Array<{ host: string }>,
+  hostnames: [] as string[],
+  profiles: [] as Array<string | undefined>,
   cookieError: false,
   urlInfo: null as null | { visitCount: number },
   historyError: false,
@@ -24,11 +27,13 @@ vi.mock('../../../src/lib/domains/index.js', () => ({
 }))
 vi.mock('../../../src/lib/storage/cookies.js', () => ({
   CookieClient: class {
-    getCookies() { if (fake.cookieError) throw new Error('no cookies db'); return fake.cookies }
+    constructor(profileDir?: string) { fake.profiles.push(profileDir) }
+    getCookiesForHostname(hostname: string) { fake.hostnames.push(hostname); if (fake.cookieError) throw new Error('no cookies db'); return fake.cookies }
   },
 }))
 vi.mock('../../../src/lib/storage/history.js', () => ({
   HistoryClient: class {
+    constructor(profileDir?: string) { fake.profiles.push(profileDir) }
     getUrlInfo(url: string) { fake.asked.push(url); if (fake.historyError) throw new Error('no history db'); return fake.urlInfo }
   },
 }))
@@ -38,7 +43,7 @@ import { getPageContext } from '../../../src/lib/queries/context.js'
 describe('8468f7b1 AC2 [tests-unit-data.1] getPageContext', () => {
   beforeEach(() => {
     fake.info = { targetId: 'T', url: 'https://www.a.test/page', title: 'A' }
-    fake.cookies = []; fake.cookieError = false; fake.urlInfo = null; fake.historyError = false; fake.asked = []
+    fake.cookies = []; fake.hostnames = []; fake.profiles = []; fake.cookieError = false; fake.urlInfo = null; fake.historyError = false; fake.asked = []
   })
 
   it('returns null when the target is unknown (error path)', async () => {
@@ -53,7 +58,7 @@ describe('8468f7b1 AC2 [tests-unit-data.1] getPageContext', () => {
   })
 
   it('[fs-186] counts cookies and history visits for the page', async () => {
-    fake.cookies = [{ host: 'www.a.test' }, { host: 'x.www.a.test' }, { host: 'elsewhere.test' }]
+    fake.cookies = [{ host: 'www.a.test' }, { host: '.a.test' }]
     fake.urlInfo = { visitCount: 3 }
     expect(await getPageContext('T')).toMatchObject({ cookieCount: 2, hasHistory: true, historyVisits: 3 })
     // each lookup is best effort: a failing cookie store does not hide the history facts
@@ -69,13 +74,20 @@ describe('8468f7b1 AC2 [tests-unit-data.1] getPageContext', () => {
   })
 
   it('combines target info, matching cookie count and history visits', async () => {
-    fake.cookies = [{ host: 'www.a.test' }, { host: '.www.a.test' }, { host: 'other.test' }]
+    fake.cookies = [{ host: 'www.a.test' }, { host: '.www.a.test' }]
     fake.urlInfo = { visitCount: 7 }
     const ctx = await getPageContext('T', 'h:1')
     expect(ctx).toEqual({
       targetId: 'T', url: 'https://www.a.test/page', title: 'A', cookieCount: 2, hasHistory: true, historyVisits: 7,
     })
     expect(fake.asked).toEqual(['T', 'https://www.a.test/page'])
+  })
+
+  it('[audit-fixes.5] P24 reads cookies and history from the given profile, and P25 asks the store for the page hostname', async () => {
+    fake.urlInfo = { visitCount: 1 }
+    await getPageContext('T', 'h:1', '/profiles/custom')
+    expect(fake.profiles).toEqual(['/profiles/custom', '/profiles/custom'])
+    expect(fake.hostnames).toEqual(['www.a.test'])
   })
 
   it('hasHistory is false when the url was never visited', async () => {

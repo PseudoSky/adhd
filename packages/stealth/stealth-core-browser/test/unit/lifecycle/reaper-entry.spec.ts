@@ -10,10 +10,13 @@
  * `createIdleRetirer` and replaces only `serveBackend`; CDP, kills and history
  * act on the simulated machine (manager-world). No socket, no process.
  * guards: serveBackend gets the socket, the host handler and both connection hooks
+ * guards: the history safety tier reads the profile the reaper guards, not the default profile
  * tier: S
- * cites: 8468f7b1 [chrome-lifecycle.15]
+ * cites: 8468f7b1 [chrome-lifecycle.15] [audit-fixes.5]
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+const seen = vi.hoisted(() => ({ historyProfiles: [] as Array<string | undefined> }))
 
 vi.mock('node:fs', async () => (await import('../../helpers/lifecycle/manager-world.js')).fsModule())
 vi.mock('../../../src/lib/cdp/browser.js', async () => (await import('../../helpers/lifecycle/manager-world.js')).browserModule(vi.fn))
@@ -23,6 +26,9 @@ vi.mock('../../../src/lib/storage/history.js', async () => {
   const { world } = await import('../../helpers/lifecycle/manager-world.js')
   return {
     HistoryClient: class {
+      constructor(profileDir?: string) {
+        seen.historyProfiles.push(profileDir)
+      }
       isRecentlyUsed(): boolean {
         if (world.history instanceof Error) throw world.history
         return world.history
@@ -84,6 +90,26 @@ function retiredFlag(p: Promise<void>): { done: boolean } {
   void p.then(() => (f.done = true))
   return f
 }
+
+describe('8468f7b1 [audit-fixes.5] P24 the history tier reads the guarded profile', () => {
+  beforeEach(() => {
+    seen.historyProfiles.length = 0
+  })
+
+  it('a custom profileDir is handed to the HistoryClient', async () => {
+    world.chromeUp = true
+    const r = await start({ profileDir: '/profiles/custom' })
+    expect(seen.historyProfiles).toEqual(['/profiles/custom'])
+    await r.close()
+  })
+
+  it('no profileDir leaves the HistoryClient on the default profile', async () => {
+    world.chromeUp = true
+    const r = await start()
+    expect(seen.historyProfiles).toEqual([undefined])
+    await r.close()
+  })
+})
 
 describe('8468f7b1 [chrome-lifecycle.15] runChromeReaper serves the host', () => {
   it('serveBackend gets the socket, the host handler and both connection hooks', async () => {

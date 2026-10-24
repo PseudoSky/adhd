@@ -7,7 +7,7 @@
  * context queries) is replaced with a mock: no process, no socket, no Chrome.
  * guards: reports a stopped Chrome without asking for its version; an invalidEndpoint failure is a typed error told apart by its code
  * tier: S
- * cites: 8468f7b1 [tests-unit-surface.1] [tests-unit-surface.2] [fix-core-errors.2]
+ * cites: 8468f7b1 [tests-unit-surface.1] [tests-unit-surface.2] [fix-core-errors.2] [audit-fixes.5]
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -144,7 +144,7 @@ describe('checkChromeActivity', () => {
     })
     const r = await checkChromeActivity({ withinMinutes: 7 })
     expect(r.lastVisit).toMatchObject({ url: 'https://a.test/', visitTime: '2026-01-02T03:04:05.000Z' })
-    expect(lib.readActivity).toHaveBeenCalledWith('127.0.0.1:9222', 7)
+    expect(lib.readActivity).toHaveBeenCalledWith('127.0.0.1:9222', 7, undefined)
     expect(lib.noteManagerActivity).toHaveBeenCalledWith('127.0.0.1', 9222)
   })
 
@@ -155,11 +155,20 @@ describe('checkChromeActivity', () => {
 })
 
 describe('getPageContext', () => {
+  it('[audit-fixes.5] P24 passes a custom userDataDir to the context and activity reads', async () => {
+    lib.readContext.mockResolvedValue(null)
+    await getPageContext({ targetId: 'T1', userDataDir: '/profiles/custom' })
+    expect(lib.readContext).toHaveBeenCalledWith('T1', '127.0.0.1:9222', '/profiles/custom')
+    lib.readActivity.mockResolvedValue({ running: false, activeWebPages: 0, lastVisit: null })
+    await checkChromeActivity({ userDataDir: '/profiles/custom' })
+    expect(lib.readActivity).toHaveBeenLastCalledWith('127.0.0.1:9222', undefined, '/profiles/custom')
+  })
+
   it('returns found true with the context', async () => {
     const context = { url: 'https://a.test/', title: 't', cookieCount: 2, visitCount: 3 }
     lib.readContext.mockResolvedValue(context)
     expect(await getPageContext({ targetId: 'T1', port: 9333 })).toEqual({ found: true, context })
-    expect(lib.readContext).toHaveBeenCalledWith('T1', '127.0.0.1:9333')
+    expect(lib.readContext).toHaveBeenCalledWith('T1', '127.0.0.1:9333', undefined)
     expect(lib.noteManagerActivity).toHaveBeenCalledWith('127.0.0.1', 9333)
   })
 

@@ -49,12 +49,16 @@ export interface LaunchChromeInput {
 export interface CheckChromeActivityInput extends ChromeEndpointInput {
   /** A visit newer than this many minutes counts as recent use (default 2) */
   withinMinutes?: number
+  /** Chrome user data directory whose history is read (default: the dedicated CDP profile) */
+  userDataDir?: string
 }
 
 /** Input of getPageContext. */
 export interface GetPageContextInput extends ChromeEndpointInput {
   /** Target id of the page, as returned by listPageTargets */
   targetId: string
+  /** Chrome user data directory whose cookies and history are read (default: the dedicated CDP profile) */
+  userDataDir?: string
 }
 
 // `managed` is REQUIRED (`managed: boolean`), never an optional property. apigen's
@@ -218,7 +222,7 @@ export async function listPageTargets(input?: ChromeEndpointInput): Promise<Page
  */
 export async function checkChromeActivity(input?: CheckChromeActivityInput): Promise<ChromeActivityReport> {
   const cdpHost = resolveCdpHost(input)
-  const activity = await readChromeActivity(cdpHost, input?.withinMinutes)
+  const activity = await readChromeActivity(cdpHost, input?.withinMinutes, input?.userDataDir)
   noteActivity(input ?? {})
   return {
     ...activity,
@@ -233,7 +237,7 @@ export async function checkChromeActivity(input?: CheckChromeActivityInput): Pro
  */
 export async function getPageContext(input: GetPageContextInput): Promise<PageContextResult> {
   const cdpHost = resolveCdpHost(input)
-  const context = await readPageContext(input.targetId, cdpHost)
+  const context = await readPageContext(input.targetId, cdpHost, input.userDataDir)
   noteActivity(input ?? {})
   return { found: context !== null, context }
 }

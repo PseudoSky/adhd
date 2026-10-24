@@ -5,9 +5,10 @@ import type { CdpTargetInfo, ChromeVisit, ChromeActivity } from '../types.js'
 export async function checkChromeActivity(
   cdpHost = '127.0.0.1:9222',
   withinMinutes = 2,
+  profileDir?: string,
 ): Promise<ChromeActivity> {
   const cdp = new CdpClient(cdpHost)
-  const history = new HistoryClient()
+  const history = new HistoryClient(profileDir)
 
   let pages: CdpTargetInfo[] = []
   try { pages = await cdp.listPageTargets() } catch (e) { console.warn('[activity] CDP unreachable:', (e as Error).message) }
