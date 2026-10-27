@@ -19,7 +19,7 @@ source is authoritative, and this doc is the index that keeps the pieces togethe
   via explicit per-project `{projects, target}` entries built from `dependencies`,
   `peerDependencies` and `optionalDependencies` (npm name mapped to Nx project name through
   `project.json#name`); `devDependencies` are excluded because Nx graph edges carry no dependency
-  kind and a graph-wide `^version`/`^publish` would fan out over devDependency and test-import edges.
+  kind and a graph-wide `^version`/`^publish` would fan out over devDependency and test-import edges. Release ordering is no longer a task-graph edge at all: `version` and `publish` depend only on the project's own tasks, `run-release.mjs` orders them in waves over the pending set, and the publish executor refuses a package whose internal ranges are ahead of `published-state.json`.
   `build`/`test` keep `^build` over the full graph, so `affected` is unchanged by that ordering.
 - **Runtime-closure cache inputs (build, typecheck)** — for each publishable project
   `tools/nx-plugins/build/plugin.js` computes the workspace projects whose SOURCE can reach the built
@@ -163,7 +163,7 @@ and `vercel` apps post check suites; none gates a merge. DeepSource is **not use
   and a "RELEASE-RESET REVIEW REQUIRED" block in the release receipt — and never fail the release.
   `--live` revert stays strict (refuses anything that is not a clean prepend / version-only diff).
   Ordering: the check `dependsOn` its own project's `version` task (acyclic — `version` does not depend
-  on it), so raw `nx run-many -t publish` / `nx run <p>:publish` never reads a half-written bump.
+  on it), so a bare `nx run <p>:publish` never reads a half-written bump.
   Standalone `nx run <p>:release-reset-check` therefore runs `version` first (use
   `ADHD_NX_VERSION_DRY_RUN=1` for a read-only check). `run-release.mjs`'s explicit version phase is still
   needed: it fixes the topological bump order and the GATE 1 range check before any publish starts.

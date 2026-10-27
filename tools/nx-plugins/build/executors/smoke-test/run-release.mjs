@@ -118,6 +118,9 @@
  * (`ADHD_NX_VERSION_DRY_RUN=1`, `--dryRun`) and skips sync-global and the smoke; `pnpm release:dry` is this
  * flag, so the dry run and the real run share one code path.
  *
+ * `--publish-only` skips GATE 0, the test gate and the build (for CI, whose earlier lanes already ran them) and exits
+ * with the publish result; `--configuration=<name>` is forwarded to every publish wave.
+ *
  * An EMPTY pending set prints that and exits 0 without running anything: nothing to release, and Nx's own
  * `--projects=` rejects an empty list rather than meaning "everyone".
  *
@@ -144,6 +147,12 @@ const { planRelease } = require('../../lib/release-plan.js');
 // for `pnpm release` and `pnpm release:dry`, so the dry run cannot drift from the real one.
 const DRY_RUN = process.argv.includes('--dry-run');
 if (DRY_RUN) process.env.ADHD_NX_VERSION_DRY_RUN = '1';
+// `--publish-only`: version waves, GATE 1 and publish waves only. For a caller that already ran the lane, test and build
+// gates earlier (CI's Publish step). Skips GATE 0, the test gate and the build, and exits with the publish result
+// without sync-global or the clean-room smoke.
+const PUBLISH_ONLY = process.argv.includes('--publish-only');
+// `--configuration=<name>` is forwarded to every publish wave (CI passes `production`).
+const CONFIGURATION = (process.argv.find((a) => a.startsWith('--configuration=')) || '').trim();
 
 const findRoot = (d) => {
   while (d !== dirname(d)) {
@@ -230,50 +239,53 @@ function main() {
     return;
   }
 
-  // GATE 0 (NEW) — lane-reachability wiring gate. This is the SAME check the
-  // pre-push hook runs (.githooks/pre-push): it refuses when any project has a
-  // tsconfig.spec.json that no target compiles (backlog 98142eab rule 6), so a
-  // spec corpus can carry type errors no gate can see. The release path
-  // previously did NOT run it, so a release could publish around a broken gate
-  // (incident: @adhd/apigen-plugin-tracing shipped with exactly that gap). A
-  // hard pre-flight gate: if the wiring is broken, nothing downstream (build,
-  // version, GATE 1, publish) is allowed to run.
-  const laneExit = run('GATE 0: check-lane-reachability', 'node', [
-    join(workspaceRoot, 'tools/nx-plugins/test/executors/wiring/check-lane-reachability.mjs'),
-  ]);
-  if (laneExit !== 0) {
-    console.error(
-      '\nrun-release: GATE 0 (lane-reachability) FAILED — the gate wiring is broken ' +
-        '(e.g. a project has a tsconfig.spec.json that no target compiles). Refusing to ' +
-        'build/version/publish around a broken gate. Fix the wiring and retry.'
-    );
-    process.exit(laneExit);
-    return;
-  }
+  if (!PUBLISH_ONLY) {
+    // GATE 0 (NEW) — lane-reachability wiring gate. This is the SAME check the
+    // pre-push hook runs (.githooks/pre-push): it refuses when any project has a
+    // tsconfig.spec.json that no target compiles (backlog 98142eab rule 6), so a
+    // spec corpus can carry type errors no gate can see. The release path
+    // previously did NOT run it, so a release could publish around a broken gate
+    // (incident: @adhd/apigen-plugin-tracing shipped with exactly that gap). A
+    // hard pre-flight gate: if the wiring is broken, nothing downstream (build,
+    // version, GATE 1, publish) is allowed to run.
+    const laneExit = run('GATE 0: check-lane-reachability', 'node', [
+      join(workspaceRoot, 'tools/nx-plugins/test/executors/wiring/check-lane-reachability.mjs'),
+    ]);
+    if (laneExit !== 0) {
+      console.error(
+        '\nrun-release: GATE 0 (lane-reachability) FAILED — the gate wiring is broken ' +
+          '(e.g. a project has a tsconfig.spec.json that no target compiles). Refusing to ' +
+          'build/version/publish around a broken gate. Fix the wiring and retry.'
+      );
+      process.exit(laneExit);
+      return;
+    }
 
-  const projectsArg = `--projects=${projectNames.join(',')}`;
+    const projectsArg = `--projects=${projectNames.join(',')}`;
 
-  // Test gate — once over the whole pending set, BEFORE anything is built, versioned or written, so a failing test
-  // can never leave source package.json files mutated. `test` depends on lint, typecheck-spec and ^build, so the
-  // gates every publish used to re-run per project run exactly once here; `publish` keeps its own `test` dependency
-  // and finds it cached.
-  const testExit = run('test gate (once over the pending set)', 'pnpm', ['nx', 'run-many', '-t', 'test', projectsArg]);
-  if (testExit !== 0) {
-    console.error('\nrun-release: test gate FAILED — nothing was built, versioned or published.');
-    process.exit(testExit);
-    return;
-  }
+    // Test gate — once over the whole pending set, BEFORE anything is built, versioned or written, so a failing test
+    // can never leave source package.json files mutated. `test` depends on lint, typecheck-spec and ^build, so the
+    // gates every publish used to re-run per project run exactly once here; `publish` keeps its own `test` dependency
+    // and finds it cached.
+    const testExit = run('test gate (once over the pending set)', 'pnpm', ['nx', 'run-many', '-t', 'test', projectsArg]);
+    if (testExit !== 0) {
+      console.error('\nrun-release: test gate FAILED — nothing was built, versioned or published.');
+      process.exit(testExit);
+      return;
+    }
 
-  // Build phase, scoped to the pending set (DEBT-BUILD-COMPOSITE-TSC-PARALLEL-001: never rely on build firing
-  // on-demand inside the publish task graph).
-  const buildExit = run('build (structural build-first guarantee)', 'pnpm', ['nx', 'run-many', '-t', 'build', projectsArg]);
-  if (buildExit !== 0) {
-    console.error(
-      '\nrun-release: build phase FAILED — refusing to run version/publish against ' +
-        'an unbuilt or partially-built cache. Release skipped entirely.'
-    );
-    process.exit(buildExit);
-    return;
+    // Build phase, scoped to the pending set (DEBT-BUILD-COMPOSITE-TSC-PARALLEL-001: never rely on build firing
+    // on-demand inside the publish task graph).
+    const buildExit = run('build (structural build-first guarantee)', 'pnpm', ['nx', 'run-many', '-t', 'build', projectsArg]);
+    if (buildExit !== 0) {
+      console.error(
+        '\nrun-release: build phase FAILED — refusing to run version/publish against ' +
+          'an unbuilt or partially-built cache. Release skipped entirely.'
+      );
+      process.exit(buildExit);
+      return;
+    }
+
   }
 
   // Version phase, in dependency waves over the pending set, BEFORE GATE 1 (DEBT-RELEASE-GATE1-STALE-DISK-VERSION-001:
@@ -307,8 +319,14 @@ function main() {
   // code captured, never thrown. GATE 2 below must run regardless of what
   // happens here (BUG-003).
   // Publish waves: a dependency is on the registry before any dependent publishes. A failed wave stops the rest.
-  const publishExit = runWaves('publish', 'publish', waves, DRY_RUN ? ['--dryRun'] : []);
+  const publishExit = runWaves('publish', 'publish', waves, [...(DRY_RUN ? ['--dryRun'] : []), ...(CONFIGURATION ? [CONFIGURATION] : [])]);
   const publishOk = publishExit === 0;
+
+  if (PUBLISH_ONLY) {
+    console.error(`\nrun-release: publish-only run ${publishOk ? 'complete' : 'FAILED'} — sync-global and clean-room-smoke were skipped.`);
+    process.exit(publishExit);
+    return;
+  }
 
   if (DRY_RUN) {
     console.error(`\nrun-release: dry run ${publishOk ? 'complete' : 'FAILED'} — nothing was published; sync-global and clean-room-smoke were skipped.`);

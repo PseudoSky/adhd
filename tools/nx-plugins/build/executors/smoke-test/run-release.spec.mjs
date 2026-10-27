@@ -452,8 +452,28 @@ test('run-release.mjs: ALL version waves settle before GATE 1, and GATE 1 runs o
 test('run-release.mjs: --dry-run shares the real code path, runs version/publish in dry-run mode, and skips sync-global and the smoke', () => {
   assert.match(source, /process\.argv\.includes\('--dry-run'\)/);
   assert.match(source, /process\.env\.ADHD_NX_VERSION_DRY_RUN = '1'/);
-  assert.match(source, /runWaves\('publish', 'publish', waves, DRY_RUN \? \['--dryRun'\] : \[\]\)/);
+  assert.match(source, /runWaves\('publish', 'publish', waves, \[\.\.\.\(DRY_RUN \? \['--dryRun'\] : \[\]\), \.\.\.\(CONFIGURATION \? \[CONFIGURATION\] : \[\]\)\]\)/);
   const dryExit = source.indexOf('if (DRY_RUN) {', source.indexOf("runWaves('publish', 'publish', waves"));
   const sync = source.indexOf("run('sync-global (global CLI shims -> published artifacts)'");
   assert.ok(dryExit !== -1 && dryExit < sync, 'the dry-run exit must come before sync-global and the smoke');
+});
+
+test('run-release.mjs: --publish-only skips GATE 0, the test gate and the build, still runs version waves, GATE 1 and publish waves, and exits with the publish result before sync-global', () => {
+  assert.match(source, /const PUBLISH_ONLY = process\.argv\.includes\('--publish-only'\);/);
+  const gated = source.indexOf('if (!PUBLISH_ONLY) {');
+  const gate0 = source.indexOf("run('GATE 0: check-lane-reachability'");
+  const testGate = source.indexOf("run('test gate (once over the pending set)'");
+  const build = source.indexOf("run('build (structural build-first guarantee)'");
+  const version = source.indexOf("runWaves('version (explicit prior phase, GATE 1 timing fix)'");
+  assert.ok(gated !== -1 && gated < gate0 && gate0 < testGate && testGate < build && build < version, 'GATE 0, the test gate and the build must all sit inside the !PUBLISH_ONLY block, before version');
+  const exitIdx = source.indexOf('if (PUBLISH_ONLY) {', version);
+  const sync = source.indexOf("run('sync-global (global CLI shims -> published artifacts)'");
+  assert.ok(exitIdx !== -1 && exitIdx < sync, 'the publish-only exit must come before sync-global and the smoke');
+  assert.match(source.slice(exitIdx, exitIdx + 400), /process\.exit\(publishExit\)/);
+});
+
+test('run-release.mjs: --configuration=<name> is forwarded to every publish wave and to nothing else', () => {
+  assert.match(source, /const CONFIGURATION = \(process\.argv\.find\(\(a\) => a\.startsWith\('--configuration='\)\)/);
+  const uses = source.match(/CONFIGURATION \? \[CONFIGURATION\]/g) || [];
+  assert.equal(uses.length, 1, 'CONFIGURATION must be forwarded only on the publish waves');
 });

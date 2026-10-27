@@ -141,7 +141,7 @@ The code-first API generation framework reaches a new level of maturity:
 
 - **Package scaffolding**: Must use `npx nx g @adhd/workspace-codegen-nx:<tier>` — the old `scripts/generate-lib.sh` exits 1 with a deprecation message. Pass the **bare name** (the generator composes the full `<domain>-<tier>-<name>`).
 - **Build**: Run `pnpm run build` — never `tsc` directly. The build pipeline is `build → dist-manifest → verify-dist-load → publish-hygiene → publish`, all via Nx targets.
-- **Release**: `pnpm release` (= `build` + `version` + `publish`). Use `pnpm release:dry` for preview. The `version` task uses `published-state.json` for cache — run `npx nx run-many -t reconcile` to refetch if the cache diverges from reality.
+- **Release**: `pnpm release` (the pending set from `pnpm release:pending`, then test gate, `build`, `version` waves, `publish` waves, in dependency order). `pnpm release:pending` lists what needs a release in ~1–2 s with no build. Use `pnpm release:dry` for preview. The `version` task uses `published-state.json` for cache — run `npx nx run-many -t reconcile` to refetch if the cache diverges from reality.
 - **Pre-commit hook**: Runs `nx affected -t lint` with `CI=true`. If lint auto-fixes a dependency range (via `sync-deps`), the commit is FAILED — review the diff, `git add` the fixed `package.json`, and retry.
 - **Nx cache**: Never use `--skip-nx-cache` — it creates a stale cached entry that can overwrite your fresh dist. Use `npx nx reset` instead of a clean rebuild.
 
