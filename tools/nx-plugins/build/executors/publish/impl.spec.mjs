@@ -466,6 +466,27 @@ test('BUG-005 write-through guard: a NEWER version writes through normally (unch
   }
 });
 
+test('BUG-RELEASE-ATOMICITY-DEP-RANGE-AHEAD-OF-TARGET-PUBLISH-001: publish refuses a package whose internal dependency is not published, and never calls npm publish', async (t) => {
+  const rootDir = mkdtempSync(join(tmpdir(), 'publish-impl-'));
+  try {
+    const srcPkg = { name: '@adhd/pkg-b', version: '1.0.0', dependencies: { '@adhd/pkg-dep': '^1.0.0' } };
+    const { context } = makeProject({ rootDir, name: 'pkg-b', projectRoot: 'packages/pkg-b', distPkg: { ...srcPkg }, srcPkg });
+    makeFiles(join(rootDir, 'packages/pkg-dep'), { 'package.json': JSON.stringify({ name: '@adhd/pkg-dep', version: '1.2.0' }) });
+    context.projectsConfigurations.projects['pkg-dep'] = { root: 'packages/pkg-dep' };
+    // The registry record stops at 1.1.0, behind the ^1.2.0 range the re-stamp resolves from the sibling's disk version.
+    writeFileSync(join(rootDir, 'published-state.json'), JSON.stringify({ '@adhd/pkg-dep': { version: '1.1.0' } }));
+    const state = newState();
+    const spawn = makeSpawnSyncMock(state);
+    const calls = [];
+    t.mock.method(child_process, 'spawnSync', (cmd, args, ...rest) => { calls.push([cmd, ...(args || [])]); return spawn(cmd, args, ...rest); });
+    const result = await loadFreshImpl()({}, context);
+    assert.equal(result.success, false);
+    assert.ok(!calls.some((c) => c[0] === 'npm' && c.includes('publish')), 'npm publish must not run for a package whose dependency is unpublished');
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
 test('BUG-BUILD-PUBLISH-DISTMANIFEST-CLOBBERED-001: publish re-stamps dist/package.json from source, even if a sibling task (build) clobbered it with an un-rebased copy first', async (t) => {
   const rootDir = mkdtempSync(join(tmpdir(), 'publish-impl-'));
   try {
@@ -496,6 +517,8 @@ test('BUG-BUILD-PUBLISH-DISTMANIFEST-CLOBBERED-001: publish re-stamps dist/packa
     // not merely copying source's originally-authored range through.
     makeFiles(join(rootDir, 'packages/pkg-dep'), { 'package.json': JSON.stringify({ name: '@adhd/pkg-dep', version: '1.2.0' }) });
     context.projectsConfigurations.projects['pkg-dep'] = { root: 'packages/pkg-dep' };
+    // The dependency is on the registry at 1.2.0 (the per-package ordering guard reads published-state.json).
+    writeFileSync(join(rootDir, 'published-state.json'), JSON.stringify({ '@adhd/pkg-dep': { version: '1.2.0' } }));
 
     const state = newState();
     t.mock.method(child_process, 'spawnSync', makeSpawnSyncMock(state));

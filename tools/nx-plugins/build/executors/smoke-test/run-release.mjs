@@ -78,104 +78,56 @@
  * doesn't invoke it at all today — see release:dry's own script — and that
  * is unrelated to this fix.)
  *
- * AFFECTED-SCOPED PUBLISH (tmp/release-pipeline-audit.md §6.1,
- * DEBT-RELEASE-UNSCOPED-PUBLISH-001): this script used to call
- * `nx run-many -t publish` with NO `--projects`/`--affected` filter — every
- * publishable project in the workspace (~55), every release, regardless of
- * what changed (486 tasks for a real ~15-package changeset, confirmed as the
- * direct cause of 2 of 3 real failures on 2026-07-31 — see the audit's
- * baseline measurement). That unscoped call no longer exists anywhere in this
- * script. Instead:
+ * PENDING-SCOPED, WAVE-ORDERED RELEASE (DEBT-RELEASE-UNSCOPED-PUBLISH-001; tmp/release-perf/HANDOFF.md P2).
+ * Nothing here calls `nx run-many` without a `--projects=` list, and the list is never the whole workspace:
  *
- *   0. `computeChangedProjectSet` (`../../lib/changed-set.js`) computes the
- *      changed/affected publishable-project set (git-diff-affected UNION
- *      published-state-cache-stale — see that module's header). This step
- *      has NO fallback to "everyone": if it cannot compute a scope (e.g. the
- *      underlying `nx show projects --affected` call fails), it THROWS, and
- *      this script exits non-zero immediately, before GATE 1, `version`, or
- *      `publish` ever run. There is no unscoped code path left in this file.
- *      The VERY FIRST statement of `main()` mints a per-run
- *      `RELEASE_RUN_TOKEN` (random UUID) into the process env; step 0's
- *      manifest write stamps it, and every later spawned phase inherits it, so
- *      the manifest backstop's age gate is skipped for THIS run's own manifest
- *      regardless of how long the batch takes (F1 root fix — see
- *      `../../lib/release-manifest.js`'s "RUN-SCOPED FRESHNESS" header).
- *   0.5. `nx run-many -t build --projects=<computed-list>` (NEW,
- *      DEBT-BUILD-COMPOSITE-TSC-PARALLEL-001) runs EXPLICITLY, scoped to the
- *      same computed project list, BEFORE the `version` phase. Previously
- *      this real (non-dry) release path had NO build step of its own and
- *      relied entirely on nx's implicit per-project `dependsOn: build` graph
- *      edges firing on-demand inside the publish task graph — exactly the
- *      code path where a transient composite-tsc project-reference race was
- *      once observed under a parallel publish-phase build (see that item for
- *      the full incident). `release:dry` in package.json already runs
- *      `pnpm run build` before anything else; this makes the same guarantee
- *      structural on the real release path too, so there is no release code
- *      path left that reaches version/publish against a cold, unbuilt cache.
- *      A hard gate: if build itself fails, nothing downstream (version,
- *      GATE 1, publish) can be trusted either.
- *   1. `version`/`^version` runs EXPLICITLY, scoped to the computed project
- *      list, BEFORE GATE 1 (DEBT-RELEASE-GATE1-STALE-DISK-VERSION-001, audit
- *      §6.2). Previously GATE 1 (`check-release-ranges.mjs`) ran first and
- *      read each project's on-disk version to predict what would be
- *      published — but the real version bump only happens inside `publish`'s
- *      own `version` dependency, so GATE 1 was reading STALE pre-bump
- *      versions and could false-positive-flag an already-correct dependent
- *      range as unresolvable (confirmed root cause of failure #1 on
- *      2026-07-31). Running `version` as its own explicit prior phase means
- *      GATE 1 now reads the REAL, post-bump disk state. `publish`'s own
- *      `dependsOn: [..., "version", ...]` chain is untouched. `version` is
- *      `cache:false` (it reads the live registry/git and writes tracked source),
- *      so Nx does NOT cache-skip it in the publish phase: it re-executes there
- *      (measured: 63 runs in this phase + 54 more in the publish phase, per
- *      release). It is idempotent after the bump (already-bumped versions are
- *      "not yet on npm — no bump"), so the repeat is redundant cost, not a
- *      correctness risk (docs/PIPELINE.md §4).
- *   2. GATE 1 (`check-release-ranges.mjs`) — hard pre-gate, unchanged in
- *      behavior, just re-ordered to run after step 1.
- *   3. `nx run-many -t publish --projects=<computed-list>` — the actual
- *      publish, now scoped. Exit code CAPTURED, not thrown — a non-zero here
- *      does not stop step 4 (BUG-003, unchanged from before).
- *   3.5. `sync-global.mjs` (BUG-027 REVISED — a real currency gate, no longer
- *      purely advisory) — after publish, flip any stale global CLI link
- *      shims AND (BUG-027) verify/upgrade an ordinary non-link global install
- *      that's simply behind the just-published version. Exit code CAPTURED,
- *      not thrown (does not stop step 4) — but DOES feed the compound
- *      verdict below.
- *   4. `clean-room-smoke.mjs` (GATE 2) ALWAYS runs after step 3, regardless
- *      of step 3's outcome. GATE 2's own scoping (audit §6.3, "scope GATE 2
- *      to only the packages actually published this run") is explicitly OUT
- *      OF SCOPE for this change — GATE 2 still runs unscoped, exactly as
- *      before; that is a separate, later fix.
- *   5. A COMPOUND verdict is printed distinguishing the FOUR outcomes (see
- *      the file-level header above for the full breakdown, including (d) —
- *      BUG-027, sync-global unable to verify the operator's global CLI):
+ *   0. `planRelease` (`../../lib/release-plan.js`) takes the pending set from `release:pending`
+ *      (`../../lib/release-pending.js`: filesystem + git only, no nx graph) and orders it into topological waves
+ *      over the pending projects (`../../lib/release-waves.js`). A dependency that is not pending is already on
+ *      the registry, so it is neither scoped in nor ordered against. There is NO fallback to "everyone": a failure
+ *      computing the scope exits non-zero before anything runs. `planRelease` also writes the release manifest the
+ *      publish executor's backstop requires. The very first statement of `main()` mints a per-run
+ *      `RELEASE_RUN_TOKEN` into the process env; the manifest stamps it and every spawned phase inherits it, so the
+ *      backstop's age gate is skipped for THIS run's manifest however long the batch takes
+ *      (`../../lib/release-manifest.js`, "RUN-SCOPED FRESHNESS").
+ *   0.25. GATE 0, lane-reachability wiring.
+ *   0.5. Test gate: `nx run-many -t test --projects=<pending>` once, before anything is built, versioned or
+ *      written, so a failing test cannot leave source `package.json` files mutated.
+ *   1. Build: `nx run-many -t build --projects=<pending>` explicitly, so no release path reaches version/publish
+ *      against a cold cache (DEBT-BUILD-COMPOSITE-TSC-PARALLEL-001).
+ *   2. Version waves: `version` per wave, in dependency order, ALL of them before GATE 1 and before any publish
+ *      (DEBT-RELEASE-GATE1-STALE-DISK-VERSION-001: GATE 1 must read every post-bump disk version). `version` needs
+ *      its dependencies' versions settled on disk, not published. It compares the built dist hash with the
+ *      registry baseline and no-ops a package whose content is unchanged, so a `release:pending` false positive
+ *      costs a build, never a bump.
+ *   3. GATE 1 (`check-release-ranges.mjs`) once: a hard pre-gate; an unresolvable internal range never attempts a
+ *      publish.
+ *   4. Publish waves: `publish` per wave, dependency-first; a failed wave stops the later waves, whose members
+ *      may depend on it. The exit code is CAPTURED, not thrown (BUG-003): GATE 2 below runs regardless.
+ *   4.5. `sync-global.mjs` (BUG-027): flip stale global CLI link shims and verify the operator's global install is
+ *      current. Exit code captured; it feeds the compound verdict.
+ *   5. `clean-room-smoke.mjs` (GATE 2) ALWAYS runs after publish, regardless of its outcome. It runs unscoped
+ *      (audit §6.3 scoping is a separate fix).
+ *   6. A COMPOUND verdict distinguishes four outcomes:
  *        (a) publish OK, smoke OK, sync-global currency verified -> exit 0
  *        (b) publish partially/fully FAILED but smoke passed     -> exit 1
  *        (c) smoke FAILED (regardless of publish outcome)        -> exit 1
  *        (d) publish+smoke OK but sync-global currency unresolved -> exit 1
- *      The overall exit code is non-zero if ANY of publish, sync-global
- *      currency, or smoke failed; it is only 0 when all three succeeded.
  *
- * If the computed project list is EMPTY (nothing changed since `baseRef` and
- * every publishable project's on-disk version already matches
- * `published-state.json`), this script prints that and exits 0 without
- * running the build phase, `version`, GATE 1, or `publish` at all — there is
- * nothing to release, and Nx's own `--projects=` flag rejects an empty list
- * rather than meaning "everyone," so an empty computed list must be handled
- * explicitly here rather than passed through.
+ * `--dry-run` runs the same flow with `version` and `publish` in their dry-run modes
+ * (`ADHD_NX_VERSION_DRY_RUN=1`, `--dryRun`) and skips sync-global and the smoke; `pnpm release:dry` is this
+ * flag, so the dry run and the real run share one code path.
  *
- * `RELEASE_BASE_REF` env var overrides the git ref the changed-set is diffed
- * against (default: `HEAD~1` — see `changed-set.js`'s `resolveBaseRef` for
- * the full precedence/fallback rules).
+ * An EMPTY pending set prints that and exits 0 without running anything: nothing to release, and Nx's own
+ * `--projects=` rejects an empty list rather than meaning "everyone".
  *
  * Usage:
- *   node tools/nx-plugins/build/executors/smoke-test/run-release.mjs
+ *   node tools/nx-plugins/build/executors/smoke-test/run-release.mjs [--dry-run]
  *
  * Exit code: 0 only if publish succeeded fully AND clean-room-smoke passed
  * (or there was nothing to publish). Non-zero otherwise. A failure computing
- * the changed-set scope, the structural build-first phase, the explicit
- * `version` phase, or GATE 1 (check-release-ranges) all exit non-zero before
+ * the release scope, the test gate, the build phase, the version
+ * waves, or GATE 1 (check-release-ranges) all exit non-zero before
  * either publish or smoke runs.
  */
 import { spawnSync } from 'node:child_process';
@@ -186,7 +138,12 @@ import { createRequire } from 'node:module';
 import { randomUUID } from 'node:crypto';
 
 const require = createRequire(import.meta.url);
-const { computeChangedProjectSet } = require('../../lib/changed-set.js');
+const { planRelease } = require('../../lib/release-plan.js');
+
+// `--dry-run`: the same flow, with version/publish in their dry-run modes and no sync-global / smoke. One code path
+// for `pnpm release` and `pnpm release:dry`, so the dry run cannot drift from the real one.
+const DRY_RUN = process.argv.includes('--dry-run');
+if (DRY_RUN) process.env.ADHD_NX_VERSION_DRY_RUN = '1';
 
 const findRoot = (d) => {
   while (d !== dirname(d)) {
@@ -207,9 +164,24 @@ function run(label, command, args) {
   return result.status ?? 1;
 }
 
+/**
+ * Run `target` over each wave in order, one `nx run-many` per wave (projects inside a wave run in parallel). Stops at
+ * the first failing wave and returns its exit code: a failed dependency must not let its dependents proceed. This is
+ * the ordering the removed `^version` / `^publish` closure edges used to give, applied to the pending set only.
+ */
+function runWaves(label, target, waves, extra = []) {
+  for (let i = 0; i < waves.length; i += 1) {
+    const exit = run(`${label} wave ${i + 1}/${waves.length}`, 'pnpm', [
+      'nx', 'run-many', '-t', target, `--projects=${waves[i].join(',')}`, ...extra,
+    ]);
+    if (exit !== 0) return exit;
+  }
+  return 0;
+}
+
 function main() {
   // Run-scoped freshness token (F1 root fix) — MUST be the very first thing
-  // this run does. `computeChangedProjectSet` (step 0, below) writes the
+  // this run does. `planRelease` (step 0, below) writes the
   // release manifest, and `release-manifest.js` stamps this value into it;
   // every later phase (build, version, GATE 1, publish) is spawned with this
   // process's env inherited, so every publish task sees the SAME token and the
@@ -231,28 +203,28 @@ function main() {
   // requirement from the audit — there must be no code path in this file
   // that reaches `nx run-many -t publish` (or `-t version`) without a
   // `--projects=<computed-list>` filter.
-  let changedSet;
+  let plan;
   try {
-    changedSet = computeChangedProjectSet({ workspaceRoot });
+    plan = planRelease({ workspaceRoot });
   } catch (err) {
     console.error(
-      `\nrun-release: FAILED to compute the changed/affected project scope — refusing to fall back to an ` +
+      `\nrun-release: FAILED to compute the release scope — refusing to fall back to an ` +
         `unscoped publish across the entire workspace. Fix the underlying error and retry.\n${err.stack || err.message}`
     );
     process.exit(1);
     return;
   }
 
-  const { baseRef, projectNames } = changedSet;
+  const { projectNames, waves, projects } = plan;
   console.error(
-    `\nrun-release: computed changed-set (base=${baseRef}): ${projectNames.length} publishable project(s) in scope` +
-      (projectNames.length ? `:\n  ${projectNames.join('\n  ')}` : '.')
+    `\nrun-release: pending set (release:pending): ${projectNames.length} publishable project(s) in ${waves.length} wave(s)` +
+      (projectNames.length ? `:\n${projects.map((p) => `  ${p.nxName}\t${p.reasons.join(',')}`).join('\n')}` : '.')
   );
 
   if (projectNames.length === 0) {
     console.error(
-      '\nrun-release: nothing changed since the computed base ref, and every publishable project already ' +
-        'matches published-state.json — nothing to release. Exiting 0 without running version/GATE 1/publish/smoke.'
+      '\nrun-release: every publishable project matches published-state.json and has no changes since its ' +
+        'publishedFromRef — nothing to release. Exiting 0 without running version/GATE 1/publish/smoke.'
     );
     process.exit(0);
     return;
@@ -281,25 +253,20 @@ function main() {
 
   const projectsArg = `--projects=${projectNames.join(',')}`;
 
-  // Step -1 (NEW) — explicit build-first phase, scoped to the SAME computed
-  // project list as version/publish (DEBT-BUILD-COMPOSITE-TSC-PARALLEL-001):
-  // this real (non-dry) release path previously had NO build step of its own
-  // and relied entirely on nx's implicit per-project `dependsOn: build` graph
-  // edges firing on-demand inside the publish task graph — exactly the code
-  // path where a transient composite-tsc project-reference race was once
-  // observed under `nx release --dry-run`'s parallel publish-phase build.
-  // `release:dry` in package.json already runs `pnpm run build` before
-  // anything else; this makes the same guarantee structural here too, so
-  // there is no release code path left that reaches version/publish against
-  // a cold, unbuilt cache. A hard gate: if build itself fails, nothing
-  // downstream (version, GATE 1, publish) can be trusted either.
-  const buildExit = run('build (structural build-first guarantee)', 'pnpm', [
-    'nx',
-    'run-many',
-    '-t',
-    'build',
-    projectsArg,
-  ]);
+  // Test gate — once over the whole pending set, BEFORE anything is built, versioned or written, so a failing test
+  // can never leave source package.json files mutated. `test` depends on lint, typecheck-spec and ^build, so the
+  // gates every publish used to re-run per project run exactly once here; `publish` keeps its own `test` dependency
+  // and finds it cached.
+  const testExit = run('test gate (once over the pending set)', 'pnpm', ['nx', 'run-many', '-t', 'test', projectsArg]);
+  if (testExit !== 0) {
+    console.error('\nrun-release: test gate FAILED — nothing was built, versioned or published.');
+    process.exit(testExit);
+    return;
+  }
+
+  // Build phase, scoped to the pending set (DEBT-BUILD-COMPOSITE-TSC-PARALLEL-001: never rely on build firing
+  // on-demand inside the publish task graph).
+  const buildExit = run('build (structural build-first guarantee)', 'pnpm', ['nx', 'run-many', '-t', 'build', projectsArg]);
   if (buildExit !== 0) {
     console.error(
       '\nrun-release: build phase FAILED — refusing to run version/publish against ' +
@@ -309,19 +276,10 @@ function main() {
     return;
   }
 
-  // Step 1 — explicit prior `version` phase, SCOPED to the computed project
-  // list, BEFORE GATE 1 (fixes DEBT-RELEASE-GATE1-STALE-DISK-VERSION-001,
-  // audit §6.2: GATE 1 must read POST-bump disk versions, not pre-bump ones).
-  // This is a hard gate: if version itself can't settle the real on-disk
-  // versions, nothing downstream (GATE 1's prediction, the publish itself)
-  // can be trusted either.
-  const versionExit = run('version (explicit prior phase, GATE 1 timing fix)', 'pnpm', [
-    'nx',
-    'run-many',
-    '-t',
-    'version',
-    projectsArg,
-  ]);
+  // Version phase, in dependency waves over the pending set, BEFORE GATE 1 (DEBT-RELEASE-GATE1-STALE-DISK-VERSION-001:
+  // GATE 1 must read every POST-bump disk version, so ALL versions settle before it and before any publish).
+  // `version` only needs its dependencies' versions settled on disk, not published, so waves order versioning alone.
+  const versionExit = runWaves('version (explicit prior phase, GATE 1 timing fix)', 'version', waves, DRY_RUN ? ['--dryRun'] : []);
   if (versionExit !== 0) {
     console.error(
       '\nrun-release: explicit version phase FAILED — GATE 1 would read unreliable on-disk versions. ' +
@@ -348,8 +306,15 @@ function main() {
   // Publish attempt — SCOPED to the computed project list (§6.1 fix). Exit
   // code captured, never thrown. GATE 2 below must run regardless of what
   // happens here (BUG-003).
-  const publishExit = run('publish', 'pnpm', ['nx', 'run-many', '-t', 'publish', projectsArg]);
+  // Publish waves: a dependency is on the registry before any dependent publishes. A failed wave stops the rest.
+  const publishExit = runWaves('publish', 'publish', waves, DRY_RUN ? ['--dryRun'] : []);
   const publishOk = publishExit === 0;
+
+  if (DRY_RUN) {
+    console.error(`\nrun-release: dry run ${publishOk ? 'complete' : 'FAILED'} — nothing was published; sync-global and clean-room-smoke were skipped.`);
+    process.exit(publishExit);
+    return;
+  }
 
   // Step 3.5 (BUG-027 REVISED) — sync-global: flip any stale global CLI link
   // shims (shims whose content references this workspace — the `pnpm link

@@ -21,7 +21,7 @@ const { join } = require('node:path');
 const { discoverReleaseSet } = require('./range-resolvability');
 const { readState } = require('./published-state');
 
-const IGNORED = [/(^|\/)(dist|node_modules|tmp|coverage)\//, /(^|\/)test\//, /(^|\/)eslint\.config\.[cm]?js$/, /\.(md|spec\.[cm]?[jt]sx?|test\.[cm]?[jt]sx?)$/];
+const IGNORED = [/(^|\/)(dist|node_modules|tmp|coverage)\//, /(^|\/)test\//, /(^|\/)eslint\.config\.[cm]?[jt]s$/, /(^|\/)tsconfig\.spec\.json$/, /(^|\/)vitest(\.[a-z0-9-]+)*\.config\.[cm]?[jt]s$/, /(^|\/)(__tests__|__mocks__|test-setup)(\/|\.)/, /\.(md|spec\.[cm]?[jt]sx?|test\.[cm]?[jt]sx?)$/];
 
 /**
  * Workspace-level inputs that change EVERY package's built or stamped output but sit under no project root.
