@@ -12,6 +12,9 @@ export default [
             '{projectRoot}/eslint.config.{js,cjs,mjs,ts,cts,mts}',
             '{projectRoot}/vite.config.{js,ts,mjs,mts}',
           ],
+          // pnpm installs two service-proxy lines (0.5.0 hoisted for sox-embedding-provider,
+          // 0.6.0 for this package); the rule compares against the hoisted one.
+          ignoredDependencies: ['@adhd/sox-service-proxy'],
         },
       ],
     },
