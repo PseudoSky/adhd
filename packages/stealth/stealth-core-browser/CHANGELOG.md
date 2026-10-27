@@ -8,7 +8,7 @@ All notable changes to `@adhd/stealth-core-browser` are documented here. The for
 
 - The unimplemented `ProfileClient.getOpenTabs()` stub (it only warned and returned `[]`). Use `listPageTargets()` for the open tabs of a running Chrome.
 
-## [0.0.1] - 2026-10-24
+## [0.1.0] - 2026-10-27
 
 Migration release: the Chrome runner library moves out of the `agent-browser` project into this package, with `@adhd/stealth-search` as its consumer.
 
