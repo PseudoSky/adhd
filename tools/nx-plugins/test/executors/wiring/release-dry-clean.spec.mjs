@@ -29,8 +29,36 @@ export function exportCoversEveryNx(script) {
 
 const scripts = JSON.parse(readFileSync(resolve(REPO_ROOT, 'package.json'), 'utf8')).scripts;
 
-test('the real release:dry script exports the dry-run variable before every nx invocation', () => {
-  assert.ok(exportCoversEveryNx(scripts['release:dry']), scripts['release:dry']);
+const RUN_RELEASE = resolve(REPO_ROOT, 'tools/nx-plugins/build/executors/smoke-test/run-release.mjs');
+
+/**
+ * `release:dry` is `run-release.mjs --dry-run`: one code path with the real release. The dry-run variable must then be
+ * set by that script at module level, before any child process is spawned (every `run(`/`runWaves(` call is inside
+ * `main()`, which runs after the module body), and the flag must be what turns it on.
+ */
+export function delegatesToDryRun(script, runReleaseSource) {
+  if (!/^node\s+tools\/nx-plugins\/build\/executors\/smoke-test\/run-release\.mjs\s+--dry-run\s*$/.test(script)) return false;
+  const set = runReleaseSource.search(/if \(DRY_RUN\) process\.env\.ADHD_NX_VERSION_DRY_RUN = '1';/);
+  const flag = runReleaseSource.search(/const DRY_RUN = process\.argv\.includes\('--dry-run'\);/);
+  const main = runReleaseSource.search(/^function main\(\) \{/m);
+  return flag !== -1 && set !== -1 && flag < set && set < main;
+}
+
+test('the real release:dry script covers every nx invocation with the dry-run variable (inline export, or run-release.mjs --dry-run setting it before main())', () => {
+  const script = scripts['release:dry'];
+  const src = readFileSync(RUN_RELEASE, 'utf8');
+  assert.ok(exportCoversEveryNx(script) || delegatesToDryRun(script, src), script);
+});
+
+test('negative control: a delegating script whose run-release.mjs sets the variable only inside main() is rejected', () => {
+  const script = 'node tools/nx-plugins/build/executors/smoke-test/run-release.mjs --dry-run';
+  const late = "const DRY_RUN = process.argv.includes('--dry-run');\nfunction main() {\n  if (DRY_RUN) process.env.ADHD_NX_VERSION_DRY_RUN = '1';\n}";
+  assert.equal(delegatesToDryRun(script, late), false);
+});
+
+test('negative control: a delegating script that omits --dry-run is rejected', () => {
+  const src = readFileSync(RUN_RELEASE, 'utf8');
+  assert.equal(delegatesToDryRun('node tools/nx-plugins/build/executors/smoke-test/run-release.mjs', src), false);
 });
 
 test('negative control: a script that sets the variable only on the version run-many is rejected', () => {

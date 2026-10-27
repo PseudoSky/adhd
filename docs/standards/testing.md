@@ -68,7 +68,7 @@ Terms used in the binding table. **Mechanism class:** C0 no mechanism; C1 text a
    | FM4 | A hook or test rewrites a tracked file or the live repository, corrupting concurrent work | P against a temporary copy, stage C |
    | FM5 | A real provider or runtime path is exercised only with a scripted stub | X, behind the documented flag; no stage sets it |
    | FM6 | A dispatch-driven feature is green in unit tests and unreachable across the real MCP boundary | P, stage D |
-   | FM7 | Dependency drift silently ships a broken dependency set | `nx lint` (`sync-deps-check`), stage B |
+   | FM7 | Dependency drift silently ships a broken dependency set | `nx lint` (`@nx/dependency-checks`), stage B |
    | FM8 | A skipped, disabled or `todo` test rests in the suite with no owner or date | G4, enforced for new markers; the 849 legacy markers recorded at the first run are baselined and fall due 2027-01-31 |
    | FM9 | Flake hides a real failure behind a retry | G5: `retry-scan.mjs` fails an untracked retry in a runner config; `test-report.mjs g5` lists any retry that ran |
    | FM10 | The gate engine cannot be found in CI, so the engine-driven steps cannot run there | tracked by backlog ca23e252 |

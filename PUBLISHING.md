@@ -60,7 +60,7 @@ Consequences for releasing:
   internal dependency ranges are correct **independent of versioning order** — this is what fixes
   the stale/unsatisfiable-range failure `nx release` itself couldn't (`BUG-RELEASE-PIPELINE-UNFIT-FOR-FULL-PUBLISH-001`,
   Defect C — the reason `nx release` was retired for this repo in the first place).
-- **One command:** `pnpm release` (= `pnpm run build && npx nx run-many -t version && npx nx run-many -t publish`).
+- **One command:** `pnpm release` (= `node tools/nx-plugins/build/executors/smoke-test/run-release.mjs`): the pending set from `pnpm release:pending`, a test gate, a build, `version` in dependency waves, `check-release-ranges`, `publish` in dependency waves, `sync-global`, then the clean-room smoke.
   Building first (proper dependency order) also sidesteps the composite-tsc cold-build parallelism
   race (`DEBT-BUILD-COMPOSITE-TSC-PARALLEL-001`).
 - **Already-published, unchanged packages are skipped**, not republished — npm refuses to publish
@@ -90,7 +90,8 @@ Consequences for releasing:
 **`nx release` is retired for this repo.** It fought the monorepo at every layer (git-config XOR, `pnpm install --lockfile-only` 404 on unpublished internal deps, non-topological versioning that shipped stale interdependency ranges, `@nx/dependency-checks` failing the build on those same stale ranges — `BUG-RELEASE-PIPELINE-UNFIT-FOR-FULL-PUBLISH-001`). Versioning and publishing are now normal per-project **nx tasks** (`@adhd/nx-build:version` and `@adhd/nx-build:publish`); the **npm registry is the source of truth** for what's released (no git tags).
 
 ```bash
-pnpm release:dry                 # build + show what would version + publish (writes/publishes nothing)
+pnpm release:pending             # the projects that need a release, from git + the filesystem (no nx, no build, ~1–2 s)
+pnpm release:dry                 # the same flow as `pnpm release` with version/publish in dry-run mode (writes/publishes nothing)
 pnpm release                     # build + version changed packages + publish everything not on npm
 npx nx run-many -t version --bump=minor    # bump changed packages minor instead of patch
 npx nx run-many -t publish --otp=123456    # supply an npm one-time password (2FA)
@@ -118,11 +119,30 @@ npx nx run apigen-cli:reconcile            # backfill/refresh just one package's
 > every task in the invocation (nx's task workers inherit the parent process's env),
 > unlike the CLI flag. `pnpm release:dry` already does this for you.
 
-`pnpm release` = `pnpm run build && npx nx run-many -t version && npx nx run-many -t publish`. Two tasks, both per-project and **not cached**:
+`pnpm release` runs two per-project tasks, `version` then `publish`, each in dependency waves over the pending set. Both are per-project and **not cached**:
 
-- **`version`** (`dependsOn: [build, assets, <each runtime dependency>:version]`, inferred by `tools/nx-plugins/build/plugin.js`'s `createNodes`) bumps a package's SOURCE `version` **iff** it needs a new release: if the current version isn't on npm → a release is already _pending_ → leave it; if it IS on npm → compare the built `dist` against the **published tarball** (ignoring the version field and internal `@adhd/*` ranges) → **changed → bump** (patch by default, `--bump=minor|major` to override), **identical → leave**. The `build` + `assets` dependencies ensure `dist/` is fresh AND doc-complete before comparison (a bare `build` alone doesn't include README/CHANGELOG — comparing it against an already-published tarball that has them would falsely register as "changed" every time); ordering after each runtime dependency's `version` ensures all internal dependencies settle first. It writes the bump but does **not** commit (review `git diff`).
-  - **Runtime-dependency `version` ordering — topological dependent-range sync (BUILD-TOOLING-VERSION-SYNC-DEPS-001):** `plugin.js` makes `version` depend on the `version` task of each internal package listed in the project's `dependencies`/`peerDependencies`/`optionalDependencies` (never `devDependencies`, which consumers do not install and which Nx graph edges cannot distinguish), so a package's internal `@adhd/*` runtime dependencies' `version` tasks run FIRST, so by the time a package's own `version` task runs, every dependency it declares has already settled its version. After deciding its own bump (or not), `version`'s final step (`reconcileInternalRangesFromDisk`) reconciles the package's declared internal `@adhd/*` ranges in `dependencies`/`peerDependencies`/`optionalDependencies` to that now-settled state by reading each dependency's `package.json` off disk (`@adhd/*` names are mapped to Nx projects through each project's `package.json#name`, so `@adhd/environment` resolves to `environment-core-node`). It writes **only that package's own** `package.json`. **`devDependencies` ranges are not rewritten by `version`:** no `version` task is ordered before this one for a dev edge, so the on-disk version it would read may not be settled, consumers never install dev dependencies (the published manifest strips them), and no gate checks them (`sync-deps-check` passes with a stale dev range). To refresh dev-edge ranges run `npx nx run <project>:sync-deps` (or `npx nx affected -t sync-deps`) after a version phase; skipping it is safe. This never forces a cascade bump: `compare-published.js`'s `normalizeManifest` already strips internal `@adhd/*` ranges before diffing, so a range-only edit is invisible to the next run's change-detector — a caret range absorbs a dependency's bump at install time, and `dist-manifest` (above) already resolves published ranges independent of source-side sync order. This eliminates the manual `sync-deps` pass previously needed after a batch of bumps to keep dependents' declared ranges from drifting.
-- **`publish`** (`dependsOn: [test, <runtime deps>:test, version, <runtime deps>:publish, dist-manifest, verify-dist-load, publish-hygiene]`, runtime deps = `dependencies`/`peerDependencies`/`optionalDependencies`) runs this project's own tests and its runtime dependencies' ( the gate that was missing before `pnpm release`'s `nx run-many -t publish` path was made to depend on it), rebuilds anything `version` bumped (a version change invalidates its build cache), re-stamps its `dist/package.json` (internal `@adhd/*` ranges resolved to concrete versions from a live snapshot), and `npm publish`es the `dist` **iff** `name@version` isn't already on the registry. Already-published = no-op skip (no "cannot publish over", no republish).
+- **`version`** (`dependsOn: [build, assets]`, inferred by `tools/nx-plugins/build/plugin.js`'s `createNodes`) bumps a package's SOURCE `version` **iff** it needs a new release: if the current version isn't on npm → a release is already _pending_ → leave it; if it IS on npm → compare the built `dist` against the **published tarball** (ignoring the version field and internal `@adhd/*` ranges) → **changed → bump** (patch by default, `--bump=minor|major` to override), **identical → leave**. The `build` + `assets` dependencies ensure `dist/` is fresh AND doc-complete before comparison (a bare `build` alone doesn't include README/CHANGELOG — comparing it against an already-published tarball that has them would falsely register as "changed" every time); `pnpm release` runs `version` in dependency waves (`release-waves.js`), so every internal dependency settles before its dependents. It writes the bump but does **not** commit (review `git diff`).
+  - **Runtime-dependency `version` ordering — topological dependent-range sync (BUILD-TOOLING-VERSION-SYNC-DEPS-001):** the release script (`run-release.mjs`) runs `version` in dependency waves over the pending set, ordered by each package's `dependencies`/`peerDependencies`/`optionalDependencies` (never `devDependencies`, which consumers do not install), so a package's internal `@adhd/*` runtime dependencies' `version` tasks run FIRST, so by the time a package's own `version` task runs, every dependency it declares has already settled its version. After deciding its own bump (or not), `version`'s final step (`reconcileInternalRangesFromDisk`) reconciles the package's declared internal `@adhd/*` ranges in `dependencies`/`peerDependencies`/`optionalDependencies` to that now-settled state by reading each dependency's `package.json` off disk (`@adhd/*` names are mapped to Nx projects through each project's `package.json#name`, so `@adhd/environment` resolves to `environment-core-node`). It writes **only that package's own** `package.json`. **`devDependencies` ranges are not rewritten by `version`:** no `version` task is ordered before this one for a dev edge, so the on-disk version it would read may not be settled, consumers never install dev dependencies (the published manifest strips them), and no gate checks them (lint's dependency-checks does not flag a stale dev range). To refresh dev-edge ranges run `npx nx run <project>:sync-deps` (or `npx nx affected -t sync-deps`) after a version phase; skipping it is safe. This never forces a cascade bump: `compare-published.js`'s `normalizeManifest` already strips internal `@adhd/*` ranges before diffing, so a range-only edit is invisible to the next run's change-detector — a caret range absorbs a dependency's bump at install time, and `dist-manifest` (above) already resolves published ranges independent of source-side sync order. This eliminates the manual `sync-deps` pass previously needed after a batch of bumps to keep dependents' declared ranges from drifting.
+- **`publish`** (`dependsOn: [test, version, dist-manifest, verify-dist-load, publish-hygiene, release-reset-check]`: this project's own tasks only) runs this project's own tests, refuses to publish while an internal `@adhd/*` range is ahead of what `published-state.json` records as published (`internal-deps-published.js`; dependency order is enforced by the release waves plus this guard), rebuilds anything `version` bumped (a version change invalidates its build cache), re-stamps its `dist/package.json` (internal `@adhd/*` ranges resolved to concrete versions from a live snapshot), and `npm publish`es the `dist` **iff** `name@version` isn't already on the registry. Already-published = no-op skip (no "cannot publish over", no republish).
+
+
+**Ordering across projects is not in the task graph.** `plugin.js` gives `version` and `publish` no edge to any dependency's tasks (an edge pulls every unchanged dependency's `test`/`version`/`publish`/dist tasks into each release: `backlog:publish` was 210 tasks, now 50). Two things hold the guarantee instead:
+
+1. `run-release.mjs` runs `version` and then `publish` in topological waves over the pending set only; all version waves settle before `check-release-ranges`, and a failed publish wave stops the later waves.
+2. The `publish` executor refuses any package whose internal `@adhd/*` ranges are ahead of what `published-state.json` records as published (`lib/internal-deps-published.js`, `BUG-RELEASE-ATOMICITY-DEP-RANGE-AHEAD-OF-TARGET-PUBLISH-001`), so a caller that bypasses the waves gets a refusal, not an uninstallable package. A dry run publishes nothing and skips this check.
+
+Never run a bare `nx run-many -t version|publish` for a release: it has no dependency order and writes no release manifest.
+
+**Measured cost (2026-10-27, warm Nx cache, machine load average 30–60, dry run):**
+
+| Case | Old task edges | New flow |
+| --- | --- | --- |
+| `backlog:publish` graph | 210 tasks, 204 run, 17.8 s wall, 56.6 s CPU, exit non-zero (dependency publishes refused in dry run) | 50 tasks, 5.0 s wall, 10.3 s CPU, exit 0 |
+| every publishable project pending (69 of 69) | 762 tasks in one `nx` invocation: 129 s wall, 331 s CPU | 7 version waves + 7 publish waves + test gate + build (about 17 `nx` invocations): 231 s wall, 828 s CPU |
+
+The new flow wins when a few projects are pending and loses when everything is, because each wave pays Nx startup and
+input hashing again. A cold cache (`nx reset`) made the old graph take 518 s wall and 2,354 s CPU, so cold and warm numbers must
+not be compared with each other.
 
 Exit code is the gate: `0` = everything versioned/published or skipped; non-zero = a task failed (nx names the project).
 
@@ -332,21 +352,32 @@ npm publish <projectRoot> --access public   # e.g. packages/agent/agent-base-typ
 Scope is decided in **two stages**, and understanding the split is the difference
 between a release that works and one that exits 0 having published nothing.
 
-### Stage 1 — candidate scope (broad, cheap, pre-build)
+### Stage 1 — candidate scope (`pnpm release:pending`: cheap, no build, no nx)
 
-`tools/nx-plugins/build/lib/changed-set.js` unions two signals:
+`tools/nx-plugins/build/lib/release-pending.js` reads the publishable projects from the filesystem and, for
+each, compares the working tree against the commit **that package** was last published from
+(`publishedFromRef` in `published-state.json`; one `git diff` per distinct ref, ~1–2 s total, independent of
+the nx cache or daemon). A project is pending when any of these holds:
 
-1. **git-diff affected** — `nx show projects --affected --base=<ref>`, plus everything
-   transitively downstream in the Nx graph.
-2. **published-state staleness** — on-disk `version` ≠ the version
-   `published-state.json` records as published (catches a prior partial run that
-   already bumped something).
+| Reason | Meaning |
+| --- | --- |
+| `never-published` | no `published-state.json` entry |
+| `version-drift` | on-disk version differs from the recorded published version |
+| `source-changed` | a shipped file under the project changed since its ref: source, `package.json` (other than `version` and `@adhd/*` range values; adding or removing an internal dependency counts), `project.json`, the project's `README.md` and any `package.json` `assets` entry, untracked files |
+| `global-input-changed` | a workspace build input changed: `tsconfig.base.json`, the shared vite plugins, the manifest generator, the asset copier, `tools/nx-plugins/build/plugin.js` |
+| `dependency-changed` | it depends (`package.json` `@adhd/*`, transitively) on a pending project |
+| `ref-unresolvable` | the recorded ref is gone and the commit that wrote it into `published-state.json` could not be found either |
 
-This stage is **deliberately over-broad**. Nx treats a root-file change
-(`pnpm-lock.yaml`, root `project.json`, `nx.json`) as affecting the _entire_
-workspace, so a lockfile regeneration alone can put ~69 projects in scope. **That
-is fine — do not try to "fix" it here.** Stage 2 is what makes it precise, and it
-runs at the only point where the data to be precise actually exists.
+Ignored: `dist`, `node_modules`, `test/`, spec and test files, test-only config (`tsconfig.spec.json`,
+`vitest*.config.*`, `eslint.config.*`), other markdown, and `CHANGELOG.md` (the release itself writes it).
+A ref that no longer resolves falls back to the commit that recorded it.
+
+**It is a superset, not the exact list.** Measured against the real `version` dry-run over 67 projects
+(2026-10-27): all 24 projects `version` would bump were in the pending set (0 missed), and the pending set held
+67. The extra projects are over-reporting from stale baselines: a package verified unchanged by `version` keeps
+its old `publishedFromRef`, so any later workspace-level change flags it again. Over-reporting costs a build and a
+no-op `version`, never a wrong publish. Under-reporting would silently withhold a package, which is why Stage 2
+stays authoritative and why a change to what counts as "shipped" must be re-validated against it.
 
 ### Stage 2 — content filter (exact, post-build)
 
@@ -362,40 +393,28 @@ strips `version` and every `@adhd/*` dependency range before hashing, so the
 comparison is stable across version bumps and internal-range churn — otherwise it
 would be circular.
 
-**Net effect:** ~69 projects scoped in → cached builds → only the handful whose
-shipped bytes actually changed get bumped and published. A recent real run: 69
-candidates, 96 no-bump messages, 11 packages published.
+**Net effect:** the pending set → cached builds → only the packages whose shipped bytes
+actually changed get bumped and published. A recent real run: 69 candidates, 96 no-bump
+messages, 11 packages published.
 
-### The base ref — the one thing that has actually broken a release
+### The baseline — the one thing that has actually broken a release
 
-Precedence in `resolveBaseRef`:
+The baseline is **per package**: each package's own `publishedFromRef`, not one workspace-wide base ref.
+`publishedFromRef` is written by `executors/publish/impl.js` **only after npm confirms a publish** (exit 0, or a
+failure the registry itself contradicts), and never under `--dry-run`. A ref that no longer resolves (rebase,
+squash, unpushed) falls back to the commit that recorded it in `published-state.json`; if that is gone too, the
+package is pending as `ref-unresolvable`.
 
-| #   | Source                                                               | When it applies                      |
-| --- | -------------------------------------------------------------------- | ------------------------------------ |
-| 1   | `RELEASE_BASE_REF` env var                                           | explicit override, always wins       |
-| 2   | oldest still-resolvable `publishedFromRef` in `published-state.json` | **normal path**                      |
-| 3   | `HEAD~1`                                                             | last resort — no usable ref recorded |
-| 4   | git empty-tree sentinel                                              | single-commit repo only              |
+It is **advisory metadata only** — `normalizedHash` remains the sole authority for "is this already
+published". That is why the cache survives rebases, worktrees, and publishes from other machines, and why a
+missing ref is ordinary rather than an error. `RELEASE_BASE_REF` no longer affects `pnpm release`; it still
+drives the older `changed-set.js` resolver.
 
-`publishedFromRef` is written by `executors/publish/impl.js` **only after npm
-confirms a publish** (exit 0, or a failure the registry itself contradicts), and
-never under `--dry-run`. The **oldest** ref is chosen deliberately: packages
-publish at different commits, and the newest ref would sit ahead of some
-packages' last publish and silently hide their changes. Refs that no longer
-resolve (rebase, squash) are skipped, and if none survive it falls through.
-
-It is **advisory metadata only** — `normalizedHash` remains the sole authority for
-"is this already published". That is why the cache survives rebases, worktrees,
-and publishes from other machines, and why a missing ref is ordinary rather than
-an error.
-
-> **⚠️ The failure this prevents.** Before `publishedFromRef` existed, the default
-> was `HEAD~1` — correct only when a release is exactly one commit ahead of the
-> last publish. A 21-commit release diffed against its previous commit (which
-> touched no publishable project), computed an **empty** changed-set, printed
-> `nothing to release`, and **exited 0 having published nothing** while 10
-> packages had genuinely changed. Nothing was broken; the question was just asked
-> against the wrong point in history.
+> **⚠️ The failure this prevents.** A single workspace-wide base ref defaulted to `HEAD~1`, correct only when a
+> release is exactly one commit ahead of the last publish. A 21-commit release diffed against its previous commit
+> (which touched no publishable project), computed an **empty** changed-set, printed `nothing to release`, and
+> **exited 0 having published nothing** while 10 packages had genuinely changed. Per-package baselines remove the
+> shared reference point that failure depended on.
 
 ### Diagnosing a release that "succeeded" but shipped nothing
 
@@ -403,16 +422,15 @@ an error.
 going to publish anything:
 
 ```
-run-release: computed changed-set (base=<ref>): N publishable project(s) in scope.
+run-release: pending set (release:pending): N publishable project(s) in W wave(s):
 ```
 
-- **N is 0 and you expected changes** → base-ref problem. Check whether `<ref>` is
-  `HEAD~1` on a multi-commit release. Re-run with an explicit base:
-  ```bash
-  RELEASE_BASE_REF=<last-release-commit> pnpm release
-  ```
-- **N is large (~all projects)** → normal after a lockfile/root-config change. Let
-  it run; stage 2 filters it.
+- **N is 0 and you expected changes** → run `pnpm release:pending --json` and read each project's
+  `reasons`. A package missing from `published-state.json`, or one whose recorded ref was
+  rewritten away, shows up as `never-published` or `ref-unresolvable`; a changed file the
+  ignore list drops (see Stage 1) shows nothing. Compare against `git diff --name-only <publishedFromRef> -- <projectRoot>`.
+- **N is large (~all projects)** → normal when a workspace build input changed since the oldest
+  baselines (`global-input-changed`). Let it run; stage 2 filters it.
 
 **Never trust exit 0 as proof anything shipped.** `run-release` legitimately exits 0
 when there is genuinely nothing to release, and the two states look identical from
@@ -428,14 +446,11 @@ is the only source of truth for what is published.
 
 ### `pnpm release:dry` is a preview, not a safety check
 
-`pnpm release:dry` is scoped and manifest-safe: it mints `RELEASE_RUN_TOKEN` and
-computes the scope via `computeChangedProjectSet`, exactly like `pnpm release`, so
-its `--dryRun` version/publish phases no longer run unscoped and the `publish`
-executor's manifest check (now advisory) no longer matters to them
-(`BUG-RELEASE-DRY-BLOCKED-BY-MANIFEST-BACKSTOP`). It is still only a PREVIEW of
-version/publish — it does not run GATE 2 (`clean-room-smoke`) or the global-CLI
-`sync-global`, so it is not proof a release works end-to-end. Use `pnpm release`
-for the real thing.
+`pnpm release:dry` is `run-release.mjs --dry-run`: the same code path as `pnpm release` (pending set, test gate, build,
+version waves, `check-release-ranges`, publish waves) with `ADHD_NX_VERSION_DRY_RUN=1` set before anything
+spawns, `version` and `publish` run with `--dryRun`, and no `sync-global` or clean-room smoke. It
+mints `RELEASE_RUN_TOKEN` and writes the release manifest exactly like `pnpm release`. It is still only a PREVIEW of
+version/publish, so it is not proof a release works end-to-end. Use `pnpm release` for the real thing.
 
 ---
 
@@ -467,22 +482,20 @@ SAME scoped pipeline as `pnpm release` — never a bare `nx affected -t version`
 `-t publish` (those can never publish; see below). In order it:
 
 1. builds the affected libraries (`npx nx affected -t build`), then
-2. mints a run token (`export RELEASE_RUN_TOKEN=$(uuidgen)`) and computes the
-   changed-set with
-   `node -e '… computeChangedProjectSet({workspaceRoot: process.cwd()})'` —
-   this step is what WRITES `.adhd/tmp/release-manifest.json`, the manifest the
-   `publish` executor's backstop requires
-   (`tools/nx-plugins/build/lib/release-manifest.js`), then
-3. runs `npx nx run-many -t version --projects=$RELEASE_PROJECTS` and
-   `npx nx run-many -t publish --projects=$RELEASE_PROJECTS --configuration=production`.
+2. runs `node tools/nx-plugins/build/executors/smoke-test/run-release.mjs --publish-only --configuration=production`.
+   That one script mints the run token, takes the scope from the pending set (`release:pending`), WRITES
+   `.adhd/tmp/release-manifest.json` (the manifest the `publish` executor's backstop requires,
+   `tools/nx-plugins/build/lib/release-manifest.js`), then runs `version` and `publish` in dependency waves. The lane,
+   test and build gates already ran in the steps above, so `--publish-only` skips them, and it exits with the publish
+   result without `sync-global` or the clean-room smoke.
 
 A bare `nx affected -t publish` / `nx run-many -t publish` / `nx run <p>:publish` works
 on a clean checkout with no manifest: the `publish` executor decides by CONTENT against
 the registry first (identical to what npm holds -> successful no-op; built content
 differs or never published -> publish; same version but different content with no
 bump -> fails loudly telling you to run `nx run <p>:version`). The release manifest
-is now only an advisory scope note on a real publish; scoping a release (cost) is
-`pnpm release`'s job via `computeChangedProjectSet`. OTP: `NPM_CONFIG_OTP=<code> npx nx run <p>:publish`
+is now only an advisory scope note on a real publish; scoping a release (cost) and ordering it is
+`run-release.mjs`'s job via `planRelease`. OTP: `NPM_CONFIG_OTP=<code> npx nx run <p>:publish`
 (or `--otp=<code>`) is passed to npm through the environment, never logged. That required shape is asserted by
 `tools/nx-plugins/build/ci-publish-wiring.spec.mjs`.
 

@@ -78,7 +78,6 @@ const reconcileCoreAbs = require.resolve('../reconcile/reconcile-core.js');
 const npmRegistryAbs = require.resolve('../../lib/npm-registry.js');
 const publishedStateAbs = require.resolve('../../lib/published-state.js');
 const syncAbs = require.resolve('../../../deps/executors/sync/impl.js');
-const checkAbs = require.resolve('../../../deps/executors/check/impl.js');
 const NX_BIN = require.resolve('nx/bin/nx.js');
 
 /** Force impl.js AND every module it (transitively) requires that itself
@@ -91,7 +90,6 @@ function resetAll() {
   delete require.cache[npmRegistryAbs];
   delete require.cache[publishedStateAbs];
   delete require.cache[syncAbs];
-  delete require.cache[checkAbs];
 }
 function loadFreshImpl() {
   resetAll();
@@ -99,8 +97,8 @@ function loadFreshImpl() {
 }
 
 /**
- * Install the `__internals.runDependencyCheck` mock on BOTH the fresh
- * sync/check modules `impl.js` used to call (before
+ * Install the `__internals.runDependencyCheck` mock on the fresh sync
+ * module `impl.js` used to call (before
  * DEBT-BUILD-VERSION-SYNCDEPS-REDUNDANT-001 (b) removed that in-process
  * call) — call AFTER `loadFreshImpl()`. `state.eslintCalls` now exists
  * purely as a NEGATIVE-SPACE probe: `version` no longer reaches the `deps`
@@ -114,7 +112,6 @@ function installEslintCheckMock(state) {
     return state.eslintStatus ?? 0;
   };
   require(syncAbs).__internals.runDependencyCheck = fn;
-  require(checkAbs).__internals.runDependencyCheck = fn;
 }
 
 /** Materialize a directory from a {relpath: contents} map. */

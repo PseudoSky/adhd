@@ -2563,9 +2563,6 @@
     "tools/nx-plugins/deps/eslint-check.spec.mjs": [
       "H1"
     ],
-    "tools/nx-plugins/deps/executors/check/impl.spec.mjs": [
-      "H1"
-    ],
     "tools/nx-plugins/deps/executors/sync/impl.spec.mjs": [
       "H1"
     ],

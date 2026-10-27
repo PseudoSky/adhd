@@ -126,14 +126,13 @@ exports.createNodes = ['**/package.json', (configFiles, _o, ctx) =>
     if (!hasBuildTarget(ctx.workspaceRoot, projectRoot)) return [pkgPath, edgeToRemove.length ? { projects: { [projectRoot]: { implicitDependencies: edgeToRemove } } } : {}];
     // Private packages have no published artifact to verify/ship.
     if (!isPublishable(ctx.workspaceRoot, projectRoot)) return [pkgPath, edgeToRemove.length ? { projects: { [projectRoot]: { implicitDependencies: edgeToRemove } } } : {}];
-    // Runtime-only ordering (see runtimeInternalProjects): explicit per-project dependsOn
-    // objects replace `^version` / `^test` / `^publish`, which expand over EVERY project-graph
-    // edge including devDependency and test/vite-config import edges. `build`/`test`'s own
-    // `^build`, `affected`, cache hashing and lint boundaries keep using the full graph.
-    let selfProject = null;
-    try { selfProject = JSON.parse(readFileSync(join(ctx.workspaceRoot, projectRoot, 'project.json'), 'utf8')).name || null; } catch { /* name stays null */ }
-    const runtimeDeps = runtimeInternalProjects(ctx.workspaceRoot, projectRoot, nameIndex, selfProject);
-    const onDeps = (target) => runtimeDeps.map((projects) => ({ projects, target }));
+    // No `^version` / `^test` / `^publish` and no per-dependency `version` / `test` / `publish` edges: a project's
+    // release tasks depend only on its OWN tasks. Ordering across projects is the release script's job
+    // (`run-release.mjs` runs `version` and `publish` in dependency waves over the pending set only), and the
+    // guarantee that a package never ships ahead of its dependencies is enforced per package by the publish
+    // executor (`lib/internal-deps-published.js`), so it holds for any caller. A graph edge would instead pull every
+    // unchanged dependency's test/version/publish/dist tasks into each release (210 tasks for `backlog:publish`,
+    // 82 without). `build`/`test`'s own `^build`, `affected`, cache hashing and lint boundaries keep using the full graph.
     // In-source dist ({projectRoot}/dist) + publish-from-source-root means pnpm resolves
     // @adhd/* natively via each package's own manifest (main → ./dist/…). The old `link`
     // target (symlink node_modules/@adhd/<name> → repo-root dist) is retired — it created
@@ -159,10 +158,9 @@ exports.createNodes = ['**/package.json', (configFiles, _o, ctx) =>
     // `version` bumps the SOURCE package.json iff the built dist differs from what's
     // published at its current version (registry as baseline — no tags). Runs before
     // publish in `pnpm release`; not cached (reads live registry, mutates source).
-    // `dependsOn: ["build", "assets", <runtime deps>:version]` — the runtime-dependency `version` tasks order versioning
-    // TOPOLOGICALLY: a package's own internal @adhd/* dependencies get their
-    // `version` task run FIRST, so by the time THIS project's version task
-    // runs, every dependency it declares has already settled its version. The
+    // `dependsOn: ["build", "assets"]` — versioning across projects is ordered by `run-release.mjs`, which runs
+    // `version` in dependency waves over the pending set, so by the time THIS project's version task runs every
+    // pending dependency it declares has already settled its version on disk. The
     // version executor's own final step (see executors/version/impl.js) then
     // reconciles this package's declared internal ranges against that now-
     // settled state — reusing the `deps` plugin's `sync-deps` logic verbatim,
@@ -231,7 +229,7 @@ exports.createNodes = ['**/package.json', (configFiles, _o, ctx) =>
             ...(depsProduction ? { depsProduction } : {}),
           },
           targets: {
-            "version": { "executor": "@adhd/nx-build:version", "dependsOn": ["build", "assets", ...onDeps("version")], /*"cache": false */ },
+            "version": { "executor": "@adhd/nx-build:version", "dependsOn": ["build", "assets"], /*"cache": false */ },
             "reconcile": { "executor": "@adhd/nx-build:reconcile", "dependsOn": ["build", "assets"], /*"cache": false*/ },
             // cache-dag AC9: CACHED. The executor is a pure function of (this project's source
             // package.json, the versions of its workspace dependencies' package.json, its
@@ -304,18 +302,16 @@ exports.createNodes = ['**/package.json', (configFiles, _o, ctx) =>
                 { "runtime": "npm --version" }
               ]
             },
-            // BUG-002 (CRITICAL): the runtime-dependency `publish` tasks order publish TOPOLOGICALLY, mirroring
-            // the `version` pattern above (see the long comment on
-            // `version` at line 40-51 for the full rationale). Without it, nx is
-            // free to publish a dependent before the internal @adhd/* dependency
-            // it declares has itself landed on the registry — a consumer running
-            // `npm install <dependent>` in that exact window resolves the
-            // dependency's declared range against a version that isn't published
-            // yet and hits ETARGET. Depending on each runtime dependency's `publish` guarantees every internal
-            // dependency's publish task completes first, closing that window.
+            // BUG-002 (CRITICAL) / BUG-RELEASE-ATOMICITY-DEP-RANGE-AHEAD-OF-TARGET-PUBLISH-001: a dependent must never
+            // be published before the internal @adhd/* dependency it declares has landed on the registry, or a consumer
+            // running `npm install <dependent>` in that window resolves the declared range against a version that is
+            // not published yet and hits ETARGET. That guarantee no longer lives in the task graph (a graph edge pulled
+            // every unchanged dependency's tasks into each release). It lives in two places: `run-release.mjs` publishes
+            // in dependency waves over the pending set, and the publish executor itself refuses any package whose
+            // internal ranges are ahead of published-state.json (`lib/internal-deps-published.js`).
             // `publish` deliberately does NOT depend on `e2e` (owner decision,
             // c0bf141d): the resource-heavy lane is not a publish prerequisite.
-            "publish": { "executor": "@adhd/nx-build:publish", "dependsOn": ["test", ...onDeps("test"), "version", ...onDeps("publish"), "dist-manifest", "verify-dist-load", "publish-hygiene", "release-reset-check"], "cache": false },
+            "publish": { "executor": "@adhd/nx-build:publish", "dependsOn": ["test", "version", "dist-manifest", "verify-dist-load", "publish-hygiene", "release-reset-check"], "cache": false },
             // release-reset (FEAT-RELEASE-RESET-001): reads LIVE git/working-tree
             // state (HEAD vs working `package.json`/`CHANGELOG.md`) to detect a
             // partial/half-generated release step for THIS project and, with

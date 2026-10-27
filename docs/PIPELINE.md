@@ -12,14 +12,14 @@ source is authoritative, and this doc is the index that keeps the pieces togethe
 ## 1. Build graph
 - **Task graph** — `nx.json` (`targetDefaults` + `plugins`); custom executors live under
   `tools/nx-plugins/{build,lint,assets,deps,test}/plugin.js`. Key edges: `build` →
-  `dependsOn: ["^build","typecheck"]`; `test` → `["lint","^build"]`; `lint` → `["sync-deps-check"]`;
+  `dependsOn: ["^build","typecheck"]`; `test` → `["lint","^build"]`; `lint` → none;
   `publish` → `["build","assets","test","dist-manifest","verify-dist-load","publish-hygiene"]`
   (`targetDefaults["nx-release-publish"]`). The inferred `version`/`publish` targets
   (`tools/nx-plugins/build/plugin.js`) order after each RUNTIME dependency's `version`/`publish`/`test`
   via explicit per-project `{projects, target}` entries built from `dependencies`,
   `peerDependencies` and `optionalDependencies` (npm name mapped to Nx project name through
   `project.json#name`); `devDependencies` are excluded because Nx graph edges carry no dependency
-  kind and a graph-wide `^version`/`^publish` would fan out over devDependency and test-import edges.
+  kind and a graph-wide `^version`/`^publish` would fan out over devDependency and test-import edges. Release ordering is no longer a task-graph edge at all: `version` and `publish` depend only on the project's own tasks, `run-release.mjs` orders them in waves over the pending set, and the publish executor refuses a package whose internal ranges are ahead of `published-state.json`.
   `build`/`test` keep `^build` over the full graph, so `affected` is unchanged by that ordering.
 - **Runtime-closure cache inputs (build, typecheck)** — for each publishable project
   `tools/nx-plugins/build/plugin.js` computes the workspace projects whose SOURCE can reach the built
@@ -95,7 +95,7 @@ and `vercel` apps post check suites; none gates a merge. DeepSource is **not use
   `-t test` in a row — dependency tasks included — end in `Cache: N/N hit` AND exit 0; there is no
   recorded exception.
 - **Cached targets** (all `cache: true`): `build`, `typecheck`, `typecheck-spec`, `lint`,
-  `sync-deps-check`, `test`, `assets`, `build-bin`, `vocabulary-gate`, `traceability`, backlog `build`
+  `test`, `assets`, `build-bin`, `vocabulary-gate`, `traceability`, backlog `build`
   (vite + `ir-artifact` bake, formerly uncached), `dispatch-cli:generate-cli` (declared
   `apigen-cli:build` dependency, outputs `dist/entrypoint/dispatch-cli/cli`), `dist-manifest`
   (inputs: own `package.json`/`CHANGELOG.md` + the `package.json` of each declared RUNTIME workspace
@@ -163,7 +163,7 @@ and `vercel` apps post check suites; none gates a merge. DeepSource is **not use
   and a "RELEASE-RESET REVIEW REQUIRED" block in the release receipt — and never fail the release.
   `--live` revert stays strict (refuses anything that is not a clean prepend / version-only diff).
   Ordering: the check `dependsOn` its own project's `version` task (acyclic — `version` does not depend
-  on it), so raw `nx run-many -t publish` / `nx run <p>:publish` never reads a half-written bump.
+  on it), so a bare `nx run <p>:publish` never reads a half-written bump.
   Standalone `nx run <p>:release-reset-check` therefore runs `version` first (use
   `ADHD_NX_VERSION_DRY_RUN=1` for a read-only check). `run-release.mjs`'s explicit version phase is still
   needed: it fixes the topological bump order and the GATE 1 range check before any publish starts.
@@ -204,7 +204,7 @@ and `vercel` apps post check suites; none gates a merge. DeepSource is **not use
   `metrics.json`, and per package PUBLISHED vs SKIPPED from the publish executor's own `outcome`
   (never a registry re-read).
 - **Coverage** — `metrics.json` covers `withMetrics` executors only (version, publish,
-  publish-hygiene, dist-manifest, verify-dist-load, sync-deps-check, secret-scan, assets-*); plain nx
+  publish-hygiene, dist-manifest, verify-dist-load, secret-scan, assets-*); plain nx
   build/test timings live in `.nx/workspace-data`.
 - **GAP** — the CPU guard is the only enforced budget and is off by default; no committed wall-clock
   or artifact-size threshold fails a build today.

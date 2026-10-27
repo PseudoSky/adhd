@@ -16,7 +16,7 @@
  *
  * `check-no-credentials.js` is `require()`d directly (it's already CJS with
  * zero dependencies) rather than spawned as a subprocess — same
- * in-process-over-subprocess rationale as `../../../deps/executors/check/impl.js`.
+ * in-process-over-subprocess rationale as the `deps` plugin's sync executor.
  */
 const { join } = require('node:path');
 const { withMetrics } = require('../../../lib/metrics');

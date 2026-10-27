@@ -61,31 +61,32 @@ test('run-release.mjs: no unscoped "nx run-many -t version" call exists anywhere
   );
 });
 
-test('run-release.mjs: the real publish invocation IS scoped with a --projects= argument derived from the computed changed-set', () => {
-  // Positive-shape check: the actual publish run() call must include a
-  // projectsArg entry (built as `--projects=${projectNames.join(',')}`).
-  assert.match(
-    source,
-    /run\(\s*'publish'\s*,\s*'pnpm'\s*,\s*\[\s*'nx'\s*,\s*'run-many'\s*,\s*'-t'\s*,\s*'publish'\s*,\s*projectsArg\s*\]\s*\)/,
-    'expected the publish run() call to pass projectsArg (a --projects=<computed-list> argument) as its last arg'
-  );
+test('run-release.mjs: publish and version run per WAVE, and every wave invocation is scoped with a --projects= argument', () => {
+  // The only `nx run-many` call that takes a wave goes through runWaves, which must pass `--projects=<wave>`.
+  assert.match(source, /runWaves\(\s*'publish'\s*,\s*'publish'\s*,\s*waves/, 'expected the publish phase to run through runWaves over the computed waves');
+  assert.match(source, /runWaves\(\s*'version \(explicit prior phase, GATE 1 timing fix\)'\s*,\s*'version'\s*,\s*waves/, 'expected the version phase to run through runWaves');
+  const helper = source.match(/function runWaves[\s\S]*?\n\}\n/);
+  assert.ok(helper, 'expected a runWaves helper');
+  assert.match(helper[0], /`--projects=\$\{waves\[i\]\.join\(','\)\}`/, 'runWaves must scope every nx run-many call with --projects=<wave>');
+  assert.match(helper[0], /if \(exit !== 0\) return exit;/, 'a failed wave must stop the later waves — its members may depend on it');
 });
 
-test('run-release.mjs: computeChangedProjectSet is imported from the shared changed-set resolver and used to build the scope', () => {
+test('run-release.mjs: the scope comes from the shared release-plan resolver (pending set), not the nx-affected changed-set', () => {
   assert.match(
     source,
-    /require\(['"]\.\.\/\.\.\/lib\/changed-set\.js['"]\)/,
-    'expected run-release.mjs to import computeChangedProjectSet from ../../lib/changed-set.js, not reinvent scoping inline'
+    /require\(['"]\.\.\/\.\.\/lib\/release-plan\.js['"]\)/,
+    'expected run-release.mjs to import planRelease from ../../lib/release-plan.js, not reinvent scoping inline'
   );
-  assert.match(source, /computeChangedProjectSet\(/, 'expected computeChangedProjectSet to actually be called');
+  assert.match(source, /planRelease\(/, 'expected planRelease to actually be called');
+  assert.ok(!/computeChangedProjectSet\(/.test(source), 'the release scope must not come from `nx show projects --affected` any more');
 });
 
 test('run-release.mjs: a scope-computation failure is NOT swallowed into an unscoped fallback (fail-loud contract)', () => {
-  // The catch block around computeChangedProjectSet must exit non-zero and
+  // The catch block around planRelease must exit non-zero and
   // must NOT proceed to call `run(...)` with a bare/unscoped publish or
   // version command afterwards.
   const catchBlockMatch = source.match(/catch \(err\) \{[\s\S]*?process\.exit\(1\);\s*return;\s*\}/);
-  assert.ok(catchBlockMatch, 'expected a catch block around computeChangedProjectSet that exits 1 and returns');
+  assert.ok(catchBlockMatch, 'expected a catch block around planRelease that exits 1 and returns');
   assert.match(
     catchBlockMatch[0],
     /refusing to fall back to an ` \+\s*`unscoped publish|refusing to fall back/i,
@@ -94,7 +95,7 @@ test('run-release.mjs: a scope-computation failure is NOT swallowed into an unsc
 });
 
 test('run-release.mjs: the explicit version-phase run() call appears BEFORE GATE 1 (check-release-ranges) in source order', () => {
-  const versionPhaseIdx = source.indexOf("run('version (explicit prior phase, GATE 1 timing fix)'");
+  const versionPhaseIdx = source.indexOf("runWaves('version (explicit prior phase, GATE 1 timing fix)'");
   const gate1Idx = source.indexOf("run(\n    'GATE 1: check-release-ranges'");
   assert.ok(versionPhaseIdx !== -1, 'expected to find the labeled explicit version-phase run() call');
   assert.ok(gate1Idx !== -1, 'expected to find the labeled GATE 1 run() call');
@@ -144,7 +145,7 @@ test('run-release.mjs: no unscoped "nx run-many -t build" call exists anywhere i
 
 test('run-release.mjs: the structural build-first run() call appears BEFORE the version run() call in source order', () => {
   const buildPhaseIdx = source.indexOf("run('build (structural build-first guarantee)'");
-  const versionPhaseIdx = source.indexOf("run('version (explicit prior phase, GATE 1 timing fix)'");
+  const versionPhaseIdx = source.indexOf("runWaves('version (explicit prior phase, GATE 1 timing fix)'");
   assert.ok(buildPhaseIdx !== -1, 'expected to find the labeled structural build-first run() call');
   assert.ok(versionPhaseIdx !== -1, 'expected to find the labeled explicit version-phase run() call');
   assert.ok(
@@ -247,7 +248,7 @@ test('run-release.mjs: GATE 0 is a HARD gate — a non-zero laneExit exits and r
 test('run-release.mjs: GATE 0 appears BEFORE the structural build-first run() call (and therefore before version/GATE 1/publish) in source order', () => {
   const gate0Idx = source.indexOf("run('GATE 0: check-lane-reachability'");
   const buildPhaseIdx = source.indexOf("run('build (structural build-first guarantee)'");
-  const versionPhaseIdx = source.indexOf("run('version (explicit prior phase, GATE 1 timing fix)'");
+  const versionPhaseIdx = source.indexOf("runWaves('version (explicit prior phase, GATE 1 timing fix)'");
   const gate1Idx = source.indexOf("run(\n    'GATE 1: check-release-ranges'");
   assert.ok(gate0Idx !== -1, 'expected to find the labeled GATE 0 run() call');
   assert.ok(buildPhaseIdx !== -1, 'expected to find the labeled structural build-first run() call');
@@ -274,7 +275,7 @@ test('RED-equivalent: the pre-fix source (no GATE 0 at all) is exactly the shape
 // --- Step 3.5: publish -> global-CLI sync (sync-global.mjs) ---
 
 test('run-release.mjs: the sync-global run() call (step 3.5) appears AFTER the publish run() call and BEFORE GATE 2 (clean-room-smoke) in source order', () => {
-  const publishIdx = source.indexOf("run('publish', 'pnpm', ['nx', 'run-many', '-t', 'publish', projectsArg])");
+  const publishIdx = source.indexOf("runWaves('publish', 'publish', waves");
   const syncIdx = source.indexOf("run('sync-global (global CLI shims -> published artifacts)'");
   const gate2Idx = source.indexOf("run(\n    'GATE 2: clean-room-smoke'");
   assert.ok(publishIdx !== -1, 'expected to find the publish run() call');
@@ -428,4 +429,59 @@ test('RED-equivalent: the pre-receipt source (go straight from smoke to the comp
   const preFixSource = "const smokeOk = smokeExit === 0;\nconsole.error('COMPOUND RESULT');";
   assert.equal(preFixSource.indexOf('receipt: release task report'), -1, 'sanity: the pre-fix shape has no receipt phase at all');
   assert.ok(preFixSource.includes('COMPOUND RESULT'), 'sanity: it goes straight to the verdict');
+});
+
+// --- pending-scoped, wave-ordered flow (tmp/release-perf/HANDOFF.md P2) ---
+
+test('run-release.mjs: the test gate runs once over the pending set, AFTER GATE 0 and BEFORE build and version — a failing test can never leave source mutated', () => {
+  const gate0 = source.indexOf("run('GATE 0: check-lane-reachability'");
+  const testGate = source.indexOf("run('test gate (once over the pending set)', 'pnpm', ['nx', 'run-many', '-t', 'test', projectsArg])");
+  const build = source.indexOf("run('build (structural build-first guarantee)'");
+  const version = source.indexOf("runWaves('version (explicit prior phase, GATE 1 timing fix)'");
+  assert.ok(testGate !== -1, 'expected the labeled, projectsArg-scoped test gate');
+  assert.ok(gate0 < testGate && testGate < build && build < version, `expected GATE 0 (${gate0}) < test gate (${testGate}) < build (${build}) < version (${version})`);
+});
+
+test('run-release.mjs: ALL version waves settle before GATE 1, and GATE 1 runs once before any publish wave', () => {
+  const version = source.indexOf("runWaves('version (explicit prior phase, GATE 1 timing fix)'");
+  const gate1 = source.indexOf("run(\n    'GATE 1: check-release-ranges'");
+  const publish = source.indexOf("runWaves('publish', 'publish', waves");
+  assert.ok(version < gate1 && gate1 < publish, `expected version waves (${version}) < GATE 1 (${gate1}) < publish waves (${publish}); versioning wave-by-wave with publish interleaved would feed GATE 1 stale versions`);
+});
+
+test('run-release.mjs: --dry-run shares the real code path, runs version/publish in dry-run mode, and skips sync-global and the smoke', () => {
+  assert.match(source, /process\.argv\.includes\('--dry-run'\)/);
+  assert.match(source, /process\.env\.ADHD_NX_VERSION_DRY_RUN = '1'/);
+  assert.match(source, /runWaves\('publish', 'publish', waves, \[\.\.\.\(DRY_RUN \? \['--dryRun'\] : \[\]\), \.\.\.\(CONFIGURATION \? \[CONFIGURATION\] : \[\]\)\]\)/);
+  const dryExit = source.indexOf('if (DRY_RUN) {', source.indexOf("runWaves('publish', 'publish', waves"));
+  const sync = source.indexOf("run('sync-global (global CLI shims -> published artifacts)'");
+  assert.ok(dryExit !== -1 && dryExit < sync, 'the dry-run exit must come before sync-global and the smoke');
+});
+
+test('run-release.mjs: --publish-only skips GATE 0, the test gate and the build, still runs version waves, GATE 1 and publish waves, and exits with the publish result before sync-global', () => {
+  assert.match(source, /const PUBLISH_ONLY = process\.argv\.includes\('--publish-only'\);/);
+  const gated = source.indexOf('if (!PUBLISH_ONLY) {');
+  const gate0 = source.indexOf("run('GATE 0: check-lane-reachability'");
+  const testGate = source.indexOf("run('test gate (once over the pending set)'");
+  const build = source.indexOf("run('build (structural build-first guarantee)'");
+  const version = source.indexOf("runWaves('version (explicit prior phase, GATE 1 timing fix)'");
+  // Brace-match the block opened at `gated` so "inside" means before its closing brace, not merely after its opening.
+  let depth = 0, close = -1;
+  for (let i = source.indexOf('{', gated); i < source.length; i += 1) {
+    if (source[i] === '{') depth += 1;
+    else if (source[i] === '}' && (depth -= 1) === 0) { close = i; break; }
+  }
+  assert.ok(gated !== -1 && close !== -1, 'expected a closed !PUBLISH_ONLY block');
+  assert.ok(gated < gate0 && gate0 < testGate && testGate < build && build < close, 'GATE 0, the test gate and the build must all sit inside the !PUBLISH_ONLY block');
+  assert.ok(close < version, 'the !PUBLISH_ONLY block must close before the version waves, which run in every mode');
+  const exitIdx = source.indexOf('if (PUBLISH_ONLY) {', version);
+  const sync = source.indexOf("run('sync-global (global CLI shims -> published artifacts)'");
+  assert.ok(exitIdx !== -1 && exitIdx < sync, 'the publish-only exit must come before sync-global and the smoke');
+  assert.match(source.slice(exitIdx, exitIdx + 400), /process\.exit\(publishExit\)/);
+});
+
+test('run-release.mjs: --configuration=<name> is forwarded to every publish wave and to nothing else', () => {
+  assert.match(source, /const CONFIGURATION = \(process\.argv\.find\(\(a\) => a\.startsWith\('--configuration='\)\)/);
+  const uses = source.match(/CONFIGURATION \? \[CONFIGURATION\]/g) || [];
+  assert.equal(uses.length, 1, 'CONFIGURATION must be forwarded only on the publish waves');
 });

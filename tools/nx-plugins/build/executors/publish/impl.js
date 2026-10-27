@@ -107,6 +107,7 @@ const { packLocalDir, tarballIntegrity } = require('../../lib/npm-registry');
 const { readState, updatePublishedState } = require('../../lib/published-state');
 const { checkPublishAllowed } = require('../../lib/release-manifest');
 const { verifyVersionRetrievable } = require('../../lib/publish-verify');
+const { unpublishedInternalDeps, formatUnpublished } = require('../../lib/internal-deps-published');
 const { reconcilePackage } = require('../reconcile/reconcile-core');
 const { withMetrics } = require('../../../lib/metrics');
 
@@ -417,6 +418,18 @@ async function run(options, context) {
     // build the registry does not hold). Scope advisory — see header.
     if (!options.dryRun && !scopeAdvisory(context).proceed) {
       return { success: false, outcome: outcome('refused', { name, version }) };
+    }
+
+    // Ordering guarantee, per package: every internal range in the manifest about to ship must be satisfied by a
+    // version published-state records as on the registry. This replaces the `publish -> <dep>:publish` graph edge
+    // (BUG-RELEASE-ATOMICITY-DEP-RANGE-AHEAD-OF-TARGET-PUBLISH-001), so the guarantee holds whatever order or
+    // scope a caller used. A dry run publishes nothing, so a dependency's state cannot have advanced: skip it there.
+    if (!options.dryRun) {
+      const missing = unpublishedInternalDeps(manifest, readState(context.root));
+      if (missing.length) {
+        console.error(formatUnpublished(name, version, missing));
+        return { success: false, outcome: outcome('failed', { name, version }) };
+      }
     }
 
     // DEBT-002 #2: `options.access` (an explicit task-option override) wins
