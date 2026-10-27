@@ -4,7 +4,7 @@ All notable changes to `@adhd/stealth-search` are recorded here. The format foll
 
 ## [Unreleased]
 
-## [0.1.0] - 2026-10-24
+## [0.1.0] - 2026-10-27
 
 ### Added
 
