@@ -479,8 +479,14 @@ test('BUG-RELEASE-ATOMICITY-DEP-RANGE-AHEAD-OF-TARGET-PUBLISH-001: publish refus
     const spawn = makeSpawnSyncMock(state);
     const calls = [];
     t.mock.method(child_process, 'spawnSync', (cmd, args, ...rest) => { calls.push([cmd, ...(args || [])]); return spawn(cmd, args, ...rest); });
+    const logged = [];
+    t.mock.method(console, 'error', (...args) => { logged.push(args.join(' ')); });
     const result = await loadFreshImpl()({}, context);
     assert.equal(result.success, false);
+    assert.ok(
+      logged.some((l) => /refusing @adhd\/pkg-b@1\.0\.0: 1 internal range\(s\) are ahead of what is published/.test(l) && /dependencies\.@adhd\/pkg-dep \^1\.2\.0 — registry has 1\.1\.0/.test(l)),
+      `the refusal must come from the internal-range guard, not an earlier gate. Logged: ${logged.join(' | ').slice(0, 400)}`
+    );
     assert.ok(!calls.some((c) => c[0] === 'npm' && c.includes('publish')), 'npm publish must not run for a package whose dependency is unpublished');
   } finally {
     rmSync(rootDir, { recursive: true, force: true });

@@ -465,7 +465,15 @@ test('run-release.mjs: --publish-only skips GATE 0, the test gate and the build,
   const testGate = source.indexOf("run('test gate (once over the pending set)'");
   const build = source.indexOf("run('build (structural build-first guarantee)'");
   const version = source.indexOf("runWaves('version (explicit prior phase, GATE 1 timing fix)'");
-  assert.ok(gated !== -1 && gated < gate0 && gate0 < testGate && testGate < build && build < version, 'GATE 0, the test gate and the build must all sit inside the !PUBLISH_ONLY block, before version');
+  // Brace-match the block opened at `gated` so "inside" means before its closing brace, not merely after its opening.
+  let depth = 0, close = -1;
+  for (let i = source.indexOf('{', gated); i < source.length; i += 1) {
+    if (source[i] === '{') depth += 1;
+    else if (source[i] === '}' && (depth -= 1) === 0) { close = i; break; }
+  }
+  assert.ok(gated !== -1 && close !== -1, 'expected a closed !PUBLISH_ONLY block');
+  assert.ok(gated < gate0 && gate0 < testGate && testGate < build && build < close, 'GATE 0, the test gate and the build must all sit inside the !PUBLISH_ONLY block');
+  assert.ok(close < version, 'the !PUBLISH_ONLY block must close before the version waves, which run in every mode');
   const exitIdx = source.indexOf('if (PUBLISH_ONLY) {', version);
   const sync = source.indexOf("run('sync-global (global CLI shims -> published artifacts)'");
   assert.ok(exitIdx !== -1 && exitIdx < sync, 'the publish-only exit must come before sync-global and the smoke');

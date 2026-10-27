@@ -95,7 +95,6 @@ function manifestChanged(root, ref, rel) {
 function computePending({ workspaceRoot, releaseSet, state } = {}) {
   const set = releaseSet || discoverReleaseSet(workspaceRoot);
   const st = state || readState(workspaceRoot);
-  const roots = set.map((p) => p.projectRoot);
   const reasons = new Map(set.map((p) => [p.name, new Set()]));
   const byRef = new Map();
   for (const p of set) {
@@ -106,6 +105,10 @@ function computePending({ workspaceRoot, releaseSet, state } = {}) {
       if (e.publishedFromRef) {
         if (!byRef.has(e.publishedFromRef)) byRef.set(e.publishedFromRef, []);
         byRef.get(e.publishedFromRef).push(p);
+      } else {
+        // A legacy entry with no baseline cannot be diffed. Silently skipping it would withhold a package whose source
+        // changed, so it is pending: over-reporting is safe (`version` no-ops it), under-reporting is not.
+        reasons.get(p.name).add('ref-unresolvable');
       }
     }
   }

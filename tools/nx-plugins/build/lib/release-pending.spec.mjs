@@ -183,3 +183,12 @@ test('an unresolvable recorded ref falls back to the commit that wrote it, then 
     assert.deepEqual(after.filter((p) => p.name === '@adhd/a'), []);
   });
 });
+
+test('a published-state entry with no publishedFromRef is pending (ref-unresolvable), never silently skipped', () => {
+  fixture(({ ws, releaseSet, state }) => {
+    delete state['@adhd/a'].publishedFromRef;
+    const out = computePending({ workspaceRoot: ws, releaseSet, state });
+    assert.deepEqual(out.find((p) => p.name === '@adhd/a').reasons, ['ref-unresolvable']);
+    assert.ok(out.find((p) => p.name === '@adhd/b').reasons.includes('dependency-changed'));
+  });
+});
