@@ -37,11 +37,11 @@
     "url": "https://github.com/PseudoSky/adhd/issues"
   },
   "dependencies": {
-    "@adhd/apigen-core-client": "^0.3.4",
-    "@adhd/apigen-engine-naming": "^0.2.5",
-    "@adhd/apigen-engine-runtime": "^0.3.3",
-    "@adhd/apigen-plugin-cli-output": "^0.2.8",
-    "@adhd/apigen-plugin-mcp": "^0.3.3",
+    "@adhd/apigen-core-client": "^0.3.7",
+    "@adhd/apigen-engine-naming": "^0.2.8",
+    "@adhd/apigen-engine-runtime": "^0.3.6",
+    "@adhd/apigen-plugin-cli-output": "^0.2.11",
+    "@adhd/apigen-plugin-mcp": "^0.3.6",
     "@adhd/apigen-plugin-tracing": "^0.2.0",
     "@adhd/resilience-core-tripwire": "^0.1.0",
     "@adhd/sox-telemetry": "^0.4.3",

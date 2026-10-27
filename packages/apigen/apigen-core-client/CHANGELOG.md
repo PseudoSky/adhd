@@ -1,3 +1,7 @@
+## 0.3.7 (2026-10-27)
+
+This was a version bump only for apigen-core-client to align it with other projects, there were no code changes.
+
 ## Unreleased
 
 ### 🚀 Features

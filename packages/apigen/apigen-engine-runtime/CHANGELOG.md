@@ -1,3 +1,7 @@
+## 0.3.6 (2026-10-27)
+
+This was a version bump only for apigen-engine-runtime to align it with other projects, there were no code changes.
+
 ## Unreleased
 
 ### 🩹 Fixes

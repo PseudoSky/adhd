@@ -850,19 +850,19 @@ importers:
   entrypoint/stealth-search:
     dependencies:
       '@adhd/apigen-core-client':
-        specifier: ^0.3.4
+        specifier: ^0.3.7
         version: link:../../packages/apigen/apigen-core-client
       '@adhd/apigen-engine-naming':
-        specifier: ^0.2.5
+        specifier: ^0.2.8
         version: link:../../packages/apigen/apigen-engine-naming
       '@adhd/apigen-engine-runtime':
-        specifier: ^0.3.3
+        specifier: ^0.3.6
         version: link:../../packages/apigen/apigen-engine-runtime
       '@adhd/apigen-plugin-cli-output':
-        specifier: ^0.2.8
+        specifier: ^0.2.11
         version: link:../../packages/apigen/apigen-plugin-cli-output
       '@adhd/apigen-plugin-mcp':
-        specifier: ^0.3.3
+        specifier: ^0.3.6
         version: link:../../packages/apigen/apigen-plugin-mcp
       '@adhd/apigen-plugin-tracing':
         specifier: ^0.2.0
@@ -1418,7 +1418,7 @@ importers:
   packages/apigen/apigen-engine-naming:
     dependencies:
       '@adhd/apigen-core-client':
-        specifier: ^0.3.6
+        specifier: ^0.3.7
         version: link:../apigen-core-client
 
   packages/apigen/apigen-engine-runtime:
@@ -1430,10 +1430,10 @@ importers:
         specifier: ^0.1.5
         version: link:../apigen-base-logical
       '@adhd/apigen-core-client':
-        specifier: ^0.3.6
+        specifier: ^0.3.7
         version: link:../apigen-core-client
       '@adhd/apigen-engine-naming':
-        specifier: ^0.2.7
+        specifier: ^0.2.8
         version: link:../apigen-engine-naming
       ajv:
         specifier: ^8.20.0
@@ -1529,13 +1529,13 @@ importers:
         specifier: ^0.2.3
         version: link:../apigen-base-errors
       '@adhd/apigen-core-client':
-        specifier: ^0.3.6
+        specifier: ^0.3.7
         version: link:../apigen-core-client
       '@adhd/apigen-engine-naming':
-        specifier: ^0.2.7
+        specifier: ^0.2.8
         version: link:../apigen-engine-naming
       '@adhd/apigen-engine-runtime':
-        specifier: ^0.3.5
+        specifier: ^0.3.6
         version: link:../apigen-engine-runtime
     devDependencies:
       '@adhd/apigen-plugin-tracing':
@@ -1596,13 +1596,13 @@ importers:
         specifier: ^0.2.3
         version: link:../apigen-base-errors
       '@adhd/apigen-core-client':
-        specifier: ^0.3.6
+        specifier: ^0.3.7
         version: link:../apigen-core-client
       '@adhd/apigen-engine-naming':
-        specifier: ^0.2.7
+        specifier: ^0.2.8
         version: link:../apigen-engine-naming
       '@adhd/apigen-engine-runtime':
-        specifier: ^0.3.5
+        specifier: ^0.3.6
         version: link:../apigen-engine-runtime
       '@modelcontextprotocol/sdk':
         specifier: 1.29.0
@@ -1663,7 +1663,7 @@ importers:
   packages/apigen/apigen-plugin-tracing:
     dependencies:
       '@adhd/apigen-core-client':
-        specifier: ^0.3.6
+        specifier: ^0.3.7
         version: link:../apigen-core-client
       '@adhd/sox-telemetry':
         specifier: ^0.4.3
