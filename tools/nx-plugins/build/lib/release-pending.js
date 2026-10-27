@@ -21,7 +21,26 @@ const { join } = require('node:path');
 const { discoverReleaseSet } = require('./range-resolvability');
 const { readState } = require('./published-state');
 
-const IGNORED = [/(^|\/)(dist|node_modules|tmp|coverage)\//, /(^|\/)test\//, /(^|\/)(project\.json|eslint\.config\.[cm]?js)$/, /\.(md|spec\.[cm]?[jt]sx?|test\.[cm]?[jt]sx?)$/];
+const IGNORED = [/(^|\/)(dist|node_modules|tmp|coverage)\//, /(^|\/)test\//, /(^|\/)eslint\.config\.[cm]?js$/, /\.(md|spec\.[cm]?[jt]sx?|test\.[cm]?[jt]sx?)$/];
+
+/**
+ * Workspace-level inputs that change EVERY package's built or stamped output but sit under no project root.
+ * Derived from nx.json `namedInputs.sharedGlobals` (the repo's own declaration), narrowed to the paths that
+ * reach `dist/`: the shared tsconfig, the vite plugins the build uses, the manifest generator, the asset copier
+ * and the plugin that defines the build targets. `tools/nx-plugins/build/**` as a whole is NOT listed: it also
+ * holds the release flow itself (publish, version, smoke), which never changes a built artifact. Specs are
+ * excluded by IGNORED. Over-reporting here is safe — `version`'s tarball-hash comparison no-ops a false positive.
+ */
+const GLOBAL_INPUT_PATHS = [
+  'tsconfig.base.json',
+  'tools/vite-plugins/externalize.mjs',
+  'tools/vite-plugins/source-resolution.mjs',
+  'tools/vite-plugins/copy-readme.mjs',
+  'packages/workspace/workspace-base-vite-paths/src',
+  'tools/nx-plugins/build/plugin.js',
+  'tools/nx-plugins/build/executors/manifest',
+  'tools/nx-plugins/assets/executors/copy',
+];
 
 function git(root, args) {
   const r = spawnSync('git', args, { cwd: root, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 });
@@ -37,6 +56,16 @@ function isRelevant(path) {
   return !IGNORED.some((re) => re.test(path));
 }
 
+/**
+ * Shipped content that IGNORED would otherwise drop: the project's own README.md (`assets` copies it into dist/)
+ * and anything under a package.json `assets` entry. CHANGELOG.md is NOT shipped content for this purpose — the
+ * release itself writes it in the same commit as the version bump.
+ */
+function isShippedDoc(path, projectRoot, assets) {
+  if (path === `${projectRoot}/README.md`) return true;
+  return assets.some((a) => path === `${projectRoot}/${a}` || path.startsWith(`${projectRoot}/${a}/`));
+}
+
 function owner(path, roots) {
   let best = null;
   for (const r of roots) if ((path === r || path.startsWith(`${r}/`)) && (!best || r.length > best.length)) best = r;
@@ -50,7 +79,8 @@ function releaseNeutral(text) {
   delete j.version;
   for (const f of ['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies']) {
     if (!j[f]) continue;
-    for (const k of Object.keys(j[f])) if (k.startsWith('@adhd/')) delete j[f][k];
+    // Blank the RANGE only: adding or removing an internal dependency is a real change and must stay visible.
+    for (const k of Object.keys(j[f])) if (k.startsWith('@adhd/')) j[f][k] = '';
   }
   return JSON.stringify(j);
 }
@@ -79,12 +109,27 @@ function computePending({ workspaceRoot, releaseSet, state } = {}) {
       }
     }
   }
-  const untracked = lines(git(workspaceRoot, ['ls-files', '-o', '--exclude-standard']).stdout).filter(isRelevant);
-  const ownerOf = new Map(set.map((p) => [p.projectRoot, p.name]));
-  for (const f of untracked) {
-    const o = owner(f, roots);
-    if (o) reasons.get(ownerOf.get(o)).add('source-changed');
+  const assetsOf = new Map();
+  for (const p of set) {
+    let a = [];
+    try { a = JSON.parse(readFileSync(join(workspaceRoot, p.projectRoot, 'package.json'), 'utf8')).assets; } catch { /* none */ }
+    assetsOf.set(p.projectRoot, Array.isArray(a) ? a.filter((x) => typeof x === 'string') : []);
   }
+  const ownerOf = new Map(set.map((p) => [p.projectRoot, p.name]));
+  const isGlobal = (f) => isRelevant(f) && GLOBAL_INPUT_PATHS.some((g) => f === g || f.startsWith(`${g}/`));
+  /** Mark `pkgs` for one changed path `f`; `ref` null = untracked file. Returns nothing. */
+  const classify = (f, pkgs, ref) => {
+    if (isGlobal(f)) {
+      for (const p of pkgs) reasons.get(p.name).add('global-input-changed');
+      return;
+    }
+    const o = owner(f, pkgs.map((p) => p.projectRoot));
+    if (!o) return;
+    if (!isRelevant(f) && !isShippedDoc(f, o, assetsOf.get(o))) return;
+    if (ref && f === `${o}/package.json` && !manifestChanged(workspaceRoot, ref, f)) return;
+    reasons.get(ownerOf.get(o)).add('source-changed');
+  };
+  for (const f of lines(git(workspaceRoot, ['ls-files', '-o', '--exclude-standard']).stdout)) classify(f, set, null);
   for (const [recorded, pkgs] of byRef) {
     let ref = recorded;
     if (git(workspaceRoot, ['cat-file', '-e', `${ref}^{commit}`]).status !== 0) {
@@ -97,15 +142,9 @@ function computePending({ workspaceRoot, releaseSet, state } = {}) {
       }
       ref = rec;
     }
-    const diff = git(workspaceRoot, ['diff', '--name-only', '--no-renames', ref, '--', ...pkgs.map((p) => p.projectRoot)]);
+    const diff = git(workspaceRoot, ['diff', '--name-only', '--no-renames', ref, '--', ...pkgs.map((p) => p.projectRoot), ...GLOBAL_INPUT_PATHS]);
     if (diff.status !== 0) throw new Error(`release-pending: git diff ${ref} failed: ${diff.stderr}`);
-    const mine = new Set(pkgs.map((p) => p.projectRoot));
-    for (const f of lines(diff.stdout).filter(isRelevant)) {
-      const o = owner(f, [...mine]);
-      if (!o) continue;
-      if (f === `${o}/package.json` && !manifestChanged(workspaceRoot, ref, f)) continue;
-      reasons.get(ownerOf.get(o)).add('source-changed');
-    }
+    for (const f of lines(diff.stdout)) classify(f, pkgs, ref);
   }
   const dependents = new Map(set.map((p) => [p.name, []]));
   for (const p of set) for (const d of p.deps) if (dependents.has(d.depName)) dependents.get(d.depName).push(p.name);
