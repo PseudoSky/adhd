@@ -189,6 +189,7 @@ Each claim below names a shipped capability in `docs/marketing/.catalog/capabili
 ## Documentation
 
 - [docs/CONFIGURATION.md](docs/CONFIGURATION.md): every default and host flag (port 9222, the `Chrome-CDP` profile, the state and data directories); macOS-first.
+- [docs/DOCKER.md](docs/DOCKER.md): the Dockerfile for a containerised run with a real Chrome, a virtual display and the published package.
 - [docs/ERRORS.md](docs/ERRORS.md): the typed error codes, exit statuses and MCP rendering.
 - [docs/OBSERVABILITY.md](docs/OBSERVABILITY.md): `adhd.<op>.start|finish|error` records, `--verbose` diagnostics, what the MCP bin writes to stdout.
 - [docs/LIBRARY.md](docs/LIBRARY.md): the wiring, configuration and error exports of the package root.
