@@ -116,6 +116,9 @@
       "@adhd/apigen-plugin-demo-plugin": [
         "./packages/apigen/plugins/demo-plugin/src/index.ts"
       ],
+      "@adhd/apigen-plugin-go-http": [
+        "./packages/apigen/apigen-plugin-go-http/src/index.ts"
+      ],
       "@adhd/apigen-plugin-health": [
         "./packages/apigen/apigen-plugin-health/src/index.ts"
       ],
